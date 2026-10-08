@@ -1,0 +1,190 @@
+{
+  "company": {
+    "name": "Ila Homes",
+    "legal_name": null,
+    "tagline": "Building futures and unlocking possibilities",
+    "short_description": "A Hyderabad-based land developer focused on plots.",
+    "long_description": "Ila Homes is a Hyderabad-based land developer. The website presents plotted property developments and a step-by-step guide to buying a plot.",
+    "business_category": "real_estate",
+    "founded_year": 2019,
+    "logo_url": "/ila-homes-logo.png",
+    "favicon_url": "",
+    "brand_description": "Ila Homes presents land and plotted property opportunities with a focus on helping prospective buyers understand the purchase journey."
+  },
+  "brand": {
+    "primary_name": "Ila Homes",
+    "positioning": "Hyderabad-based land developer focused on plotted property.",
+    "promise": "Building futures and unlocking possibilities",
+    "primary_colors": [],
+    "secondary_colors": [],
+    "typography": "Montserrat",
+    "tone": [],
+    "description": "The Ila Homes website uses a property-focused, explanatory presentation for land and plot buyers."
+  },
+  "contact": {
+    "primary_phone": null,
+    "whatsapp": null,
+    "email": null,
+    "sales_contact": null,
+    "support_contact": null,
+    "office": {
+      "name": null,
+      "address": null,
+      "city": null,
+      "state": null,
+      "country": null,
+      "pincode": null,
+      "latitude": null,
+      "longitude": null
+    },
+    "business_hours": [],
+    "emergency_after_hours_contact": null
+  },
+  "locations": {
+    "cities": ["Hyderabad"],
+    "states": ["Telangana"],
+    "primary_market": "Hyderabad",
+    "service_areas": ["Telangana"],
+    "localities": ["Tukkuguda"],
+    "geographic_coverage": "Telangana",
+    "currently_marketed_areas": ["Hyderabad", "Tukkuguda"]
+  },
+  "property_types": [
+    {
+      "type": "plot",
+      "name": "Plots",
+      "description": "Residential land plots are presented on the website.",
+      "enabled": true
+    }
+  ],
+  "services": [
+    {
+      "key": "property_buying",
+      "name": "Property buying",
+      "description": "Information and guidance for people considering a plot purchase.",
+      "enabled": true
+    },
+    {
+      "key": "site_visits",
+      "name": "Site visits",
+      "description": "Site visits are presented as part of the property enquiry journey.",
+      "enabled": true
+    }
+  ],
+  "buying_process": {
+    "enabled": true,
+    "steps": [
+      {
+        "step": 1,
+        "name": "Site visit",
+        "description": "The website describes the plot-buying journey as beginning with a site visit."
+      },
+      {
+        "step": 2,
+        "name": "Registration",
+        "description": "The website describes the journey as continuing from site visit to registration."
+      }
+    ]
+  },
+  "selling_process": {
+    "enabled": false,
+    "steps": []
+  },
+  "lead_capture": {
+    "enabled": true,
+    "fields": [
+      "name",
+      "phone",
+      "email",
+      "preferred_location",
+      "property_type",
+      "site_visit_interest",
+      "preferred_contact_method"
+    ],
+    "qualification_questions": [
+      "Which location are you interested in?",
+      "Are you interested in a plot?",
+      "Would you like to enquire about a site visit?",
+      "What is your preferred contact method?"
+    ],
+    "preferred_contact_methods": ["phone", "email"],
+    "lead_sources": ["website", "property_enquiry", "site_visit_request"],
+    "handoff_conditions": [
+      "The lead requests a site visit.",
+      "The lead asks for current property availability, pricing, or plot details.",
+      "The lead requests legal, financing, or contractual advice."
+    ]
+  },
+  "faqs": [
+    {
+      "question": "What does Ila Homes do?",
+      "answer": "Ila Homes is a Hyderabad-based land developer focused on plotted property.",
+      "category": "company"
+    },
+    {
+      "question": "Where does Ila Homes operate?",
+      "answer": "The website identifies Hyderabad as its primary market and Telangana as its broader coverage area.",
+      "category": "locations"
+    },
+    {
+      "question": "What type of property does Ila Homes present?",
+      "answer": "The website presents plots and plotted property developments.",
+      "category": "properties"
+    },
+    {
+      "question": "Can I request a site visit?",
+      "answer": "Site visits are part of the website's property enquiry journey. A current request should be handed to the sales team for confirmation.",
+      "category": "site_visits"
+    }
+  ],
+  "financing": {
+    "home_loan_availability": null,
+    "financing_assistance": null,
+    "partner_banks": [],
+    "loan_information": null,
+    "emi_information": null,
+    "eligibility_information": null
+  },
+  "legal": {
+    "rera_registration": null,
+    "rera_number": null,
+    "legal_company_information": null,
+    "terms_url": "",
+    "privacy_policy_url": "",
+    "disclaimer": "Property availability, pricing, approvals, legal status, financing, and transaction details must be confirmed from current official records or the Ila Homes team. This configuration does not contain live inventory or transactional data.",
+    "cookie_policy_url": ""
+  },
+  "social": {
+    "instagram": null,
+    "facebook": null,
+    "youtube": null,
+    "linkedin": null,
+    "x": null,
+    "telegram": null,
+    "whatsapp": null
+  },
+  "seo": {
+    "title": "Ila Homes | Plots in Hyderabad",
+    "description": "Explore plotted property developments from Ila Homes, a Hyderabad-based land developer.",
+    "keywords": ["Ila Homes", "plots in Hyderabad", "land developer Hyderabad"],
+    "og_title": "Ila Homes | Plots in Hyderabad",
+    "og_description": "Explore plotted property developments from Ila Homes.",
+    "og_image": "/hero-image.png",
+    "canonical_url": ""
+  },
+  "ai": {
+    "enabled": true,
+    "company_summary": "Ila Homes is a Hyderabad-based land developer focused on plotted property and presents developments in Telangana.",
+    "what_we_do": ["Present plotted property developments", "Provide property information", "Receive property enquiries and site-visit requests"],
+    "target_customers": ["People looking for plots in Hyderabad or Telangana"],
+    "supported_languages": ["English"],
+    "conversation_topics": ["Ila Homes", "plots", "Hyderabad", "Telangana", "property enquiries", "site visits", "buying journey"],
+    "allowed_topics": ["Company information", "Supported property type", "Published locations", "Property enquiry collection", "Site-visit request collection"],
+    "restricted_topics": ["Live prices", "Availability", "Inventory", "Plot IDs", "Property views", "Visitors", "Lead scores", "Transactions", "Unverified legal or approval claims", "Unverified financing or bank partnerships"],
+    "handoff": {
+      "sales_team": true,
+      "site_visit": true,
+      "callback": true
+    }
+  }
+}

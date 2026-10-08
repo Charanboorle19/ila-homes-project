@@ -1,0 +1,1384 @@
+.property-page {
+  --pd-ink: #171717;
+  --pd-muted: #5c5852;
+  --pd-soft: #f4f1ea;
+  --pd-surface: #ffffff;
+  --pd-line: rgba(23, 23, 23, 0.12);
+  --pd-gold: #c6a46c;
+  --pd-gold-bright: #d4b57e;
+  --pd-space: clamp(0.75rem, 2vw, 1.25rem);
+  --pd-max: calc(100% - (var(--pd-space) * 2));
+
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  color: var(--pd-ink);
+  background: #ffffff;
+}
+
+.property-page * {
+  box-sizing: border-box;
+}
+
+.pd-kicker {
+  margin: 0 0 0.45rem;
+  color: var(--pd-gold);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.pd-section {
+  width: 100%;
+  padding: clamp(2.25rem, 5vh, 3.75rem) var(--pd-space);
+}
+
+.pd-section__inner {
+  width: min(100%, var(--pd-max));
+  margin-inline: auto;
+}
+
+.pd-section h2 {
+  margin: 0;
+  font-size: clamp(1.55rem, 3.4vw, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.pd-section__lead {
+  margin: 0.75rem 0 0;
+  max-width: 40rem;
+  color: var(--pd-muted);
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.pd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding: 0.7rem 1.15rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.88rem;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.pd-btn--primary {
+  background: var(--pd-gold);
+  color: #171717;
+}
+
+.pd-btn--primary:hover {
+  background: var(--pd-gold-bright);
+}
+
+.pd-btn--ghost {
+  background: transparent;
+  border-color: rgba(23, 23, 23, 0.18);
+  color: var(--pd-ink);
+}
+
+.pd-btn--ghost:hover {
+  border-color: rgba(23, 23, 23, 0.34);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.pd-chip,
+.pd-segment button,
+.pd-match__goal,
+.pd-hero__thumb,
+.pd-sat__years button,
+.pd-journey__steps button {
+  cursor: pointer;
+  border: 1px solid var(--pd-line);
+  background: rgba(255, 255, 255, 0.72);
+  color: inherit;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.pd-chip {
+  min-height: 2.4rem;
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.pd-chip.is-active,
+.pd-segment button.is-active,
+.pd-match__goal.is-active,
+.pd-hero__thumb.is-active,
+.pd-sat__years button.is-active,
+.pd-journey__steps button.is-active {
+  border-color: rgba(198, 164, 108, 0.7);
+  background: rgba(198, 164, 108, 0.18);
+}
+
+.pd-segment {
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--pd-line);
+}
+
+.pd-segment button {
+  border: 0;
+  border-radius: 999px;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.95rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+  background: transparent;
+}
+
+/* The page background is plain white now, so translucent white card fills no
+   longer separate from it. These surfaces lean on a hairline border plus a
+   soft shadow for their lift, instead of the old cream page behind them. */
+.pd-chip,
+.pd-segment,
+.pd-match__result,
+.pd-future__card,
+.pd-emi__card,
+.pd-legal__list li,
+.pd-journey__detail,
+.pd-final__quote,
+.pd-similar__card,
+.pd-hero__thumb,
+.pd-lifestyle__point {
+  box-shadow:
+    0 1px 2px rgba(23, 23, 23, 0.04),
+    0 10px 28px rgba(23, 23, 23, 0.05);
+}
+
+/* Hero */
+.pd-hero {
+  width: 100%;
+  padding: calc(var(--nav-h) + 0.75rem) var(--pd-space) 2rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.pd-hero__frame {
+  width: min(100%, var(--pd-max));
+  margin-inline: auto;
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pd-hero__crumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin-bottom: 1.15rem;
+  color: var(--pd-muted);
+  font-size: 0.82rem;
+}
+
+.pd-hero__crumb a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.pd-hero__crumb a:hover {
+  color: var(--pd-ink);
+}
+
+.pd-hero__grid {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: grid;
+  gap: 1.5rem;
+  align-content: start;
+}
+
+.pd-hero__copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pd-hero__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.pd-hero__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(198, 164, 108, 0.45);
+  background: rgba(198, 164, 108, 0.15);
+  color: #7a5c28;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pd-hero__badge--ink {
+  background: var(--pd-ink);
+  border-color: var(--pd-ink);
+  color: #fff;
+}
+
+.pd-hero__badge--plain {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--pd-line);
+  color: var(--pd-muted);
+}
+
+.pd-hero__title {
+  margin: 0;
+  font-size: clamp(1.9rem, 3.8vw, 2.9rem);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+}
+
+.pd-hero__tagline {
+  margin: 0.55rem 0 0;
+  font-size: 1.02rem;
+  font-weight: 600;
+}
+
+.pd-hero__desc {
+  margin: 0.7rem 0 0;
+  color: var(--pd-muted);
+  line-height: 1.55;
+  max-width: 38rem;
+}
+
+/* Spec bar — a 1px gap over a line-coloured backdrop draws the dividers,
+   so the cells read as one table instead of four floating cards. */
+.pd-hero__specs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 1.15rem 0 0;
+  border: 1px solid var(--pd-line);
+  background: var(--pd-line);
+}
+
+.pd-hero__specs div {
+  padding: 0.6rem 0.85rem;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.pd-hero__specs dt {
+  margin: 0;
+  color: var(--pd-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.pd-hero__specs dd {
+  margin: 0.2rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.pd-hero__price-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  margin-top: 1.15rem;
+}
+
+/* Gold rule instead of a box — keeps the price prominent without adding
+   another filled block competing with the image. */
+.pd-hero__price-block {
+  padding-left: 0.85rem;
+  border-left: 3px solid var(--pd-gold);
+}
+
+.pd-hero__price {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.6vw, 1.95rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.pd-hero__meta {
+  margin: 0.3rem 0 0;
+  color: var(--pd-muted);
+  font-size: 0.84rem;
+}
+
+.pd-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.pd-hero__gallery {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.pd-hero__stage {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid var(--pd-line);
+  background: #d9d2c7;
+  box-shadow: 0 12px 30px rgba(23, 23, 23, 0.09);
+}
+
+.pd-hero__count {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  margin: 0;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(23, 23, 23, 0.74);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.pd-hero__stage-img,
+.pd-hero__thumb-img,
+.pd-lifestyle__img,
+.pd-similar__media img {
+  object-fit: cover;
+}
+
+.pd-hero__thumbs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.pd-hero__thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 0.6rem;
+}
+
+.pd-hero__thumb.is-active {
+  border-color: var(--pd-gold);
+  box-shadow: 0 0 0 2px rgba(198, 164, 108, 0.4);
+}
+
+/* Match / Future / Lifestyle / EMI / Legal / Sat / Journey / Similar / Final */
+.pd-match__grid,
+.pd-future__layout,
+.pd-sat__layout {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+/* Buyer fit — the one full-bleed dark band on the page. It breaks up the
+   white run of sections and gives the interactive goal picker contrast. */
+.pd-match {
+  background:
+    radial-gradient(
+      ellipse 60% 70% at 88% 0%,
+      rgba(198, 164, 108, 0.16),
+      transparent 62%
+    ),
+    linear-gradient(158deg, #1d2025 0%, #15171b 55%, #101215 100%);
+  color: #f4f1ea;
+}
+
+.pd-match h2 {
+  color: #f4f1ea;
+}
+
+.pd-match .pd-section__lead {
+  color: #a9a59d;
+}
+
+.pd-match__grid {
+  align-items: start;
+}
+
+.pd-match__goals {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.pd-match__goal {
+  display: grid;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(244, 241, 234, 0.14);
+  background: rgba(255, 255, 255, 0.045);
+  color: #f4f1ea;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.pd-match__goal:hover {
+  border-color: rgba(198, 164, 108, 0.42);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pd-match__goal.is-active {
+  border-color: var(--pd-gold);
+  background: rgba(198, 164, 108, 0.15);
+}
+
+.pd-match__goal-label {
+  grid-column: 1;
+  font-weight: 650;
+}
+
+.pd-match__goal-desc {
+  grid-column: 1;
+  color: #a9a59d;
+  font-size: 0.85rem;
+}
+
+.pd-match__result {
+  padding: 1.5rem 1.4rem;
+  border-radius: 16px;
+  border: 1px solid rgba(244, 241, 234, 0.16);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.pd-match__goalname {
+  margin: 0;
+  color: var(--pd-gold);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.pd-match__score {
+  margin: 0.55rem 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.pd-match__score-value {
+  color: #f4f1ea;
+  font-size: clamp(2.8rem, 6vw, 4rem);
+  font-weight: 720;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  /* Keeps the digits from jittering while the count-up runs. */
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-match__score-unit {
+  color: #a9a59d;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.pd-match__meter {
+  margin-top: 1rem;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.pd-match__meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--pd-gold), var(--pd-gold-bright));
+  animation: pd-match-meter-in 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* `key` on the meter remounts it whenever the score changes, so this
+   replays each time a new goal is picked. */
+@keyframes pd-match-meter-in {
+  from {
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+  to {
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
+}
+
+/* While an API property's buyer fit is still being fetched, the score reads as
+   unknown and the meter shimmers instead of implying a zero fit. */
+.pd-match__score-value--pending {
+  color: rgba(244, 241, 234, 0.32);
+}
+
+.pd-match__meter--pending {
+  position: relative;
+}
+
+.pd-match__meter--pending::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 38%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(244, 241, 234, 0.24),
+    transparent
+  );
+  animation: pd-match-meter-pending 1.25s ease-in-out infinite;
+}
+
+@keyframes pd-match-meter-pending {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(263%);
+  }
+}
+
+@keyframes pd-match-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Goal name and reason cross-fade as the panel content changes. */
+.pd-match__goalname,
+.pd-match__reason {
+  animation: pd-match-reveal 0.45s ease-out both;
+}
+
+.pd-match__reason {
+  margin: 1.1rem 0 0;
+  color: #cdc9c1;
+  line-height: 1.6;
+}
+
+.pd-future__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  margin-top: 1.1rem;
+}
+
+.pd-future__near {
+  margin: 0.75rem 0 0;
+  color: var(--pd-muted);
+  font-size: 0.86rem;
+}
+
+/* Right-hand map column: sticky so it stays beside the scrolling list. */
+.pd-future__map {
+  position: relative;
+  min-height: 24rem;
+  border: 1px solid var(--pd-line);
+  border-radius: 1rem;
+  overflow: hidden;
+  background: #e8e4dc;
+  box-shadow:
+    0 1px 2px rgba(23, 23, 23, 0.04),
+    0 10px 28px rgba(23, 23, 23, 0.05);
+}
+
+.pd-future__canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* MapLibre's own controls need to sit above the canvas, not scroll away. */
+.pd-future__map .maplibregl-ctrl-group {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(23, 23, 23, 0.16);
+}
+
+.pd-future__map .maplibregl-ctrl-attrib {
+  font-size: 0.7rem;
+}
+
+.pd-future__map-error {
+  position: absolute;
+  inset: auto 0 0 0;
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  background: rgba(23, 23, 23, 0.82);
+  color: #f4f1ea;
+  font-size: 0.82rem;
+}
+
+.pd-future__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.pd-future__card {
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--pd-line);
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.pd-future__card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--pd-muted);
+}
+
+.pd-future__card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.pd-future__card p {
+  margin: 0.45rem 0 0;
+  color: var(--pd-muted);
+  line-height: 1.45;
+}
+
+.pd-future__dist {
+  color: var(--pd-ink) !important;
+  font-weight: 650;
+}
+
+.pd-lifestyle__layout {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.pd-lifestyle__points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+}
+
+.pd-lifestyle__point {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--pd-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.pd-lifestyle__point:hover {
+  border-color: rgba(198, 164, 108, 0.5);
+  background: #fff;
+}
+
+.pd-lifestyle__point.is-active {
+  border-color: var(--pd-gold);
+  background: rgba(198, 164, 108, 0.12);
+}
+
+.pd-lifestyle__point-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--pd-line);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--pd-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-lifestyle__point.is-active .pd-lifestyle__point-index {
+  background: var(--pd-ink);
+  border-color: var(--pd-ink);
+  color: #fff;
+}
+
+.pd-lifestyle__point-title {
+  display: block;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.pd-lifestyle__point-alt {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--pd-muted);
+  font-size: 0.84rem;
+}
+
+.pd-lifestyle__stage {
+  position: relative;
+  min-height: 20rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid var(--pd-line);
+  background: #d9d2c7;
+  box-shadow:
+    0 1px 2px rgba(23, 23, 23, 0.04),
+    0 10px 28px rgba(23, 23, 23, 0.06);
+}
+
+/* `key` on the image remounts it each swap, so this replays as a cross-fade. */
+.pd-lifestyle__img {
+  animation: pd-lifestyle-fade 0.6s ease-out both;
+}
+
+@keyframes pd-lifestyle-fade {
+  from {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pd-lifestyle__caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  padding: 2.4rem 1.1rem 1.05rem;
+  background: linear-gradient(transparent, rgba(15, 17, 20, 0.8));
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+/* A long list — an API property publishes every amenity it has. On a phone a
+   column that tall pushes the stage image off the screen, so the points run
+   sideways as one scroll-snapping row instead. */
+.pd-lifestyle__points--dense {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 0.35rem;
+  scrollbar-width: thin;
+}
+
+.pd-lifestyle__points--dense > li {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.pd-lifestyle__points--dense .pd-lifestyle__point {
+  white-space: nowrap;
+}
+
+/* Stands in for a photograph when the item has none: the selected point is
+   already named in the list, so this is a quiet panel, not another headline. */
+.pd-lifestyle__panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  background:
+    radial-gradient(
+      120% 120% at 15% 10%,
+      rgba(198, 164, 108, 0.22),
+      rgba(198, 164, 108, 0) 60%
+    ),
+    linear-gradient(160deg, #23211d, #14161a);
+  animation: pd-lifestyle-fade 0.6s ease-out both;
+}
+
+.pd-lifestyle__panel-index {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--pd-gold);
+}
+
+.pd-lifestyle__panel-title {
+  margin: 0;
+  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  font-weight: 650;
+  line-height: 1.2;
+  text-wrap: balance;
+  color: #fff;
+}
+
+.pd-lifestyle__panel-meta {
+  margin: 0;
+  font-size: 0.84rem;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.pd-emi__card {
+  margin-top: 1.4rem;
+  padding: 1.25rem;
+  border: 1px solid var(--pd-line);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.pd-emi__top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.pd-emi__label {
+  margin: 0;
+  color: var(--pd-muted);
+  font-size: 0.86rem;
+}
+
+.pd-emi__price {
+  margin: 0.25rem 0 0;
+  font-size: 1.7rem;
+  font-weight: 720;
+}
+
+.pd-emi__slider {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1.25rem;
+  font-size: 0.92rem;
+}
+
+.pd-emi__slider input {
+  width: 100%;
+  accent-color: var(--pd-gold);
+}
+
+.pd-emi__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 1.2rem 0 0;
+}
+
+.pd-emi__stats div {
+  padding: 0.8rem 0.9rem;
+  background: var(--pd-soft);
+}
+
+.pd-emi__stats dt {
+  margin: 0;
+  color: var(--pd-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pd-emi__stats dd {
+  margin: 0.3rem 0 0;
+  font-weight: 700;
+}
+
+.pd-emi__note {
+  margin: 1rem 0 0;
+  color: var(--pd-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.pd-legal__list {
+  list-style: none;
+  margin: 1.4rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.pd-legal__list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.85rem;
+  align-items: center;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--pd-line);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.pd-legal__list h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.pd-legal__list p {
+  margin: 0.3rem 0 0;
+  color: var(--pd-muted);
+  font-size: 0.84rem;
+}
+
+.pd-legal__extras {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1.1rem;
+}
+
+.pd-legal__callout {
+  margin: 0;
+  color: var(--pd-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.pd-sat__map-wrap {
+  position: relative;
+  min-height: 18rem;
+  border: 1px solid var(--pd-line);
+  overflow: hidden;
+  background: #1c1f24;
+}
+
+.pd-sat__map {
+  width: 100%;
+  height: 18rem;
+}
+
+.pd-sat__overlay {
+  position: absolute;
+  left: 0.85rem;
+  bottom: 0.85rem;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.65rem 0.8rem;
+  background: rgba(15, 17, 20, 0.72);
+  color: #fff;
+  font-size: 0.84rem;
+}
+
+.pd-sat__fallback {
+  position: absolute;
+  inset: auto 0.85rem 3.5rem;
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  background: rgba(15, 17, 20, 0.8);
+  color: #fff;
+  font-size: 0.84rem;
+}
+
+.pd-sat__years {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.pd-sat__years button {
+  min-height: 2.2rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.pd-sat__story h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.pd-sat__story p {
+  margin: 0.55rem 0 0;
+  color: var(--pd-muted);
+  line-height: 1.55;
+}
+
+.pd-journey__steps {
+  list-style: none;
+  margin: 1.4rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.pd-journey__steps button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  font-weight: 650;
+}
+
+.pd-journey__steps span {
+  display: inline-flex;
+  width: 2rem;
+  justify-content: center;
+  color: var(--pd-gold);
+  font-size: 0.82rem;
+}
+
+.pd-journey__detail {
+  margin-top: 1rem;
+  padding: 1.2rem 1.15rem;
+  border: 1px solid var(--pd-line);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.pd-journey__number {
+  margin: 0;
+  color: var(--pd-gold);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.pd-journey__detail h3 {
+  margin: 0.35rem 0 0;
+}
+
+.pd-journey__detail p {
+  margin: 0.55rem 0 0;
+  color: var(--pd-muted);
+  line-height: 1.5;
+}
+
+.pd-similar__grid {
+  list-style: none;
+  margin: 1.4rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.pd-similar__card {
+  display: grid;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid var(--pd-line);
+  background: rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.pd-similar__card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(198, 164, 108, 0.55);
+}
+
+.pd-similar__media {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: #d9d2c7;
+}
+
+.pd-similar__badge {
+  position: absolute;
+  top: 0.7rem;
+  left: 0.7rem;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(15, 17, 20, 0.72);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pd-similar__body {
+  padding: 0.95rem 1rem 1.1rem;
+}
+
+.pd-similar__body h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.pd-similar__body p {
+  margin: 0.35rem 0 0;
+  color: var(--pd-muted);
+  font-size: 0.88rem;
+}
+
+.pd-similar__meta {
+  color: var(--pd-ink) !important;
+  font-weight: 650;
+}
+
+.pd-similar__reasons {
+  font-size: 0.8rem !important;
+}
+
+.pd-final__inner {
+  text-align: left;
+}
+
+.pd-final__actions,
+.pd-final__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1.2rem;
+}
+
+.pd-final__share-note {
+  margin: 0.75rem 0 0;
+  color: var(--pd-muted);
+  font-size: 0.86rem;
+}
+
+.pd-final__quote {
+  margin: 1.5rem 0 0;
+  padding: 1.15rem 1.2rem;
+  border-left: 3px solid var(--pd-gold);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.pd-final__quote p {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.pd-final__quote footer {
+  margin-top: 0.7rem;
+  color: var(--pd-muted);
+  font-size: 0.86rem;
+}
+
+.pd-sticky {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  padding: 0.75rem var(--pd-space) calc(0.75rem + env(safe-area-inset-bottom));
+  background: rgba(23, 23, 23, 0.92);
+  color: #f4f1ea;
+  backdrop-filter: blur(10px);
+}
+
+.pd-sticky__inner {
+  width: min(100%, var(--pd-max));
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.pd-sticky__label {
+  margin: 0;
+  font-weight: 700;
+}
+
+.pd-sticky__meta {
+  margin: 0.2rem 0 0;
+  color: rgba(244, 241, 234, 0.72);
+  font-size: 0.84rem;
+}
+
+.pd-sticky__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.pd-sticky .pd-btn--ghost {
+  border-color: rgba(244, 241, 234, 0.28);
+  color: #f4f1ea;
+}
+
+.pd-sticky__close {
+  margin-left: auto;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+/* Lifestyle: point cards left, single image right. */
+@media (min-width: 760px) {
+  .pd-lifestyle__layout {
+    grid-template-columns: 0.85fr 1.15fr;
+    align-items: start;
+    gap: 1.75rem;
+  }
+
+  /* Room for the row, so the dense points can be a two-column grid again. */
+  .pd-lifestyle__points--dense {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+
+  .pd-lifestyle__points--dense .pd-lifestyle__point {
+    white-space: normal;
+  }
+
+  .pd-lifestyle__stage {
+    position: sticky;
+    top: calc(var(--nav-h) + 1rem);
+    height: 30rem;
+    min-height: 0;
+  }
+}
+
+@media (min-width: 760px) {
+  /* Height is driven by the content, not the viewport. Forcing a 100dvh box
+     left the grid centring its single row inside leftover space, which read
+     as a void above the copy and a second gap below the price row. The stage
+     is capped instead, so nothing overflows and nothing floats. */
+  .pd-hero {
+    min-height: 0;
+  }
+
+  .pd-hero__frame {
+    flex: 0 1 auto;
+  }
+
+  .pd-hero__grid {
+    grid-template-columns: 1.15fr 0.85fr;
+    align-content: start;
+    align-items: start;
+    gap: 2rem;
+  }
+
+  .pd-hero__price-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: end;
+    gap: 1.25rem;
+  }
+
+  .pd-hero__price-block {
+    min-width: 0;
+  }
+
+  .pd-hero__stage {
+    max-height: 20rem;
+  }
+
+  .pd-match__grid,
+  .pd-future__layout,
+  .pd-sat__layout {
+    grid-template-columns: 0.95fr 1.05fr;
+  }
+
+  /* Map column: sticky so it stays beside the list while the list scrolls. */
+  .pd-future__map {
+    position: sticky;
+    top: calc(var(--nav-h) + 1rem);
+    height: 34rem;
+    min-height: 0;
+  }
+
+  /* Goal buttons need the extra width for label + description + score. */
+  .pd-match__grid {
+    grid-template-columns: 1.15fr 0.85fr;
+  }
+
+  .pd-emi__top {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .pd-emi__stats {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .pd-similar__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .pd-sticky__inner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+@media (min-width: 980px) {
+  /* An API property can publish five facts (plot size, plot size in sq ft,
+     project area, plot count, configuration), so the row fits itself to the
+     width instead of always taking four columns and leaving a ragged gap. */
+  .pd-hero__specs {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  }
+
+  .pd-match__goals {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pd-btn,
+  .pd-chip,
+  .pd-similar__card,
+  .pd-hero__thumb,
+  .pd-lifestyle__point {
+    transition: none;
+  }
+
+  .pd-lifestyle__img {
+    animation: none;
+  }
+
+  .pd-match__meter > span,
+  .pd-match__meter--pending::after,
+  .pd-match__goalname,
+  .pd-match__reason {
+    animation: none;
+  }
+}

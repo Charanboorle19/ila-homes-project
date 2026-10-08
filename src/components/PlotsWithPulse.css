@@ -1,0 +1,429 @@
+/* Plots with Pulse — light social proof section */
+
+.plots-pulse {
+  --font-body: var(--font-montserrat), system-ui, sans-serif;
+  --space: clamp(1rem, 3.5vw, 3rem);
+  --max: calc(100% - (var(--space) * 2));
+  --pp-bg: #f7f8fa;
+  --pp-card: #ffffff;
+  --pp-ink: #0f1114;
+  --pp-fog: #4a5060;
+  --pp-muted: #8a909e;
+  --pp-line: rgba(15, 17, 20, 0.1);
+  --pp-gold: #c9a84c;
+  --pp-sage: #3d5a47;
+  --pp-live: #22c55e;
+
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: clamp(2.5rem, 6vh, 4rem) var(--space);
+  color: var(--pp-ink);
+  font-family: var(--font-body);
+  overflow-x: clip;
+  background:
+    radial-gradient(ellipse 40% 35% at 8% 12%, rgba(34, 197, 94, 0.06), transparent 55%),
+    radial-gradient(ellipse 35% 30% at 92% 88%, rgba(201, 168, 76, 0.08), transparent 50%),
+    var(--pp-bg);
+}
+
+.plots-pulse__frame {
+  width: min(100%, var(--max));
+  margin-inline: auto;
+}
+
+.plots-pulse__intro {
+  max-width: 36rem;
+  margin-bottom: clamp(1.75rem, 4vw, 2.5rem);
+}
+
+.plots-pulse__eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--pp-gold);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.plots-pulse__heading {
+  margin: 0 0 0.65rem;
+  color: var(--pp-ink);
+  font-family: var(--font-body);
+  font-size: clamp(1.45rem, 2.8vw, 2rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.plots-pulse__lede {
+  margin: 0;
+  color: var(--pp-fog);
+  font-size: clamp(0.8rem, 1.1vw, 0.92rem);
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.plots-pulse__updating {
+  margin: 1rem 0 0;
+  max-width: 36rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(201, 168, 76, 0.4);
+  border-radius: 10px;
+  background: rgba(201, 168, 76, 0.12);
+  color: #8a7040;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.plots-pulse__updating strong {
+  color: #6e5830;
+  font-weight: 700;
+}
+
+.plots-pulse__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.plots-pulse__card {
+  overflow: hidden;
+  border: 1px solid var(--pp-line);
+  background: var(--pp-card);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.plots-pulse__card:hover {
+  border-color: rgba(201, 168, 76, 0.45);
+  box-shadow: 0 10px 28px rgba(15, 17, 20, 0.06);
+}
+
+.plots-pulse__card.is-soon {
+  filter: grayscale(1);
+  opacity: 0.62;
+  pointer-events: none;
+}
+
+.plots-pulse__card.is-soon:hover {
+  border-color: var(--pp-line);
+  box-shadow: none;
+}
+
+.plots-pulse__live--soon {
+  background: rgba(30, 34, 40, 0.75);
+  color: #d1d5db;
+}
+
+.plots-pulse__soon-copy {
+  margin: 0.75rem 0 0;
+  color: var(--pp-fog);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.plots-pulse__image {
+  position: relative;
+  isolation: isolate;
+  display: block;
+  height: 9.5rem;
+  overflow: hidden;
+  background-color: #2a2e35;
+}
+
+.plots-pulse__image-bg {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  z-index: 0;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  object-fit: cover !important;
+  object-position: center center !important;
+  pointer-events: none;
+  user-select: none;
+}
+
+.plots-pulse__image::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    to top,
+    rgba(15, 17, 20, 0.7) 0%,
+    rgba(15, 17, 20, 0.2) 50%,
+    rgba(15, 17, 20, 0.05) 100%
+  );
+  pointer-events: none;
+}
+
+.plots-pulse__image-text {
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: left;
+  padding: 0.85rem 0.9rem;
+  line-height: 1.35;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+}
+
+.plots-pulse__badge {
+  position: absolute;
+  z-index: 2;
+  top: 0.65rem;
+  left: 0.65rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 2px;
+  background: var(--pp-sage);
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.plots-pulse__live {
+  position: absolute;
+  z-index: 2;
+  right: 0.65rem;
+  top: 0.65rem;
+  bottom: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.65rem;
+  border: 1px solid var(--pp-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--pp-fog);
+  font-size: 0.62rem;
+  font-weight: 500;
+}
+
+.plots-pulse__ping {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--pp-live);
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+  animation: plots-pulse-ping 1.5s ease-in-out infinite;
+}
+
+.plots-pulse__ping--sm {
+  width: 0.4rem;
+  height: 0.4rem;
+}
+
+@keyframes plots-pulse-ping {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+  }
+}
+
+.plots-pulse__body {
+  padding: 1rem 1.1rem 1.15rem;
+}
+
+.plots-pulse__name {
+  margin: 0 0 0.2rem;
+  color: var(--pp-ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.plots-pulse__meta {
+  margin: 0 0 0.65rem;
+  color: var(--pp-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.plots-pulse__price {
+  margin: 0 0 0.85rem;
+  color: #a6862e;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.plots-pulse__signals {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.75rem;
+  list-style: none;
+  border: 1px solid var(--pp-line);
+  background: #f2f3f7;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.plots-pulse__signals li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--pp-fog);
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.plots-pulse__bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.plots-pulse__bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.plots-pulse__bar-label {
+  width: 4.5rem;
+  flex-shrink: 0;
+  color: var(--pp-muted);
+  font-size: 0.6rem;
+}
+
+.plots-pulse__bar-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(15, 17, 20, 0.08);
+  overflow: hidden;
+}
+
+.plots-pulse__bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--pp-gold);
+}
+
+.plots-pulse__bar-val {
+  width: 1.85rem;
+  flex-shrink: 0;
+  color: #a6862e;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .plots-pulse {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    padding: clamp(1.75rem, 4vh, 2.5rem) var(--space) 1rem;
+  }
+
+  .plots-pulse__frame {
+    width: 100%;
+    max-width: 100%;
+    margin-inline: 0;
+    box-sizing: border-box;
+  }
+
+  .plots-pulse__intro {
+    max-width: none;
+    margin-bottom: 0.85rem;
+  }
+
+  .plots-pulse__heading {
+    font-size: clamp(1.3rem, 5.8vw, 1.65rem);
+    overflow-wrap: break-word;
+  }
+
+  .plots-pulse__grid {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(201, 168, 76, 0.45) transparent;
+  }
+
+  .plots-pulse__grid::-webkit-scrollbar {
+    height: 3px;
+  }
+
+  .plots-pulse__grid::-webkit-scrollbar-thumb {
+    background: rgba(201, 168, 76, 0.45);
+    border-radius: 999px;
+  }
+
+  .plots-pulse__card {
+    flex: 0 0 auto;
+    width: min(78vw, 17.5rem);
+    max-width: 17.5rem;
+    min-width: 15rem;
+    scroll-snap-align: start;
+    box-sizing: border-box;
+    border-radius: 0;
+    border-right-width: 0;
+  }
+
+  .plots-pulse__card:last-child {
+    border-right-width: 1px;
+  }
+
+  .plots-pulse__image {
+    height: 8.25rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .plots-pulse {
+    padding-bottom: 0.75rem;
+  }
+
+  .plots-pulse__card {
+    width: min(82vw, 16rem);
+    min-width: 14.5rem;
+    max-width: 16rem;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1100px) {
+  .plots-pulse__grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .plots-pulse__bar-label {
+    width: 3.75rem;
+  }
+}

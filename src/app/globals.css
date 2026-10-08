@@ -1,26 +1,581 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #000000;
+  --foreground: #ffffff;
+  --accent: #c6a46c;
+  --accent-bright: #d4b57e;
+  --nav-h: 3.5rem;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --nav-h: 4rem;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --font-sans: var(--font-montserrat);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-montserrat), system-ui, sans-serif;
+}
+
+@keyframes hero-zoom {
+  from {
+    transform: scale(1.06);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(1.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hero-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes search-word-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.55em);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes search-word-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-0.45em);
+    filter: blur(2px);
+  }
+}
+
+.animate-hero-zoom {
+  animation: hero-zoom 1.4s ease-out both;
+}
+
+.animate-hero-rise {
+  animation: hero-rise 0.9s ease-out 0.2s both;
+}
+
+.animate-hero-fade {
+  animation: hero-fade 1s ease-out 0.55s both;
+}
+
+.hero-search-word {
+  display: inline-block;
+  will-change: transform, opacity, filter;
+}
+
+.hero-search-word--in {
+  animation: search-word-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hero-search-word--out {
+  animation: search-word-out 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.hero-search-word-slot {
+  display: inline-grid;
+  overflow: hidden;
+  vertical-align: bottom;
+  min-height: 1.25em;
+}
+
+.hero-search-word-slot > * {
+  grid-area: 1 / 1;
+}
+
+@keyframes map-hint-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-map-hint-fade {
+  animation: map-hint-fade 0.25s ease-out both;
+}
+
+@keyframes sheet-up {
+  from {
+    opacity: 0.6;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-sheet-up {
+  animation: sheet-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Modern slim scrollbar for the map panel and sheets: transparent track,
+   floating pill thumb that darkens on hover. Firefox uses the standard
+   properties; WebKit/Chromium use the pseudo-elements. */
+.ila-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(36, 35, 31, 0.32) transparent;
+}
+
+.ila-scroll::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.ila-scroll::-webkit-scrollbar-track,
+.ila-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Transparent border + content-box clip keeps the thumb visually inset
+   from the content edge instead of sitting flush against it. */
+.ila-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(36, 35, 31, 0.28);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
+}
+
+.ila-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(36, 35, 31, 0.5);
+}
+
+.ila-scroll::-webkit-scrollbar-thumb:active {
+  background-color: rgba(36, 35, 31, 0.62);
+}
+
+@keyframes fyp-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
+
+.ila-fyp-progress {
+  animation: fyp-progress 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ila-fyp-progress {
+    animation: none;
+    width: 70%;
+  }
+}
+
+@keyframes scroll-cue-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translateX(4px);
+    opacity: 1;
+  }
+}
+
+.ila-scroll-cue {
+  animation: scroll-cue-nudge 1.2s ease-in-out infinite;
+}
+
+@keyframes pinch-spread {
+  0%,
+  100% {
+    transform: translate(-10px, 10px) scale(0.92);
+  }
+  50% {
+    transform: translate(-18px, 18px) scale(1);
+  }
+}
+
+@keyframes pinch-spread-b {
+  0%,
+  100% {
+    transform: translate(10px, -10px) scale(0.92);
+  }
+  50% {
+    transform: translate(18px, -18px) scale(1);
+  }
+}
+
+@keyframes pinch-ring {
+  0%,
+  100% {
+    transform: scale(0.78);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.85;
+  }
+}
+
+.ila-pinch-hint {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+}
+
+.ila-pinch-hint__ring {
+  position: absolute;
+  inset: 0.35rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 9999px;
+  animation: pinch-ring 1.15s ease-in-out infinite;
+}
+
+.ila-pinch-hint__finger {
+  position: absolute;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 9999px;
+  background: #c6a46c;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+
+.ila-pinch-hint__finger--a {
+  animation: pinch-spread 1.15s ease-in-out infinite;
+}
+
+.ila-pinch-hint__finger--b {
+  animation: pinch-spread-b 1.15s ease-in-out infinite;
+}
+
+@keyframes fullscreen-hint-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 8px 20px rgba(15, 23, 42, 0.14),
+      0 0 0 0 rgba(23, 23, 23, 0);
+    border-color: rgba(0, 0, 0, 0.15);
+    background-color: #d9d2c7;
+    color: #171717;
+  }
+  45% {
+    transform: scale(1.08);
+    box-shadow:
+      0 12px 28px rgba(15, 23, 42, 0.28),
+      0 0 0 6px rgba(23, 23, 23, 0.18);
+    border-color: rgba(23, 23, 23, 0.55);
+    background-color: #171717;
+    color: #ffffff;
+  }
+}
+
+@media (max-width: 767px) {
+  .ila-fullscreen-hint {
+    animation: fullscreen-hint-pulse 2.2s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+    will-change: transform, box-shadow;
+  }
+
+  .ila-map-search-panel--open {
+    animation: map-search-expand 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    transform-origin: top right;
+  }
+}
+
+@keyframes map-search-expand {
+  from {
+    opacity: 0.7;
+    transform: translateX(12%) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@media (min-width: 768px) {
+  .ila-fullscreen-hint {
+    animation: none;
+  }
+}
+
+/* Indeterminate spinner shown while a property detail + /units layout loads. */
+.ila-map-loader {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 3px solid rgba(23, 23, 23, 0.14);
+  border-top-color: #171717;
+}
+
+/* Sliding bar across the top of the map frame during the same load. */
+.ila-map-progress {
+  display: block;
+  width: 32%;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(198, 164, 108, 0) 0%,
+    #c6a46c 50%,
+    rgba(198, 164, 108, 0) 100%
+  );
+  animation-name: ila-map-progress;
+  animation-duration: 1.1s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+@keyframes ila-map-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(312%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ila-map-progress {
+    animation: none;
+  }
+
+  .animate-hero-zoom,
+  .animate-hero-rise,
+  .animate-hero-fade,
+  .hero-search-word--in,
+  .hero-search-word--out,
+  .ila-fullscreen-hint,
+  .ila-map-search-panel--open {
+    animation: none;
+  }
+
+  .ila-pinch-hint__ring,
+  .ila-pinch-hint__finger--a,
+  .ila-pinch-hint__finger--b,
+  .ila-scroll-cue {
+    animation: none;
+  }
+}
+
+/* Project map pins — high contrast on light basemaps */
+.ila-project-pin {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  transform-origin: center bottom;
+  transition: transform 0.2s ease;
+  z-index: 1;
+}
+
+.ila-project-pin:hover {
+  z-index: 8;
+  transform: translateY(-3px);
+}
+
+.ila-project-pin__anchor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 36px;
+}
+
+.ila-project-pin__halo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  transform: translate(-50%, -58%);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 2px rgba(17, 17, 17, 0.12);
+  pointer-events: none;
+}
+
+.ila-project-pin__core {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  color: #c6a46c;
+  background: #111111;
+  border: 3px solid #c6a46c;
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 8px 18px rgba(0, 0, 0, 0.45);
+}
+
+.ila-project-pin:hover .ila-project-pin__core {
+  color: #111111;
+  background: #c6a46c;
+  border-color: #111111;
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 10px 22px rgba(0, 0, 0, 0.5);
+}
+
+.ila-project-pin__icon {
+  width: 15px;
+  height: 15px;
+}
+
+.ila-project-pin__needle {
+  position: relative;
+  z-index: 1;
+  width: 3px;
+  height: 12px;
+  margin-top: -2px;
+  background: #111111;
+  border-left: 1px solid #fff;
+  border-right: 1px solid #fff;
+}
+
+.ila-project-pin__point {
+  position: relative;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  background: #111111;
+  transform: rotate(45deg);
+  border-radius: 0 0 2px 0;
+  border-right: 2px solid #c6a46c;
+  border-bottom: 2px solid #c6a46c;
+  box-shadow: 2px 2px 0 #ffffff;
+}
+
+/* Keep old plot-pin helpers available if reused later */
+.ila-plot-pin {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ila-area-label {
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  pointer-events: none;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 10px !important;
+  background: rgba(255, 255, 255, 0.75) !important;
+}
+
+.ila-corridor-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  pointer-events: none;
+}
+
+.ila-corridor-marker__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #c9a84c;
+  border: 2px solid #0f1114;
+  box-shadow: 0 4px 12px rgba(15, 17, 20, 0.25);
+}
+
+.ila-corridor-marker__label {
+  max-width: 9rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.5rem;
+  background: rgba(15, 17, 20, 0.92);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  /* Slide MapLibre's attribution out from under the left sidebar. */
+  .ila-map-frame:not(.ila-map-frame--fullscreen):has(> aside)
+    .maplibregl-ctrl-attrib {
+    left: 376px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .growth-corridors * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Native vertical page scroll over the map on mobile (embedded only) */
+@media (max-width: 767px) {
+  .ila-map-frame:not(.ila-map-frame--fullscreen) .maplibregl-canvas-container,
+  .ila-map-frame:not(.ila-map-frame--fullscreen) .maplibregl-canvas,
+  .ila-map-frame:not(.ila-map-frame--fullscreen) .maplibregl-map {
+    touch-action: pan-y !important;
+  }
+
+  .ila-map-frame--fullscreen .maplibregl-canvas-container,
+  .ila-map-frame--fullscreen .maplibregl-canvas,
+  .ila-map-frame--fullscreen .maplibregl-map {
+    touch-action: none !important;
+  }
 }

@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Master Plan — 3D Connectivity</title>
+
+  <!-- Local/system fonts only — no font API -->
+  <link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import { createModelBuildingsLayer } from './model-buildings.js';
+    window.createModelBuildingsLayer = createModelBuildingsLayer;
+    window.dispatchEvent(new Event('gltf-ready'));
+  </script>
+
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --panel: rgba(12, 12, 12, 0.9);
+      --panel-border: rgba(255, 255, 255, 0.1);
+      --ink: #f4f4f4;
+      --muted: #8a8a8a;
+      --line: rgba(255, 255, 255, 0.14);
+      --available: #2f9e44;
+      --accent: #69db7c;
+      --bike: #63e6be;
+      --car: #74c0fc;
+    }
+
+    * { box-sizing: border-box; }
+    body, html {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: var(--bg); color: var(--ink);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden;
+    }
+    #map { width: 100vw; height: 100vh; background: #111; }
+
+    .map-overlay {
+      position: absolute; top: 14px; left: 14px; z-index: 10;
+      width: min(340px, calc(100vw - 28px));
+      max-height: calc(100vh - 120px); overflow: auto;
+      padding: 18px;
+      background: var(--panel); border: 1px solid var(--panel-border);
+      backdrop-filter: blur(18px);
+    }
+
+    .eyebrow {
+      margin: 0 0 6px; font-size: 0.62rem; letter-spacing: 0.16em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .map-overlay h1 {
+      margin: 0 0 6px; font-family: Georgia, "Times New Roman", serif;
+      font-weight: 400; font-size: 1.65rem; line-height: 1.05;
+    }
+    .lede { margin: 0 0 12px; font-size: 0.8rem; line-height: 1.45; color: var(--muted); }
+
+    .section-label {
+      margin: 12px 0 8px; font-size: 0.6rem; letter-spacing: 0.14em;
+      text-transform: uppercase; color: #777;
+    }
+
+    .year-grid, .mode-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .mode-grid { grid-template-columns: 1fr 1fr; }
+
+    .year-btn, .mode-btn, .tour-btn {
+      border: 1px solid var(--panel-border); background: transparent; color: #cfcfcf;
+      font-family: inherit; cursor: pointer;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+    .year-btn { font-size: 0.76rem; font-weight: 600; padding: 9px 4px; }
+    .mode-btn { font-size: 0.78rem; font-weight: 600; padding: 11px 8px; }
+    .year-btn:hover, .mode-btn:hover, .tour-btn:hover {
+      border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.04);
+    }
+    .year-btn.active { background: var(--accent); color: #0b1a0e; border-color: var(--accent); }
+    .mode-btn.active.bike { background: var(--bike); color: #06261c; border-color: var(--bike); }
+    .mode-btn.active.car { background: var(--car); color: #062033; border-color: var(--car); }
+
+    .year-note { margin: 8px 0 0; font-size: 0.76rem; line-height: 1.4; color: #bdbdbd; }
+
+    .tour-controls { display: flex; gap: 6px; margin-top: 10px; }
+    .tour-btn {
+      flex: 1; font-size: 0.66rem; letter-spacing: 0.06em;
+      text-transform: uppercase; padding: 9px 6px; color: var(--ink);
+    }
+    .tour-btn.active { background: #f4f4f4; color: #111; border-color: #f4f4f4; }
+
+    .connect-list { display: grid; gap: 6px; margin-top: 4px; }
+    .connect-item {
+      display: grid; grid-template-columns: 1fr auto; gap: 4px 10px;
+      padding: 10px 10px; border: 1px solid var(--panel-border);
+      background: rgba(255,255,255,0.02); cursor: pointer; text-align: left;
+      color: inherit; font-family: inherit; width: 100%;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .connect-item:hover, .connect-item.active {
+      border-color: rgba(105, 219, 124, 0.45);
+      background: rgba(47, 158, 68, 0.08);
+    }
+    .connect-item .name { font-size: 0.78rem; font-weight: 600; color: #eee; }
+    .connect-item .type { font-size: 0.65rem; color: #888; letter-spacing: 0.04em; text-transform: uppercase; }
+    .connect-item .stats {
+      grid-column: 2; grid-row: 1 / span 2; align-self: center; text-align: right;
+      font-size: 0.72rem; color: #cfcfcf; line-height: 1.35;
+    }
+    .connect-item .stats strong { display: block; color: var(--accent); font-weight: 600; }
+    .connect-item.locked { opacity: 0.35; pointer-events: none; }
+
+    .legend {
+      display: grid; gap: 7px; margin-top: 12px; padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+    .legend-item { display: flex; align-items: center; gap: 9px; font-size: 0.72rem; color: #cfcfcf; }
+    .legend-swatch {
+      width: 13px; height: 13px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.25);
+    }
+    .legend-swatch.available { background: var(--available); }
+    .legend-swatch.landmark { background: #f0f0f0; }
+    .legend-swatch.bike { background: #ffffff; height: 3px; border: none; }
+    .legend-swatch.car { background: #cfcfcf; height: 3px; border: none; }
+    .legend-swatch.icon3d {
+      width: 18px; height: 18px; border: none; border-radius: 4px;
+      background: linear-gradient(145deg, #2a2a2a, #111);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15);
+    }
+
+    /* Free Fluent Emoji 3D icons floating above campuses */
+    .icon3d-marker {
+      display: flex; flex-direction: column; align-items: center;
+      cursor: pointer; transform: translateY(-6px);
+      filter: drop-shadow(0 10px 14px rgba(0,0,0,0.55));
+      transition: transform 0.2s ease, opacity 0.35s ease;
+      opacity: 1;
+    }
+    .icon3d-marker:hover { transform: translateY(-10px) scale(1.06); }
+    .icon3d-marker.hidden { opacity: 0; pointer-events: none; transform: translateY(4px) scale(0.85); }
+    .icon3d-marker img {
+      width: 52px; height: 52px; object-fit: contain;
+      image-rendering: auto;
+    }
+    .icon3d-marker .icon3d-base {
+      width: 28px; height: 8px; margin-top: -4px;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,0.55), transparent 70%);
+    }
+    .icon3d-marker .icon3d-caption {
+      margin-top: 2px; padding: 2px 7px;
+      font-size: 0.58rem; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: #f1f1f1;
+      background: rgba(0,0,0,0.72); border: 1px solid rgba(255,255,255,0.12);
+      white-space: nowrap;
+    }
+    .place-label {
+      padding: 2px 6px;
+      background: rgba(0,0,0,0.72);
+      border: 1px solid rgba(255,255,255,0.35);
+      color: #ffffff;
+      font-size: 0.58rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      cursor: pointer;
+      pointer-events: auto;
+      opacity: 0.9;
+    }
+    .place-dot {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #ffffff;
+      border: 3px solid #2f9e44;
+      box-shadow: 0 0 0 4px rgba(255,255,255,0.15), 0 6px 16px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+    .place-dot.active {
+      background: #69db7c;
+      border-color: #ffffff;
+      transform: scale(1.25);
+    }
+    .gate-marker {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #69db7c;
+      border: 2px solid #fff;
+      box-shadow: 0 0 12px rgba(105,219,124,0.7);
+    }
+    .route-label {
+      padding: 3px 7px;
+      background: rgba(0, 0, 0, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      color: #ffffff;
+      font-size: 0.66rem;
+      font-weight: 600;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+
+    .insight-card {
+      position: absolute; right: 14px; top: 14px; z-index: 10;
+      width: min(320px, calc(100vw - 28px));
+      padding: 16px 18px;
+      background: var(--panel); border: 1px solid var(--panel-border);
+      backdrop-filter: blur(18px);
+    }
+    .insight-card .year-tag {
+      display: inline-block; margin-bottom: 8px; padding: 3px 8px;
+      font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase;
+      border: 1px solid rgba(105,219,124,0.45); color: var(--accent);
+    }
+    .insight-card h2 {
+      margin: 0 0 6px; font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.25rem; font-weight: 400;
+    }
+    .insight-card p { margin: 0; font-size: 0.8rem; line-height: 1.45; color: #c4c4c4; }
+
+    .route-chip {
+      position: absolute; left: 50%; bottom: 72px; transform: translateX(-50%);
+      z-index: 10; min-width: 220px; max-width: calc(100vw - 28px);
+      padding: 12px 16px; text-align: center;
+      background: var(--panel); border: 1px solid var(--panel-border);
+      opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    }
+    .route-chip.visible { opacity: 1; }
+    .route-chip .to { font-family: Georgia, "Times New Roman", serif; font-size: 1.1rem; margin-bottom: 4px; }
+    .route-chip .detail { font-size: 0.78rem; color: #bdbdbd; }
+
+    .timeline-bar {
+      position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+      z-index: 10; width: min(520px, calc(100vw - 28px));
+      padding: 10px 12px; display: flex; align-items: center; gap: 10px;
+      background: var(--panel); border: 1px solid var(--panel-border);
+    }
+    .timeline-bar .label {
+      font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+    }
+    .timeline-track {
+      flex: 1; display: flex; justify-content: space-between; position: relative;
+    }
+    .timeline-track::before {
+      content: ""; position: absolute; left: 10px; right: 10px; top: 50%;
+      height: 1px; background: rgba(255,255,255,0.18); transform: translateY(-50%);
+    }
+    .timeline-dot {
+      position: relative; z-index: 1; width: 28px; height: 28px; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.25); background: #111; color: #bbb;
+      font-size: 0.6rem; font-weight: 600; cursor: pointer; display: grid; place-items: center;
+    }
+    .timeline-dot.active { background: var(--accent); color: #0b1a0e; border-color: var(--accent); }
+
+    #status {
+      position: absolute; bottom: 64px; left: 14px; z-index: 10;
+      padding: 7px 10px; background: rgba(0,0,0,0.75);
+      border: 1px solid var(--panel-border); color: #d0d0d0; font-size: 0.7rem;
+    }
+
+    .maplibregl-ctrl-group {
+      background: rgba(12,12,12,0.9) !important;
+      border: 1px solid var(--panel-border) !important;
+      border-radius: 0 !important; box-shadow: none !important;
+    }
+    .maplibregl-ctrl-group button {
+      background: transparent !important; width: 34px !important; height: 34px !important;
+    }
+    .maplibregl-ctrl-group button span { filter: invert(1) brightness(1.2); }
+    .maplibregl-ctrl-attrib { background: rgba(0,0,0,0.55) !important; color: #777 !important; font-size: 10px !important; }
+    .maplibregl-popup-content {
+      background: #111 !important; color: var(--ink); border: 1px solid var(--panel-border);
+      border-radius: 0 !important; padding: 14px 16px !important; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .maplibregl-popup-tip { border-top-color: #111 !important; border-bottom-color: #111 !important; }
+    .popup-title { font-family: Georgia, "Times New Roman", serif; font-size: 1.1rem; margin-bottom: 6px; }
+    .popup-metric { font-size: 0.76rem; color: #b5b5b5; margin: 4px 0; }
+    .popup-metric strong { color: #f0f0f0; font-weight: 500; }
+
+    @media (max-width: 900px) {
+      .insight-card { display: none; }
+      .map-overlay { max-height: 48vh; }
+    }
+  </style>
+</head>
+<body>
+  <div class="map-overlay">
+    <p class="eyebrow">ILA Homes · Site connectivity atlas</p>
+    <h1>Master Plan</h1>
+    <p class="lede">Explore plots, places, and travel times across Hyderabad. Tap a place to lock its route.</p>
+
+    <p class="section-label">Development year</p>
+    <div class="year-grid" id="yearGrid">
+      <button class="year-btn" data-year="2015" type="button">2015</button>
+      <button class="year-btn" data-year="2021" type="button">2021</button>
+      <button class="year-btn active" data-year="2026" type="button">2026</button>
+      <button class="year-btn" data-year="2031" type="button">2031</button>
+    </div>
+    <p class="year-note" id="yearNote"></p>
+
+    <p class="section-label">Travel mode</p>
+    <div class="mode-grid">
+      <button class="mode-btn bike active" id="modeBike" type="button">Bike</button>
+      <button class="mode-btn car" id="modeCar" type="button">Car</button>
+    </div>
+
+    <p class="section-label">From plot gate (tap one)</p>
+    <div class="connect-list" id="connectList"></div>
+
+    <div class="tour-controls">
+      <button class="tour-btn" id="tourToggle" type="button">Play tour</button>
+      <button class="tour-btn" id="playYears" type="button">Play years</button>
+      <button class="tour-btn" id="clearRoute" type="button">Resume auto</button>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch available"></span> Available sale plots</div>
+      <div class="legend-item"><span class="legend-swatch landmark"></span> Your GLB/GLTF icons</div>
+      <div class="legend-item"><span class="legend-swatch bike"></span> Active route (auto or tapped)</div>
+      <div class="legend-item"><span class="legend-swatch car"></span> Time & distance on route</div>
+    </div>
+  </div>
+
+  <div class="insight-card">
+    <span class="year-tag" id="insightYear">2026 view</span>
+    <h2 id="insightTitle">Today’s corridor</h2>
+    <p id="insightBody"></p>
+  </div>
+
+  <div class="route-chip" id="routeChip">
+    <div class="to" id="routeTo">—</div>
+    <div class="detail" id="routeDetail">—</div>
+  </div>
+
+  <div class="timeline-bar">
+    <span class="label">Timeline</span>
+    <div class="timeline-track" id="timelineTrack">
+      <button class="timeline-dot" data-year="2015" type="button">15</button>
+      <button class="timeline-dot" data-year="2021" type="button">21</button>
+      <button class="timeline-dot active" data-year="2026" type="button">26</button>
+      <button class="timeline-dot" data-year="2031" type="button">31</button>
+    </div>
+  </div>
+
+  <div id="status">Loading map…</div>
+  <div id="map"></div>
+
+  <script>
+    const YEARS = [2015, 2021, 2026, 2031];
+    let currentYear = 2026;
+    let travelMode = 'bike'; // bike | car
+    let activeDest = null;
+
+    const statusEl = document.getElementById('status');
+    const yearNote = document.getElementById('yearNote');
+    const insightYear = document.getElementById('insightYear');
+    const insightTitle = document.getElementById('insightTitle');
+    const insightBody = document.getElementById('insightBody');
+    const connectList = document.getElementById('connectList');
+    const routeChip = document.getElementById('routeChip');
+    const routeTo = document.getElementById('routeTo');
+    const routeDetail = document.getElementById('routeDetail');
+    const modeBike = document.getElementById('modeBike');
+    const modeCar = document.getElementById('modeCar');
+    const tourToggle = document.getElementById('tourToggle');
+    const playYearsBtn = document.getElementById('playYears');
+    const clearRouteBtn = document.getElementById('clearRoute');
+
+    const GATE = [78.38185, 17.44795]; // plot gate / road entry
+
+    const yearStories = {
+      2015: {
+        title: 'Greenfield beginnings',
+        body: 'Open land and a thin village track. Airport road exists far south — no metro, school campus, or formal bus stop yet.'
+      },
+      2021: {
+        title: 'First urban wave',
+        body: 'Boulevard and school campus open. Metro is under construction. Early car / bike links to school and ring road become meaningful.'
+      },
+      2026: {
+        title: 'Live sale corridor',
+        body: 'Metro station, bus terminal, hospital and park stand as full 3D buildings. Use Bike / Car to read exact minutes and kilometres from the plot gate.'
+      },
+      2031: {
+        title: 'Mature skyline',
+        body: 'Mall, IT campus and Phase II tower complete the node. Connectivity lines stay the same — destinations get denser and more valuable.'
+      }
+    };
+
+    const satelliteStyle = {
+      version: 8,
+      name: 'Satellite',
+      sources: {
+        satellite: {
+          type: 'raster',
+          tiles: [
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+          ],
+          tileSize: 256,
+          attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',
+          maxzoom: 19
+        }
+      },
+      layers: [
+        {
+          id: 'satellite',
+          type: 'raster',
+          source: 'satellite',
+          minzoom: 0,
+          maxzoom: 22
+        }
+      ]
+    };
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      // Satellite basemap (Esri World Imagery) — no API key
+      style: satelliteStyle,
+      center: [78.3820, 17.4478],
+      zoom: 14.4,
+      pitch: 50,
+      bearing: -18,
+      antialias: true,
+      maxPitch: 70,
+      // Avoid globe mode which can blank the map on MapLibre 4
+      projection: { type: 'mercator' }
+    });
+
+    // Block accidental paid tile hosts if anything tries to load them
+    map.setTransformRequest((url, resourceType) => {
+      const bad = /maptiler\.com|mapbox\.com|stadia\.maps|tiles\.stadiamaps|api\.mapbox/i;
+      if (bad.test(url)) {
+        console.warn('Blocked paid/API tile URL:', url);
+        return { url: 'data:,' };
+      }
+      return { url };
+    });
+
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+
+    function rect(w, s, e, n) {
+      return [[[w, s], [e, s], [e, n], [w, n], [w, s]]];
+    }
+
+    function dLat(meters) { return meters / 111320; }
+    function dLng(meters, lat) { return meters / (111320 * Math.cos((lat * Math.PI) / 180)); }
+
+    function years(since, h2015, h2021, h2026, h2031) {
+      return { since, h2015, h2021, h2026, h2031 };
+    }
+
+    function heightForYear(p, year) {
+      if (year < p.since) return 0;
+      if (year <= 2015) return p.h2015 || 0;
+      if (year <= 2021) return p.h2021 || 0;
+      if (year <= 2026) return p.h2026 || 0;
+      return p.h2031 || 0;
+    }
+
+    // Spaced campus anchors — wider gaps so icons don’t overlap
+    const SITE = {
+      metro:    [78.3748, 17.4522],
+      bus:      [78.3872, 17.4408],
+      school:   [78.3958, 17.4510],
+      hospital: [78.3945, 17.4595],
+      park:     [78.3920, 17.4385],
+      finance:  [78.3670, 17.4415],
+      airport:  [78.3525, 17.4285],
+      mall:     [78.3995, 17.4355],
+      it:       [78.3680, 17.4588]
+    };
+
+    const availableCells = (() => {
+      const west = 78.3812, east = 78.3828, south = 17.4476, north = 17.4488;
+      const cols = 3, rows = 2, gap = 0.00003;
+      const dx = (east - west) / cols, dy = (north - south) / rows;
+      const out = [];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x0 = west + c * dx + gap, x1 = west + (c + 1) * dx - gap;
+          const y0 = south + r * dy + gap, y1 = south + (r + 1) * dy - gap;
+          out.push({
+            type: 'Feature',
+            properties: {
+              id: 'PL-101', title: 'Plot 101 — Commercial unit', status: 'available',
+              area_sqft: '750 sq.ft', price: '$20,000 / unit',
+              ...years(2026, 0, 0, 18, 22), color: '#2f9e44', base: 0,
+              story: 'Green sale unit.'
+            },
+            geometry: { type: 'Polygon', coordinates: rect(x0, y0, x1, y1) }
+          });
+        }
+      }
+      return out;
+    })();
+
+    const saleAndPhase = [
+      ...availableCells,
+      {
+        type: 'Feature',
+        properties: {
+          id: 'PL-102', title: 'Plot 102 — Villa', status: 'sold', area_sqft: '3,200 sq.ft', price: '$95,000',
+          ...years(2026, 0, 0, 14, 14), color: '#5a5a5a', base: 0, story: 'Reserved villa plot.'
+        },
+        geometry: { type: 'Polygon', coordinates: rect(78.3830, 17.4476, 78.3840, 17.4488) }
+      }
+    ];
+
+    // Smaller floating icons
+    const modelPlacements = [
+      { id: 'park',     url: './cafe.glb',     lngLat: SITE.park,     since: 2026, sizeMeters: 100, floatMeters: 26 },
+      { id: 'airport',  url: './airport.glb',  lngLat: SITE.airport,  since: 2015, sizeMeters: 200, floatMeters: 36 },
+      { id: 'mall',     url: './store.glb',    lngLat: SITE.mall,     since: 2031, sizeMeters: 145, floatMeters: 30 },
+      { id: 'finance',  url: './bank.glb',     lngLat: SITE.finance,  since: 2021, sizeMeters: 155, floatMeters: 32 },
+      { id: 'school',   url: './school.gltf',  lngLat: SITE.school,   since: 2021, sizeMeters: 155, floatMeters: 30 },
+      { id: 'hospital', url: './hospital.glb', lngLat: SITE.hospital, since: 2026, sizeMeters: 165, floatMeters: 34 }
+    ];
+
+    let gltfLayer = null;
+
+    const destinations = [
+      {
+        id: 'metro', name: 'Metro', short: 'Metro', type: 'Transit', since: 2026, center: SITE.metro,
+        bike: { km: 0.9, min: 5, path: [GATE, SITE.metro] },
+        car:  { km: 1.1, min: 5, path: [GATE, [78.3780, 17.4495], SITE.metro] }
+      },
+      {
+        id: 'bus', name: 'Bus', short: 'Bus', type: 'Transit', since: 2026, center: SITE.bus,
+        bike: { km: 0.9, min: 5, path: [GATE, SITE.bus] },
+        car:  { km: 1.0, min: 4, path: [GATE, SITE.bus] }
+      },
+      {
+        id: 'school', name: 'School', short: 'School', type: 'Education', since: 2021, center: SITE.school,
+        bike: { km: 1.5, min: 8, path: [GATE, [78.3880, 17.4490], SITE.school] },
+        car:  { km: 1.7, min: 7, path: [GATE, [78.3880, 17.4490], SITE.school] }
+      },
+      {
+        id: 'hospital', name: 'Hospital', short: 'Hospital', type: 'Healthcare', since: 2026, center: SITE.hospital,
+        bike: { km: 1.8, min: 10, path: [GATE, [78.3880, 17.4520], SITE.hospital] },
+        car:  { km: 2.0, min: 8, path: [GATE, [78.3880, 17.4520], SITE.hospital] }
+      },
+      {
+        id: 'park', name: 'Park', short: 'Park', type: 'Lifestyle', since: 2026, center: SITE.park,
+        bike: { km: 1.4, min: 7, path: [GATE, SITE.bus, SITE.park] },
+        car:  { km: 1.6, min: 6, path: [GATE, SITE.bus, SITE.park] }
+      },
+      {
+        id: 'finance', name: 'Finance', short: 'Finance', type: 'Famous area', since: 2021, center: SITE.finance,
+        bike: { km: 1.9, min: 10, path: [GATE, SITE.metro, SITE.finance] },
+        car:  { km: 2.2, min: 9, path: [GATE, SITE.metro, SITE.finance] }
+      },
+      {
+        id: 'airport', name: 'Airport', short: 'Airport', type: 'Airport', since: 2015, center: SITE.airport,
+        bike: { km: 4.2, min: 20, path: [GATE, SITE.finance, SITE.airport] },
+        car:  { km: 4.6, min: 14, path: [GATE, SITE.finance, SITE.airport] }
+      },
+      {
+        id: 'mall', name: 'Mall', short: 'Mall', type: 'Retail', since: 2031, center: SITE.mall,
+        bike: { km: 2.2, min: 11, path: [GATE, SITE.park, SITE.mall] },
+        car:  { km: 2.5, min: 9, path: [GATE, SITE.park, SITE.mall] }
+      },
+      {
+        id: 'it', name: 'IT', short: 'IT', type: 'Employment', since: 2031, center: SITE.it,
+        bike: { km: 1.8, min: 9, path: [GATE, SITE.metro, SITE.it] },
+        car:  { km: 2.0, min: 8, path: [GATE, SITE.metro, SITE.it] }
+      }
+    ];
+
+    // Free HTML labels + dots (no MapLibre glyphs / font API)
+    const placeLabelMarkers = [];
+    const placeDotMarkers = [];
+    const routeLabelMarkers = [];
+    let gateMarker = null;
+
+    function makeHtmlLabel(text, className) {
+      const el = document.createElement('div');
+      el.className = className;
+      el.textContent = text;
+      return el;
+    }
+
+    function createPlaceLabels() {
+      // Plot gate anchor
+      const gateEl = document.createElement('div');
+      gateEl.className = 'gate-marker';
+      gateEl.title = 'Plot gate';
+      gateMarker = new maplibregl.Marker({ element: gateEl, anchor: 'center' })
+        .setLngLat(GATE)
+        .addTo(map);
+
+      destinations.forEach((d) => {
+        const el = makeHtmlLabel(d.short || d.name, 'place-label');
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          focusDestination(d.id);
+        });
+        const marker = new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [0, -22] })
+          .setLngLat(d.center)
+          .addTo(map);
+        placeLabelMarkers.push({ id: d.id, since: d.since, el, marker });
+
+        const dot = document.createElement('div');
+        dot.className = 'place-dot';
+        dot.title = d.name;
+        dot.addEventListener('click', (e) => {
+          e.stopPropagation();
+          focusDestination(d.id);
+        });
+        const dotMarker = new maplibregl.Marker({ element: dot, anchor: 'center' })
+          .setLngLat(d.center)
+          .addTo(map);
+        placeDotMarkers.push({ id: d.id, since: d.since, el: dot, marker: dotMarker });
+      });
+      updatePlaceLabels(currentYear);
+    }
+
+    function updatePlaceLabels(year) {
+      placeLabelMarkers.forEach(({ since, el }) => {
+        el.style.display = year >= since ? 'block' : 'none';
+      });
+      placeDotMarkers.forEach(({ id, since, el }) => {
+        el.style.display = year >= since ? 'block' : 'none';
+        el.classList.toggle('active', activeDest === id);
+      });
+    }
+
+    function clearRouteLabels() {
+      routeLabelMarkers.forEach((m) => m.remove());
+      routeLabelMarkers.length = 0;
+    }
+
+    function refreshRouteLabels(mode, year, highlightId) {
+      clearRouteLabels();
+      if (!highlightId) return;
+      const d = destinations.find((x) => x.id === highlightId);
+      if (!d || year < d.since) return;
+      const trip = d[mode];
+      const el = makeHtmlLabel(`${trip.km} km · ${trip.min} min`, 'route-label');
+      const coords = trip.path;
+      const mid = coords.length === 2
+        ? [(coords[0][0] + coords[1][0]) / 2, (coords[0][1] + coords[1][1]) / 2]
+        : coords[Math.floor(coords.length / 2)];
+      const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat(mid)
+        .addTo(map);
+      routeLabelMarkers.push(marker);
+    }
+
+    function buildSale(year) {
+      return {
+        type: 'FeatureCollection',
+        features: saleAndPhase.map((f) => {
+          const h = heightForYear(f.properties, year);
+          if (h <= 0) return null;
+          const base = f.properties.base || 0;
+          return { ...f, properties: { ...f.properties, height: h, base } };
+        }).filter(Boolean)
+      };
+    }
+
+    function midPoint(coords) {
+      const i = Math.floor(coords.length / 2);
+      if (coords.length === 2) {
+        return [(coords[0][0] + coords[1][0]) / 2, (coords[0][1] + coords[1][1]) / 2];
+      }
+      return coords[i];
+    }
+
+    function buildConnectivity(mode, year, highlightId) {
+      // Only ONE connection at a time — keeps the map clean
+      const lines = [];
+      if (!highlightId) {
+        return { lines: { type: 'FeatureCollection', features: [] } };
+      }
+
+      const d = destinations.find((x) => x.id === highlightId);
+      if (!d || year < d.since) {
+        return { lines: { type: 'FeatureCollection', features: [] } };
+      }
+
+      const trip = d[mode];
+      lines.push({
+        type: 'Feature',
+        properties: {
+          id: d.id,
+          name: d.name,
+          mode,
+          km: trip.km,
+          min: trip.min,
+          label: `${trip.km} km · ${trip.min} min`,
+          active: 1,
+          color: mode === 'bike' ? '#ffffff' : '#d0d0d0'
+        },
+        geometry: { type: 'LineString', coordinates: trip.path }
+      });
+
+      return { lines: { type: 'FeatureCollection', features: lines } };
+    }
+
+    function renderConnectList() {
+      connectList.innerHTML = destinations.map((d) => {
+        const locked = currentYear < d.since;
+        const trip = d[travelMode];
+        return `
+          <button class="connect-item ${locked ? 'locked' : ''} ${activeDest === d.id ? 'active' : ''}"
+            data-id="${d.id}" type="button" ${locked ? 'disabled' : ''}>
+            <span class="name">${d.short || d.name}</span>
+            <span class="type">${d.type}${locked ? ` · from ${d.since}` : ''}</span>
+            <span class="stats">
+              <strong>${trip.min} min</strong>
+              ${trip.km} km · ${travelMode}
+            </span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function updateConnectivity() {
+      if (!map.getSource('connect-lines')) return;
+      const data = buildConnectivity(travelMode, currentYear, activeDest);
+      map.getSource('connect-lines').setData(data.lines);
+
+      map.setPaintProperty('connect-line', 'line-opacity', activeDest ? 1 : 0);
+      map.setPaintProperty('connect-glow', 'line-opacity', activeDest ? 0.35 : 0);
+
+      refreshRouteLabels(travelMode, currentYear, activeDest);
+      renderConnectList();
+      updatePlaceLabels(currentYear);
+    }
+
+    function showRouteChip(dest) {
+      if (!dest || currentYear < dest.since) {
+        routeChip.classList.remove('visible');
+        return;
+      }
+      const trip = dest[travelMode];
+      routeTo.textContent = `${dest.name}`;
+      routeDetail.textContent = `${travelMode === 'bike' ? 'Bike' : 'Car'} · ${trip.km} km · ${trip.min} min from plot gate`;
+      routeChip.classList.add('visible');
+    }
+
+    function focusDestination(id, opts = {}) {
+      const dest = destinations.find((d) => d.id === id);
+      if (!dest || currentYear < dest.since) return;
+
+      // User taps stop auto route cycle + tour; guided tour passes { keepTour: true }
+      if (!opts.keepTour) {
+        pauseTour();
+        pauseYearPlay();
+        pauseRouteCycle();
+        routeLockedByUser = true;
+      }
+
+      activeDest = id;
+      updateConnectivity();
+      showRouteChip(dest);
+      if (gltfLayer) gltfLayer.focus(id);
+
+      // Tour drives its own zoom in/out framing
+      if (opts.skipCamera) return;
+
+      map.easeTo({
+        center: dest.center,
+        zoom: id === 'airport' ? 14.2 : 15.6,
+        pitch: 58,
+        duration: 1200
+      });
+    }
+
+    function framePlotAndPlace(dest, opts = {}) {
+      const pad = opts.padding || 100;
+      const bounds = new maplibregl.LngLatBounds();
+      bounds.extend(GATE);
+      bounds.extend(dest.center);
+      // Include a bit of the sale plot block so green plots stay visible
+      bounds.extend([78.3812, 17.4476]);
+      bounds.extend([78.3840, 17.4488]);
+      map.fitBounds(bounds, {
+        padding: { top: pad, bottom: pad + 80, left: pad + 160, right: pad + 140 },
+        pitch: opts.pitch != null ? opts.pitch : 52,
+        bearing: opts.bearing != null ? opts.bearing : map.getBearing(),
+        duration: opts.duration != null ? opts.duration : 1600,
+        maxZoom: opts.maxZoom != null ? opts.maxZoom : 15.2
+      });
+    }
+
+    function setTourCard(stop, dest) {
+      insightYear.textContent = `${stop.year} · tour`;
+      insightTitle.textContent = stop.title;
+      insightBody.textContent = stop.body;
+      yearNote.textContent = stop.body;
+    }
+
+    function updateInsight(year) {
+      const s = yearStories[year];
+      insightYear.textContent = `${year} view`;
+      insightTitle.textContent = s.title;
+      insightBody.textContent = s.body;
+      yearNote.textContent = s.body;
+      document.querySelectorAll('.year-btn, .timeline-dot').forEach((el) => {
+        el.classList.toggle('active', Number(el.dataset.year) === year);
+      });
+    }
+
+    function setYear(year, animateCamera = true) {
+      currentYear = year;
+      if (!map.getSource('sale-data')) return;
+
+      map.getSource('sale-data').setData(buildSale(year));
+
+      if (activeDest) {
+        const d = destinations.find((x) => x.id === activeDest);
+        if (!d || year < d.since) {
+          activeDest = null;
+          routeChip.classList.remove('visible');
+        } else {
+          showRouteChip(d);
+        }
+      }
+
+      updateConnectivity();
+      updateInsight(year);
+      updatePlaceLabels(year);
+      if (gltfLayer) gltfLayer.setYear(year);
+
+      if (animateCamera) {
+        const views = {
+          2015: { center: [78.3700, 17.4400], zoom: 13.8, pitch: 48, bearing: -12 },
+          2021: { center: [78.3820, 17.4478], zoom: 14.2, pitch: 50, bearing: -16 },
+          2026: { center: [78.3820, 17.4478], zoom: 14.4, pitch: 50, bearing: -18 },
+          2031: { center: [78.3820, 17.4478], zoom: 14.1, pitch: 52, bearing: -22 }
+        };
+        map.easeTo({ ...views[year], duration: 1300 });
+      }
+
+      statusEl.style.display = 'block';
+      statusEl.textContent = `${year} · local icons only · no map API`;
+      clearTimeout(statusEl._hide);
+      statusEl._hide = setTimeout(() => { statusEl.style.display = 'none'; }, 2600);
+
+    }
+
+    function setMode(mode) {
+      travelMode = mode;
+      modeBike.classList.toggle('active', mode === 'bike');
+      modeCar.classList.toggle('active', mode === 'car');
+      updateConnectivity();
+      if (activeDest) {
+        const d = destinations.find((x) => x.id === activeDest);
+        showRouteChip(d);
+      }
+    }
+
+    // Tour / year play / auto route cycle (one line at a time)
+    let tourRunning = false, yearPlaying = false, tourIndex = 0;
+    let rotateRaf = null, stepTimeout = null, yearPlayTimeout = null, userInteracting = false;
+    let routeCycling = false, routeCycleIndex = 0, routeCycleTimeout = null, routeLockedByUser = false;
+
+    const tourStops = [
+      {
+        year: 2026, dest: 'metro', ms: 9000,
+        title: 'Plot → Metro',
+        body: 'From the green sale plots, metro is a short hop. Zoom out shows both gate and station; zoom in reads the place.'
+      },
+      {
+        year: 2026, dest: 'school', ms: 9000,
+        title: 'Plot → School',
+        body: 'Master plots and school stay in frame — watch the route, then ease in on the school icon.'
+      },
+      {
+        year: 2026, dest: 'hospital', ms: 9000,
+        title: 'Plot → Hospital',
+        body: 'Healthcare link from the gate. Time and distance stay on the route while both ends stay visible.'
+      },
+      {
+        year: 2026, dest: 'airport', ms: 10000,
+        title: 'Plot → Airport',
+        body: 'Longer corridor: wide zoom for the full link, then a nudge toward the airport icon.'
+      },
+      {
+        year: 2031, dest: 'mall', ms: 9000,
+        title: 'Plot → Mall',
+        body: '2031 retail node — master plots and mall share the screen so the connection reads clearly.'
+      }
+    ];
+
+    let tourMoveHandler = null;
+
+    function unlockedDestinations() {
+      return destinations.filter((d) => currentYear >= d.since);
+    }
+
+    function pauseRouteCycle() {
+      routeCycling = false;
+      clearTimeout(routeCycleTimeout);
+      routeCycleTimeout = null;
+    }
+
+    function showRouteOnly(id, keepCamera) {
+      const dest = destinations.find((d) => d.id === id);
+      if (!dest || currentYear < dest.since) return;
+      activeDest = id;
+      updateConnectivity();
+      showRouteChip(dest);
+      if (gltfLayer) gltfLayer.focus(id);
+      if (!keepCamera) {
+        map.easeTo({
+          center: dest.center,
+          zoom: id === 'airport' ? 14.0 : 14.8,
+          pitch: 52,
+          duration: 900
+        });
+      }
+    }
+
+    function goRouteCycle() {
+      if (!routeCycling || routeLockedByUser) return;
+      const list = unlockedDestinations();
+      if (!list.length) return;
+      routeCycleIndex = routeCycleIndex % list.length;
+      const dest = list[routeCycleIndex];
+      showRouteOnly(dest.id, true);
+      routeCycleIndex += 1;
+      routeCycleTimeout = setTimeout(goRouteCycle, 3200);
+    }
+
+    function startRouteCycle() {
+      if (routeLockedByUser) return;
+      pauseRouteCycle();
+      routeCycling = true;
+      goRouteCycle();
+    }
+
+    function stopRotation() { cancelAnimationFrame(rotateRaf); rotateRaf = null; }
+    function startOrbit() {
+      stopRotation();
+      const spin = () => {
+        if (tourRunning && !userInteracting) map.setBearing(map.getBearing() + 0.012);
+        rotateRaf = requestAnimationFrame(spin);
+      };
+      rotateRaf = requestAnimationFrame(spin);
+    }
+
+    function pauseTour() {
+      tourRunning = false;
+      tourToggle.textContent = 'Play tour';
+      tourToggle.classList.remove('active');
+      clearTimeout(stepTimeout);
+      stopRotation();
+      if (tourMoveHandler) {
+        map.off('moveend', tourMoveHandler);
+        tourMoveHandler = null;
+      }
+      updateInsight(currentYear);
+    }
+
+    function goTour(i) {
+      if (!tourRunning) return;
+      tourIndex = i % tourStops.length;
+      const stop = tourStops[tourIndex];
+      const dest = destinations.find((d) => d.id === stop.dest);
+      if (!dest) {
+        stepTimeout = setTimeout(() => goTour(tourIndex + 1), 400);
+        return;
+      }
+
+      clearTimeout(stepTimeout);
+      stopRotation();
+      if (tourMoveHandler) {
+        map.off('moveend', tourMoveHandler);
+        tourMoveHandler = null;
+      }
+
+      if (currentYear !== stop.year) setYear(stop.year, false);
+      setTourCard(stop, dest);
+      focusDestination(stop.dest, { keepTour: true, skipCamera: true });
+
+      // 1) Zoom OUT — plot + place together
+      framePlotAndPlace(dest, {
+        pitch: 48,
+        bearing: map.getBearing() + 18,
+        duration: 1800,
+        maxZoom: stop.dest === 'airport' ? 13.6 : 14.8,
+        padding: 90
+      });
+
+      let phase = 0;
+      tourMoveHandler = () => {
+        if (!tourRunning) return;
+        phase += 1;
+
+        if (phase === 1) {
+          // 2) Zoom IN on the place
+          map.easeTo({
+            center: dest.center,
+            zoom: stop.dest === 'airport' ? 14.4 : 15.4,
+            pitch: 58,
+            bearing: map.getBearing() + 20,
+            duration: 1600
+          });
+          return;
+        }
+
+        if (phase === 2) {
+          // 3) Zoom OUT again — both visible
+          framePlotAndPlace(dest, {
+            pitch: 52,
+            bearing: map.getBearing() + 12,
+            duration: 1600,
+            maxZoom: stop.dest === 'airport' ? 13.8 : 14.9,
+            padding: 100
+          });
+          return;
+        }
+
+        // 4) Soft orbit, then next card
+        map.off('moveend', tourMoveHandler);
+        tourMoveHandler = null;
+        startOrbit();
+        stepTimeout = setTimeout(() => goTour(tourIndex + 1), Math.max(2800, stop.ms - 5000));
+      };
+
+      map.on('moveend', tourMoveHandler);
+    }
+
+    function startTour() {
+      pauseYearPlay();
+      pauseRouteCycle();
+      routeLockedByUser = true;
+      tourRunning = true;
+      tourToggle.textContent = 'Pause tour';
+      tourToggle.classList.add('active');
+      goTour(tourIndex);
+    }
+
+    function pauseYearPlay() {
+      yearPlaying = false;
+      playYearsBtn.textContent = 'Play years';
+      playYearsBtn.classList.remove('active');
+      clearTimeout(yearPlayTimeout);
+    }
+
+    function playYears() {
+      pauseTour();
+      yearPlaying = true;
+      playYearsBtn.textContent = 'Stop years';
+      playYearsBtn.classList.add('active');
+      let i = 0;
+      const step = () => {
+        if (!yearPlaying) return;
+        setYear(YEARS[i]);
+        i += 1;
+        if (i >= YEARS.length) { pauseYearPlay(); return; }
+        yearPlayTimeout = setTimeout(step, 3200);
+      };
+      step();
+    }
+
+    function addLayers() {
+      map.addSource('sale-data', { type: 'geojson', data: buildSale(currentYear) });
+
+      const conn = buildConnectivity(travelMode, currentYear, null);
+      map.addSource('connect-lines', { type: 'geojson', data: conn.lines });
+
+      // Flat fill first — always readable
+      map.addLayer({
+        id: 'sale-fill', type: 'fill', source: 'sale-data',
+        paint: {
+          'fill-color': ['get', 'color'],
+          'fill-opacity': 0.85
+        }
+      });
+
+      map.addLayer({
+        id: 'sale-extrusion', type: 'fill-extrusion', source: 'sale-data',
+        paint: {
+          'fill-extrusion-color': ['get', 'color'],
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-base': ['coalesce', ['get', 'base'], 0],
+          'fill-extrusion-opacity': 0.88,
+          'fill-extrusion-vertical-gradient': true
+        }
+      });
+
+      map.addLayer({
+        id: 'sale-outline', type: 'line', source: 'sale-data',
+        paint: {
+          'line-color': ['match', ['get', 'status'], 'available', '#b2f2bb', '#ffffff'],
+          'line-width': ['match', ['get', 'status'], 'available', 2.4, 1.4],
+          'line-opacity': 1
+        }
+      });
+
+      map.addLayer({
+        id: 'connect-glow', type: 'line', source: 'connect-lines',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#ffffff', 'line-width': 16, 'line-opacity': 0.3, 'line-blur': 1.2 }
+      });
+
+      map.addLayer({
+        id: 'connect-line', type: 'line', source: 'connect-lines',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': '#ffffff',
+          'line-width': 5,
+          'line-dasharray': [2, 1.2],
+          'line-opacity': 1
+        }
+      });
+
+      createPlaceLabels();
+
+      map.on('click', 'connect-line', (e) => {
+        focusDestination(e.features[0].properties.id);
+      });
+
+      const showSalePopup = (e) => {
+        const p = e.features[0].properties;
+        new maplibregl.Popup({ offset: 12 })
+          .setLngLat(e.lngLat)
+          .setHTML(`
+            <div class="popup-title">${p.title}</div>
+            <div class="popup-metric"><strong>Status</strong> — ${p.status}</div>
+            <div class="popup-metric"><strong>Area</strong> — ${p.area_sqft}</div>
+            <div class="popup-metric"><strong>Price</strong> — ${p.price}</div>
+          `)
+          .addTo(map);
+      };
+      map.on('click', 'sale-extrusion', showSalePopup);
+      map.on('click', 'sale-fill', showSalePopup);
+
+      ['connect-line', 'sale-extrusion', 'sale-fill'].forEach((id) => {
+        map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
+      });
+
+      map.on('mousedown', () => { userInteracting = true; });
+      map.on('mouseup', () => { userInteracting = false; });
+
+      setYear(2026, false);
+      // Kick first route immediately so the map is never empty
+      const first = unlockedDestinations()[0];
+      if (first) {
+        activeDest = first.id;
+        updateConnectivity();
+        showRouteChip(first);
+      }
+      statusEl.style.display = 'block';
+      statusEl.textContent = 'Satellite map loaded — no API key required.';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
+      startRouteCycle();
+    }
+
+    connectList.addEventListener('click', (e) => {
+      const item = e.target.closest('.connect-item');
+      if (!item || item.disabled) return;
+      pauseTour();
+      focusDestination(item.dataset.id);
+    });
+
+    modeBike.addEventListener('click', () => setMode('bike'));
+    modeCar.addEventListener('click', () => setMode('car'));
+
+    document.getElementById('yearGrid').addEventListener('click', (e) => {
+      const btn = e.target.closest('.year-btn');
+      if (!btn) return;
+      pauseTour(); pauseYearPlay();
+      setYear(Number(btn.dataset.year));
+    });
+
+    document.getElementById('timelineTrack').addEventListener('click', (e) => {
+      const btn = e.target.closest('.timeline-dot');
+      if (!btn) return;
+      pauseTour(); pauseYearPlay();
+      setYear(Number(btn.dataset.year));
+    });
+
+    tourToggle.addEventListener('click', () => tourRunning ? pauseTour() : startTour());
+    playYearsBtn.addEventListener('click', () => yearPlaying ? pauseYearPlay() : playYears());
+
+    clearRouteBtn.addEventListener('click', () => {
+      pauseTour();
+      pauseYearPlay();
+      routeLockedByUser = false;
+      activeDest = null;
+      updateConnectivity();
+      routeChip.classList.remove('visible');
+      if (gltfLayer) gltfLayer.focus(null);
+      startRouteCycle();
+    });
+
+    async function waitForGltfLoader(timeoutMs = 15000) {
+      if (window.createModelBuildingsLayer) return true;
+      return new Promise((resolve) => {
+        const t = setTimeout(() => resolve(false), timeoutMs);
+        window.addEventListener('gltf-ready', () => {
+          clearTimeout(t);
+          resolve(true);
+        }, { once: true });
+      });
+    }
+
+    map.on('load', async () => {
+      statusEl.style.display = 'block';
+      statusEl.textContent = 'Loading local GLB/GLTF icons on satellite map…';
+
+      addLayers();
+
+      const ok = await waitForGltfLoader();
+      if (!ok || !window.createModelBuildingsLayer) {
+        statusEl.textContent = 'Map ready. Icons failed — check Three.js CDN or open via localhost.';
+        return;
+      }
+
+      try {
+        gltfLayer = await window.createModelBuildingsLayer(maplibregl, modelPlacements);
+        map.addLayer(gltfLayer);
+        gltfLayer.setYear(currentYear);
+        if (activeDest) gltfLayer.focus(activeDest);
+
+        if (gltfLayer.whenReady) {
+          gltfLayer.whenReady().then(() => {
+            statusEl.textContent = 'Large 3D icons ready.';
+            setTimeout(() => { statusEl.style.display = 'none'; }, 2800);
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Icon load error — see console.';
+      }
+    });
+    map.on('error', (e) => {
+      console.error(e);
+    });
+  </script>
+</body>
+</html>

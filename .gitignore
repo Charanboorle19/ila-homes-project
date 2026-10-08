@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# reference material, not part of the app
+# A copy of public/map/ plus macOS resource-fork junk; nothing imports it.
+/src/map sample/
+# Scratch output from favicon generation.
+/tmp-favicons/

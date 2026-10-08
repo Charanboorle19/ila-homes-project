@@ -22,8 +22,8 @@ import {
  * needs to know about so it can ask the API for a fresh one.
  */
 
-/** Matches `bucket.s3.amazonaws.com`, `bucket.s3.<region>.amazonaws.com`, etc. */
-const S3_HOST = /^[a-z0-9][a-z0-9.-]*\.s3([.-][a-z0-9-]+)?\.amazonaws\.com$/i;
+/** Accepts virtual-hosted and path-style presigned S3 URLs. */
+const S3_HOST = /^(?:[a-z0-9][a-z0-9.-]*\.s3(?:[.-][a-z0-9-]+)?|s3(?:[.-][a-z0-9-]+)?)\.amazonaws\.com$/i;
 
 /**
  * Decoded previews are cached: re-opening a property should not re-download a

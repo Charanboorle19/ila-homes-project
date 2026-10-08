@@ -2,9 +2,17 @@ import type { PropertyRecord } from "@/data/properties";
 
 export default function LegalDocuments({
   property,
+  documentsState = "ready",
 }: {
   property: PropertyRecord;
+  documentsState?: "loading" | "ready" | "error";
 }) {
+  const formatBytes = (bytes?: number) => {
+    if (!bytes || bytes < 1) return null;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
     <section
       className="pd-section pd-legal"
@@ -15,27 +23,40 @@ export default function LegalDocuments({
         <p className="pd-kicker">Verification</p>
         <h2 id="pd-legal-title">Legal documents for {property.name}</h2>
         <p className="pd-section__lead">
-          {property.documents.some((doc) => doc.href)
-            ? "Demo catalogue links may be fragments until production targets are verified for each property."
-            : "Recorded for this development as published by the listing."}
+          {documentsState === "loading"
+            ? "Loading the latest property documents…"
+            : documentsState === "error"
+              ? "Documents could not be loaded right now. Please try again later."
+              : property.documents.length > 0
+                ? `${property.documents.length} document${property.documents.length === 1 ? "" : "s"} published for this property.`
+                : "No documents have been published for this property yet."}
         </p>
 
         <ul className="pd-legal__list">
-          {property.documents.map((doc) => (
+          {documentsState === "loading" ? (
+            <li>
+              <div>
+                <h3>Loading documents</h3>
+                <p role="status">Fetching the verification files for this property…</p>
+              </div>
+            </li>
+          ) : property.documents.map((doc) => (
             <li key={doc.id}>
               <div>
                 <h3>{doc.label}</h3>
                 <p>
-                  {/* A stated fact stands on its own; only a real document
-                      file gets a link to open. */}
-                  {doc.detail ??
-                    `${property.bankEligible ? "Bank-eligible context" : "Verify financing"} · ${
-                      property.reraRegistered ? "RERA noted" : "RERA status TBA"
-                    }`}
+                  {[doc.documentType, doc.visibility, formatBytes(doc.sizeBytes)]
+                    .filter(Boolean)
+                    .join(" · ") || doc.detail || "Published verification document"}
                 </p>
               </div>
               {doc.href ? (
-                <a className="pd-btn pd-btn--ghost" href={doc.href}>
+                <a
+                  className="pd-btn pd-btn--ghost"
+                  href={doc.href}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   View
                 </a>
               ) : null}

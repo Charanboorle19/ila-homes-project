@@ -14,8 +14,11 @@
  * given, so it must not become an open proxy.
  */
 
-/** Matches `bucket.s3.amazonaws.com`, `bucket.s3.<region>.amazonaws.com`, etc. */
-const S3_HOST = /^[a-z0-9][a-z0-9.-]*\.s3([.-][a-z0-9-]+)?\.amazonaws\.com$/i;
+/**
+ * Accepts both virtual-hosted S3 URLs (`bucket.s3.amazonaws.com`) and
+ * path-style presigned URLs (`s3.<region>.amazonaws.com/bucket/...`).
+ */
+const S3_HOST = /^(?:[a-z0-9][a-z0-9.-]*\.s3(?:[.-][a-z0-9-]+)?|s3(?:[.-][a-z0-9-]+)?)\.amazonaws\.com$/i;
 
 /** Master plans are scans or previews of them; anything larger is not one. */
 const MAX_BYTES = 60 * 1024 * 1024;

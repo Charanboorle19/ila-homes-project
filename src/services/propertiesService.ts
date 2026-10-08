@@ -116,6 +116,10 @@ export type ApiProperty = {
   area: number | null;
   facing: string | null;
   amenities: string[] | null;
+  /** Published plot inventory fields returned by the catalogue API. */
+  total_plots?: number | null;
+  available_plots_count?: number | null;
+  area_range?: { min: number | null; max: number | null } | null;
   connectivity_score: number | null;
   rera_registered: boolean | null;
   rera_number: string | null;
@@ -135,6 +139,40 @@ export type ApiProperty = {
   } | null;
   metadata: Record<string, unknown> | null;
 };
+
+export type ApiPropertyDocument = {
+  id: string;
+  name: string;
+  document_type: string | null;
+  size_bytes: number | null;
+  visibility: string | null;
+  storage_reference: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+type PropertyDocumentsResponse = {
+  success?: boolean;
+  data?: {
+    items?: ApiPropertyDocument[];
+    total?: number;
+  };
+};
+
+/** Documents available for a property, via GET /api/properties/{id}/documents. */
+export async function fetchPropertyDocuments(
+  propertyId: string,
+  signal?: AbortSignal,
+): Promise<{ items: ApiPropertyDocument[]; total: number }> {
+  const response = await apiFetch<PropertyDocumentsResponse>(
+    `/api/properties/${encodeURIComponent(propertyId)}/documents`,
+    { signal },
+  );
+
+  const items = Array.isArray(response?.data?.items) ? response.data.items : [];
+  return { items, total: response?.data?.total ?? items.length };
+}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -289,6 +327,8 @@ export async function fetchPropertyUnits(
     const data = response?.data;
     const items = data?.items ?? [];
 
+    console.log("[ILA API] layout_preview_url", data?.layout_preview_url ?? null);
+
     // Layout image + geometry only arrive on the first page, but log what
     // came back: this is the call that decides whether a layout can be drawn,
     // so its shape needs to be visible when a map renders nothing.
@@ -418,6 +458,12 @@ export type PropertyListItem = {
   property_type: string | null;
   price: number | null;
   cover_url: string | null;
+  /** Some API deployments include these popup-ready fields in list rows. */
+  price_label?: string | null;
+  amenities?: string[] | null;
+  total_plots?: number | null;
+  available_plots_count?: number | null;
+  area_range?: { min: number | null; max: number | null } | null;
   /** Present on some deployments of the list endpoint; null elsewhere. */
   latitude?: number | null;
   longitude?: number | null;
@@ -537,6 +583,44 @@ export async function fetchPropertyAnchors(
   );
 
   return anchors;
+}
+
+export type ApiNearbyPlace = {
+  id: string;
+  property_id: string;
+  name: string;
+  category: string;
+  distance: number;
+  distance_unit: string;
+  proximity_label?: string | null;
+  status: string;
+  expected_year?: number | null;
+  latitude: number;
+  longitude: number;
+  metadata?: {
+    source?: string;
+    distance_type?: string;
+    verified_route_distance?: boolean;
+    [key: string]: unknown;
+  } | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export async function fetchNearbyPlaces(
+  propertyId: string,
+  signal?: AbortSignal,
+): Promise<ApiNearbyPlace[]> {
+  if (!propertyId) return [];
+
+  const response = await apiFetch<{
+    success?: boolean;
+    data?: ApiNearbyPlace[];
+  }>(`/api/properties/${encodeURIComponent(propertyId)}/nearby-places`, {
+    signal,
+  });
+
+  return Array.isArray(response?.data) ? response.data : [];
 }
 
 /** The API returns price as a float; 0 means "price on request". */

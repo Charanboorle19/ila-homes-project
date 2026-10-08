@@ -31,6 +31,10 @@ export type PropertyDocument = {
   href?: string;
   /** Supporting line shown under the label. */
   detail?: string;
+  documentType?: string;
+  sizeBytes?: number;
+  visibility?: string;
+  createdAt?: string;
 };
 
 export type TimelineEntry = {

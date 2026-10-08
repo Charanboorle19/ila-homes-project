@@ -6,11 +6,16 @@ import PropertyPageView from "@/components/PropertyDetail/PropertyPageView";
 import type { PropertyRecord } from "@/data/properties";
 import {
   fetchPropertyById,
+  fetchPropertyDocuments,
   fetchPropertyLifeStageFit,
   isPropertyUuid,
   type ApiProperty,
 } from "@/services/propertiesService";
-import { apiPropertyToRecord, type LifeStageSource } from "@/services/propertyMapper";
+import {
+  apiDocumentsToRecords,
+  apiPropertyToRecord,
+  type LifeStageSource,
+} from "@/services/propertyMapper";
 import { useTrackPropertyView } from "@/services/analytics/usePropertyView";
 
 /**
@@ -31,6 +36,9 @@ export default function ApiPropertyView({ id }: { id: string }) {
   const [lifeStage, setLifeStage] = useState<LifeStageSource>({
     status: "pending",
   });
+  const [documents, setDocuments] = useState<
+    { status: "loading" | "ready" | "error"; items: ReturnType<typeof apiDocumentsToRecords> }
+  >({ status: "loading", items: [] });
   const [state, setState] = useState<"loading" | "ready" | "error">(
     isPropertyUuid(id) ? "loading" : "error",
   );
@@ -52,6 +60,28 @@ export default function ApiPropertyView({ id }: { id: string }) {
         if (controller.signal.aborted) return;
         console.warn("[property] fetch failed", error);
         setState("error");
+      });
+
+    return () => controller.abort();
+  }, [id]);
+
+  useEffect(() => {
+    if (!isPropertyUuid(id)) return;
+
+    const controller = new AbortController();
+
+    fetchPropertyDocuments(id, controller.signal)
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        setDocuments({
+          status: "ready",
+          items: apiDocumentsToRecords(result.items),
+        });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.warn("[property] documents fetch failed", error);
+        setDocuments({ status: "error", items: [] });
       });
 
     return () => controller.abort();
@@ -121,7 +151,7 @@ export default function ApiPropertyView({ id }: { id: string }) {
   }
 
   // Render the shared property template with API data mapped into its shape.
-  const record = apiPropertyToRecord(property, lifeStage) as PropertyRecord;
+  const record = apiPropertyToRecord(property, lifeStage, documents.items) as PropertyRecord;
 
-  return <PropertyPageView property={record} />;
+  return <PropertyPageView property={record} documentsState={documents.status} />;
 }

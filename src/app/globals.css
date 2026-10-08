@@ -305,12 +305,12 @@ body {
   }
 }
 
-@media (max-width: 767px) {
-  .ila-fullscreen-hint {
-    animation: fullscreen-hint-pulse 2.2s cubic-bezier(0.45, 0, 0.2, 1) infinite;
-    will-change: transform, box-shadow;
-  }
+.ila-fullscreen-hint {
+  animation: fullscreen-hint-pulse 2.2s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+  will-change: transform, box-shadow;
+}
 
+@media (max-width: 767px) {
   .ila-map-search-panel--open {
     animation: map-search-expand 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
     transform-origin: top right;
@@ -325,12 +325,6 @@ body {
   to {
     opacity: 1;
     transform: translateX(0) scale(1);
-  }
-}
-
-@media (min-width: 768px) {
-  .ila-fullscreen-hint {
-    animation: none;
   }
 }
 

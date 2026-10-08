@@ -53,23 +53,29 @@ export default function PropertyFinalCta({
       url,
     };
 
-    try {
-      if (navigator.share) {
+    if (navigator.share) {
+      try {
         await navigator.share(payload);
         setShareNote("Shared");
-        return;
+      } catch (error) {
+        // Dismissing the share sheet rejects with AbortError. That is a
+        // deliberate "no", not a failure. It must not fall through to any
+        // fallback, or cancelling the sheet launches the fallback instead.
+        if ((error as { name?: string } | null)?.name === "AbortError") return;
+        setShareNote("Sharing did not complete");
       }
-    } catch {
-      // fall through
+      return;
     }
 
+    // No Web Share API: offer the link on the clipboard. This deliberately
+    // never opens a chat app — the page does not get to choose where a visitor
+    // takes their link, and silently launching WhatsApp turned "Share property"
+    // into an unsolicited chat on every clipboard failure.
     try {
       await navigator.clipboard.writeText(url);
       setShareNote("Link copied");
-      return;
     } catch {
-      window.open(whatsappUrl(`${payload.text}\n${url}`), "_blank", "noreferrer");
-      setShareNote("Opened WhatsApp share");
+      setShareNote("Copy the link from your address bar");
     }
   };
 

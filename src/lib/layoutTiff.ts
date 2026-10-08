@@ -2,6 +2,7 @@ import {
   layoutCordsToBounds,
   layoutCordsToCoordinates,
   type LayoutRaster,
+  type LayoutRasterImage,
 } from "@/data/projects/layoutRasters";
 import type { PropertyLayoutCords } from "@/services/propertiesService";
 
@@ -9,13 +10,13 @@ import type { PropertyLayoutCords } from "@/services/propertiesService";
  * Inline TIFF support for the estate master plan.
  *
  * MapLibre cannot decode TIFF, and browsers cannot display one either, so the
- * file is decoded in the browser (geotiff.js) and handed to the map as a PNG
- * data URL on an image source. The image is georeferenced with the extent the
+ * file is decoded in the browser (geotiff.js) and handed to the map as a canvas
+ * on an image source. The image is georeferenced with the extent the
  * units API returns (`property_layout_cords`) rather than GeoTIFF tags, which
  * keeps this independent of how the survey was exported.
  *
- * This is the fallback path: the API's `layout_preview_url` is already a
- * browser-readable PNG and is preferred — see @/lib/layoutPreview.
+ * The API's `layout_preview_url` remains a separate PNG fallback — see
+ * @/lib/layoutPreview.
  */
 
 /**
@@ -38,7 +39,7 @@ const MAX_DECODED_PIXELS = MAX_DECODED_EDGE * MAX_DECODED_EDGE;
  */
 const CACHE_TTL_MS = 45 * 60 * 1000;
 
-type CacheEntry = { dataUrl: string; cachedAt: number };
+type CacheEntry = { image: LayoutRasterImage; cachedAt: number };
 
 const rasterCache = new Map<string, CacheEntry>();
 
@@ -58,31 +59,34 @@ export async function loadLayoutRaster(options: {
   const { propertyId, tifUrl, cords, opacity = 0.85, signal } = options;
 
   const cached = rasterCache.get(propertyId);
-  let dataUrl: string;
+  let image: LayoutRasterImage;
 
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-    dataUrl = cached.dataUrl;
+    image = cached.image;
   } else {
-    const decoded = await decodeTiffToPngDataUrl(tifUrl, signal);
+    const decoded = await decodeTiffToCanvas(tifUrl, signal);
     if (!decoded) return undefined;
-    dataUrl = decoded;
-    rasterCache.set(propertyId, { dataUrl, cachedAt: Date.now() });
+    image = decoded;
+    rasterCache.set(propertyId, { image, cachedAt: Date.now() });
   }
 
   return {
     id: `${propertyId}-layout`,
-    url: dataUrl,
+    // The image source is created without a URL in MapSection. Supplying the
+    // decoded canvas makes updateImage({ image }) upload it directly instead
+    // of asking MapLibre to perform a second URL load.
+    image,
     coordinates: layoutCordsToCoordinates(cords),
     opacity,
     bounds: layoutCordsToBounds(cords),
   };
 }
 
-/** Decodes a TIFF into a PNG data URL via an offscreen canvas. */
-export async function decodeTiffToPngDataUrl(
+/** Decodes a TIFF into a canvas that MapLibre can upload directly. */
+export async function decodeTiffToCanvas(
   url: string,
   signal?: AbortSignal,
-): Promise<string | null> {
+): Promise<HTMLCanvasElement | null> {
   try {
     // Same-origin, because the S3 bucket allows no cross-origin reads.
     const proxied = `${LAYOUT_IMAGE_PROXY}?url=${encodeURIComponent(url)}`;
@@ -174,11 +178,10 @@ export async function decodeTiffToPngDataUrl(
     const raster = ctx.createImageData(decoded.width, decoded.height);
     raster.data.set(rgba);
     ctx.putImageData(raster, 0, 0);
-    const dataUrl = canvas.toDataURL("image/png");
     console.log(
-      `[ILA map] layout TIFF decoded — ${decoded.width}x${decoded.height}, stride ${decoded.pixels.length / (decoded.width * decoded.height)}, data URL ${Math.round(dataUrl.length / 1024)} KB`,
+      `[ILA map] layout TIFF decoded — ${decoded.width}x${decoded.height}, stride ${decoded.pixels.length / (decoded.width * decoded.height)}`,
     );
-    return dataUrl;
+    return canvas;
   } catch (error) {
     console.warn("[ILA map] layout TIFF decode failed", error);
     return null;

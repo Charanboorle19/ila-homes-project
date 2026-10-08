@@ -10,6 +10,11 @@ import {
   type ApiProperty,
   type PropertyListItem,
 } from "@/services/propertiesService";
+import {
+  fetchFavorites,
+  removeFavorite,
+  saveFavorite,
+} from "@/services/favoritesService";
 
 /**
  * Caps simultaneous detail requests.
@@ -60,12 +65,56 @@ export default function PropertiesList() {
   const [items, setItems] = useState<Enriched[]>([]);
   const [total, setTotal] = useState(0);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
+  const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
+
+  async function handleFavoriteToggle(propertyId: string) {
+    const isSaved = savedIds.has(propertyId);
+    if (savingIds.has(propertyId)) return;
+
+    setFavoriteError(null);
+    setSavingIds((current) => new Set(current).add(propertyId));
+
+    try {
+      if (isSaved) {
+        await removeFavorite(propertyId);
+        setSavedIds((current) => {
+          const next = new Set(current);
+          next.delete(propertyId);
+          return next;
+        });
+      } else {
+        await saveFavorite(propertyId);
+        setSavedIds((current) => new Set(current).add(propertyId));
+      }
+    } catch (error: unknown) {
+      console.warn("[properties] favorite toggle failed", error);
+      setFavoriteError(
+        isSaved
+          ? "Could not remove this property. Please try again."
+          : "Could not save this property. Please try again.",
+      );
+    } finally {
+      setSavingIds((current) => {
+        const next = new Set(current);
+        next.delete(propertyId);
+        return next;
+      });
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
     const { signal } = controller;
 
     async function load() {
+      const favoritesPromise = fetchFavorites(signal).then((favorites) => {
+        if (signal.aborted) return;
+
+        setSavedIds(new Set(favorites.map((favorite) => favorite.property_id)));
+      });
+
       const result = await fetchProperties({
         status: "ALL",
         page: 1,
@@ -98,6 +147,12 @@ export default function PropertiesList() {
           item ? item : (result.items[i] as Enriched),
         ),
       );
+
+      await favoritesPromise.catch((error: unknown) => {
+        if (signal.aborted) return;
+        console.warn("[properties] favorites fetch failed", error);
+        setFavoriteError("Saved properties could not be loaded.");
+      });
     }
 
     load().catch((error: unknown) => {
@@ -134,10 +189,13 @@ export default function PropertiesList() {
       <p className="text-[10px] font-semibold tracking-[0.18em] text-[#8a909e] uppercase">
         {items.length} of {total} properties
       </p>
+      <p className="sr-only" aria-live="polite">
+        {favoriteError}
+      </p>
 
       <ul className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((property) => (
-          <li key={property.id}>
+          <li key={property.id} className="relative">
             <Link
               href={`/properties/${property.id}`}
               data-track="PROPERTY_VIEW"
@@ -168,7 +226,7 @@ export default function PropertiesList() {
                 ) : null}
 
                 {property.status ? (
-                  <span className="absolute top-3 right-3 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-semibold tracking-[0.12em] text-[#0f1114] uppercase backdrop-blur-sm">
+                  <span className="absolute top-12 right-3 rounded-full bg-white/90 px-2.5 py-1 text-[9px] font-semibold tracking-[0.12em] text-[#0f1114] uppercase backdrop-blur-sm">
                     {property.status}
                   </span>
                 ) : null}
@@ -223,6 +281,21 @@ export default function PropertiesList() {
                 </div>
               </div>
             </Link>
+            <button
+              type="button"
+              aria-pressed={savedIds.has(property.id)}
+              disabled={savingIds.has(property.id)}
+              onClick={() => void handleFavoriteToggle(property.id)}
+              className="absolute top-3 right-3 z-10 rounded-full bg-white/95 px-2.5 py-1.5 text-[9px] font-semibold tracking-[0.08em] text-[#5c5852] uppercase shadow-sm transition hover:bg-[#a6862e] hover:text-white disabled:cursor-default disabled:opacity-90 disabled:hover:bg-white disabled:hover:text-[#5c5852]"
+            >
+              {savingIds.has(property.id)
+                ? savedIds.has(property.id)
+                  ? "Removing…"
+                  : "Saving…"
+                : savedIds.has(property.id)
+                  ? "Saved as favourite"
+                  : "Save as favourite"}
+            </button>
           </li>
         ))}
       </ul>

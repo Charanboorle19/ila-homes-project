@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   LngLatBounds,
   Map as MapLibreMap,
@@ -278,6 +279,8 @@ type SheetTab = (typeof SHEET_TABS)[number];
 type PropertySheetProps = {
   project: EstateProject;
   property: PropertyRecord | undefined;
+  /** Live API detail for UUID-backed properties. */
+  apiProperty?: ApiProperty | null;
   expanded: boolean;
   dense: boolean;
   /** When false the card always renders its full form and drops the toggle. */
@@ -296,6 +299,7 @@ type PropertySheetProps = {
 function PropertySheet({
   project,
   property,
+  apiProperty = null,
   expanded,
   dense,
   collapsible = true,
@@ -304,24 +308,61 @@ function PropertySheet({
   onToggle = () => undefined,
   className = "",
 }: PropertySheetProps) {
-  const popupImage = property?.gallery?.[0];
+  const popupImage = apiProperty?.cover_url
+    ? { src: apiProperty.cover_url, alt: apiProperty.name }
+    : property?.gallery?.[0];
   const popupSample = property?.popupSample;
-  const projectName = property?.name ?? project.name;
-  const projectLocation = property?.location ?? project.location;
-  const totalPlots = popupSample?.totalPlots ?? project.plots.length;
+  const apiLocation = [
+    apiProperty?.locality,
+    apiProperty?.city,
+  ].filter(Boolean).join(", ");
+  const projectName = apiProperty?.name ?? property?.name ?? project.name;
+  const projectLocation =
+    apiLocation ||
+    apiProperty?.location_name ||
+    apiProperty?.address ||
+    property?.location ||
+    project.location;
+  const totalPlots =
+    apiProperty?.total_plots ??
+    popupSample?.totalPlots ??
+    apiProperty?.total_inventory ??
+    project.plots.length;
   const availablePlots =
+    apiProperty?.available_plots_count ??
     popupSample?.availablePlots ??
+    apiProperty?.available_inventory ??
     project.plots.filter((plot) => plot.status === "available").length;
-  const projectExtent = popupSample?.projectExtent ?? property?.areaCents ?? "—";
-  const plotSize = popupSample?.plotSizes ?? property?.sqYards ?? "—";
+  const apiAreaRange = apiProperty?.area_range;
+  const apiPlotSize = apiAreaRange
+    ? [apiAreaRange.min, apiAreaRange.max]
+        .filter((value): value is number => value !== null && Number.isFinite(value))
+        .map((value) => `${value} sq yd`)
+        .join(" – ")
+    : null;
+  const projectExtent =
+    (apiProperty?.area != null ? `${apiProperty.area} acres` : null) ??
+    popupSample?.projectExtent ??
+    property?.areaCents ??
+    "—";
+  const plotSize = apiPlotSize ?? popupSample?.plotSizes ?? property?.sqYards ?? "—";
   const price =
+    apiProperty?.price_label ??
+    (apiProperty?.price ? formatPrice(apiProperty.price) : null) ??
     popupSample?.pricePerSqYard ??
     (property?.price ? formatInr(property.price) : "Price on request");
   const starting =
-    popupSample?.startingPrice ??
-    (property?.price ? formatInr(property.price) : "—");
+    apiProperty?.minimum_price != null
+      ? formatPrice(Number(apiProperty.minimum_price))
+      : apiProperty?.price
+        ? formatPrice(apiProperty.price)
+        : popupSample?.startingPrice ??
+          (property?.price ? formatInr(property.price) : "—");
   const approval =
+    (apiProperty?.rera_registered ? "RERA registered" : null) ??
     popupSample?.approvalLabel ?? property?.approval ?? "Approval pending";
+  const apiAmenities = apiProperty?.amenities?.filter(Boolean) ?? [];
+  const viewPropertyId = property?.id ?? apiProperty?.id;
 
   // Type scale: the phone sheet is tight, the sidebar has room to breathe.
   const t = dense
@@ -343,9 +384,9 @@ function PropertySheet({
       }
     : {
         eyebrow: "text-[11px]",
-        name: "text-lg",
+        name: "text-xl",
         location: "text-[13px]",
-        price: "text-xl",
+        price: "text-2xl",
         sub: "text-xs",
         chip: "text-[11px]",
         chipPad: "px-2.5 py-1",
@@ -361,18 +402,29 @@ function PropertySheet({
   // Non-collapsible hosts (desktop sidebar) always render the full card.
   const showFull = expanded || !collapsible;
 
+  // Every tab body shares one surface, so switching tabs never changes the
+  // card's padding, border or shadow. `text` is set here on purpose: the page
+  // sets body colour to white, so a panel with no explicit colour of its own
+  // would render its body copy white-on-white.
+  const panel =
+    "rounded-2xl border border-[#ded9cf] bg-white p-4 text-[#3f3a34] shadow-[0_2px_10px_rgba(36,35,31,0.05)] sm:p-5";
+  const panelLabel =
+    "block text-[10px] font-semibold tracking-[0.16em] text-[#8a6d34] uppercase";
+
   // Chips always wrap — long approval labels must never be clipped.
   const chips = (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       <span
-        className={`max-w-full break-words rounded-full border border-[#ded9cf] bg-white ${t.chipPad} ${t.chip} font-medium text-[#5c5348]`}
+        className={`inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#d9e3da] bg-[#f2f7f2] ${t.chipPad} ${t.chip} font-semibold text-[#1f5c45]`}
       >
-        {approval}
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#1f8a68]" />
+        <span className="wrap-break-word">{approval}</span>
       </span>
       {property?.reraRegistered ? (
         <span
-          className={`shrink-0 rounded-full border border-[#e6d7b0] bg-[#faf4e4] ${t.chipPad} ${t.chip} font-semibold text-[#8a6d34]`}
+          className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-[#e6d7b0] bg-[#faf4e4] ${t.chipPad} ${t.chip} font-semibold tracking-[0.08em] text-[#8a6d34] uppercase`}
         >
+          <span className="text-[9px] leading-none">✦</span>
           RERA
         </span>
       ) : null}
@@ -383,7 +435,7 @@ function PropertySheet({
     return (
       <div className={className}>
         {popupImage ? (
-          <div className="relative h-44 w-full shrink-0 overflow-hidden rounded-2xl border border-[#ded9cf] bg-[#e8e4dc]">
+          <div className="relative h-52 w-full shrink-0 overflow-hidden rounded-2xl border border-[#ded9cf] bg-[#e8e4dc] shadow-[0_10px_26px_rgba(36,35,31,0.10)] sm:h-60">
             <Image
               src={popupImage.src}
               alt={popupImage.alt}
@@ -391,186 +443,247 @@ function PropertySheet({
               sizes="(min-width: 768px) 420px, 100vw"
               className="object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-            <div className="absolute inset-x-0 bottom-0 p-4">
+            {/* Inventory is the number buyers look for first, so it is lifted
+                out of the stats grid and pinned to the hero. */}
+            <span className="absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/90 py-1 pr-2.5 pl-2 text-[10px] font-semibold tracking-[0.04em] text-[#1f5c45] shadow-[0_2px_8px_rgba(0,0,0,0.18)] backdrop-blur">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#1f8a68]" />
+              {availablePlots} available
+            </span>
+            <div className="absolute inset-0 bg-linear-to-t from-black/88 via-black/35 to-black/10" />
+            <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
               <p
-                className={`${t.eyebrow} font-semibold tracking-[0.18em] text-white/75 uppercase`}
+                className={`${t.eyebrow} flex items-center gap-2 font-semibold tracking-[0.2em] text-[#e8d3a6] uppercase`}
               >
+                <span className="h-px w-4 shrink-0 bg-[#c6a46c]" />
                 Selected property
               </p>
               <h3
-                className={`${t.name} mt-1 text-balance font-semibold tracking-tight text-white`}
+                className={`${t.name} mt-1.5 text-balance font-semibold tracking-tight text-white`}
               >
                 {projectName}
               </h3>
               <p
-                className={`${t.location} mt-1 flex items-start gap-1.5 text-white/85`}
+                className={`${t.location} mt-1.5 flex items-start gap-1.5 text-white/85`}
               >
                 <PinIcon className="mt-[0.15em] h-3.5 w-3.5 shrink-0 text-[#e8d3a6]" />
-                <span className="min-w-0 break-words">{projectLocation}</span>
+                <span className="min-w-0 wrap-break-word">{projectLocation}</span>
               </p>
             </div>
           </div>
         ) : (
           <div className="shrink-0 pr-9">
             <p
-              className={`${t.eyebrow} font-semibold tracking-[0.18em] text-[#77736a] uppercase`}
+              className={`${t.eyebrow} flex items-center gap-2 font-semibold tracking-[0.2em] text-[#a07c3c] uppercase`}
             >
+              <span className="h-px w-4 shrink-0 bg-[#c6a46c]" />
               Selected property
             </p>
             <h3
-              className={`${t.name} mt-1 font-semibold tracking-tight text-[#24231f]`}
+              className={`${t.name} mt-1.5 text-balance font-semibold tracking-tight text-[#24231f]`}
             >
               {projectName}
             </h3>
-            <p className={`${t.location} mt-1 flex items-start gap-1.5 text-[#77736a]`}>
+            <p className={`${t.location} mt-1.5 flex items-start gap-1.5 text-[#77736a]`}>
               <PinIcon className="mt-[0.15em] h-3.5 w-3.5 shrink-0 text-[#c6a46c]" />
-              <span className="min-w-0 break-words">{projectLocation}</span>
+              <span className="min-w-0 wrap-break-word">{projectLocation}</span>
             </p>
           </div>
         )}
 
-        <div className="mt-4 flex flex-wrap items-end justify-between gap-x-3 gap-y-2 rounded-2xl border border-[#ded9cf] bg-white p-4">
-          <div className="min-w-0">
-            <span
-              className={`${t.eyebrow} block font-semibold tracking-[0.14em] text-[#77736a] uppercase`}
-            >
-              Price
-            </span>
-            <strong
-              className={`${t.price} mt-1 block break-words font-bold tracking-tight text-[#24231f]`}
-            >
-              {price}
-            </strong>
-          </div>
-          <div className="min-w-0 sm:text-right">
-            <span
-              className={`${t.eyebrow} block font-semibold tracking-[0.14em] text-[#77736a] uppercase`}
-            >
-              Starting
-            </span>
-            <strong className={`${t.sub} mt-1 block break-words font-semibold text-[#24231f]`}>
-              {starting}
-            </strong>
+        {/* Price is the most-sought value, so it owns the only inverted surface in
+            the card; approval and RERA stay together in the status strip below. */}
+        <div className="relative mt-4 overflow-hidden rounded-2xl border border-[#3a362e] bg-linear-to-br from-[#35322b] via-[#24231f] to-[#171614] p-4 shadow-[0_12px_28px_rgba(36,35,31,0.16)] sm:p-5">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-5 top-0 h-px bg-linear-to-r from-transparent via-[#c6a46c]/70 to-transparent"
+          />
+          <span
+            className={`${t.eyebrow} block font-semibold tracking-[0.18em] text-[#d7c39b] uppercase`}
+          >
+            Price
+          </span>
+          <strong
+            className={`${t.price} mt-1.5 block max-w-full wrap-break-word font-bold tracking-tight text-white`}
+          >
+            {price}
+          </strong>
+          <div className="mt-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-white/12 pt-3 text-xs">
+            <span className="text-white/55">Starting from</span>
+            <span className="font-semibold text-white">{starting}</span>
           </div>
         </div>
 
-        <div className="mt-3">{chips}</div>
+        <div className="mt-3.5">{chips}</div>
 
-        <div className="mt-4 grid grid-cols-4 divide-x divide-[#ded9cf] rounded-2xl border border-[#ded9cf] bg-white p-3.5">
+        {/* Four values read as one spec sheet: a label/value row each, rather
+            than four tall tiles. Accents echo the master-plan palette so a
+            number can be traced back to its meaning on the map. */}
+        <dl className="mt-4 overflow-hidden rounded-2xl border border-[#ded9cf] bg-white shadow-[0_2px_10px_rgba(36,35,31,0.05)]">
           {[
-            { label: "Total plots", value: totalPlots },
-            { label: "Available", value: availablePlots },
-            { label: "Acres", value: projectExtent },
-            { label: "Plot size", value: plotSize },
-          ].map((stat) => (
+            { label: "Total plots", value: totalPlots, accent: "#8a8174" },
+            { label: "Available", value: availablePlots, accent: "#1F8A68" },
+            { label: "Acres", value: projectExtent, accent: "#7CB342" },
+            { label: "Plot size", value: plotSize, accent: "#C6A46C" },
+          ].map((stat, index) => (
             <div
               key={stat.label}
-              className="min-w-0 px-2.5 first:pl-0 last:pr-0"
+              className={`flex min-w-0 items-baseline justify-between gap-3 px-3.5 py-2 sm:px-4 ${
+                index === 0 ? "" : "border-t border-[#f0ece3]"
+              }`}
             >
-              <span
-                className={`${t.statLabel} block break-words leading-tight font-semibold tracking-[0.1em] text-[#77736a] uppercase`}
+              <dt
+                className={`${t.statLabel} flex min-w-0 items-center gap-2 font-semibold tracking-[0.1em] text-[#8a8174] uppercase`}
               >
-                {stat.label}
-              </span>
-              <strong
-                className={`${t.statValue} mt-1.5 block break-words font-bold text-[#24231f]`}
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5 shrink-0 self-center rounded-full"
+                  style={{ backgroundColor: stat.accent }}
+                />
+                <span className="wrap-break-word">{stat.label}</span>
+              </dt>
+              <dd
+                className={`${t.statValue} min-w-0 wrap-break-word text-right font-bold text-[#24231f]`}
               >
                 {stat.value}
-              </strong>
+              </dd>
             </div>
           ))}
-        </div>
+        </dl>
 
-        <div className="mt-4 flex gap-1 rounded-xl border border-[#ded9cf] bg-white p-1">
+        <div
+          role="tablist"
+          aria-label="Property information"
+          className="ila-tabs-scroll mt-5 flex snap-x snap-mandatory gap-4 overflow-x-auto border-b border-[#ded9cf] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-6"
+        >
           {SHEET_TABS.map((item) => (
             <button
               key={item}
               type="button"
-              aria-pressed={tab === item}
+              role="tab"
+              id={`property-tab-${item}`}
+              aria-selected={tab === item}
+              aria-controls={`property-panel-${item}`}
               onClick={() => onTabChange(item)}
-              className={`${t.tab} flex-1 rounded-lg px-1 py-2.5 font-semibold capitalize transition ${tab === item ? "bg-[#24231f] text-white" : "text-[#77736a]"}`}
+              className={`relative shrink-0 snap-start pb-2.5 font-semibold capitalize transition-colors ${t.tab} ${
+                tab === item
+                  ? "text-[#24231f] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-[#c6a46c]"
+                  : "text-[#8a8174] hover:text-[#24231f]"
+              }`}
             >
               {item}
             </button>
           ))}
         </div>
 
-        <div className={`${t.body} mt-3 min-h-24 leading-relaxed text-[#5c5348]`}>
+        {/* Every tab renders inside the same surface, and only the active one
+            is mounted, so the block never shifts as the reader switches. */}
+        <div
+          role="tabpanel"
+          id={`property-panel-${tab}`}
+          aria-labelledby={`property-tab-${tab}`}
+          className="mt-3.5"
+        >
           {tab === "about" ? (
-            <p>
-              {property?.description ??
-                property?.tagline ??
-                "Project details are available on the property page."}
-            </p>
+            <div className={panel}>
+              <p className={`${panelLabel} mb-2.5`}>About the project</p>
+              <p className={`${t.body} leading-relaxed`}>
+                {apiProperty?.description ??
+                  property?.description ??
+                  property?.tagline ??
+                  "Project details are available on the property page."}
+              </p>
+            </div>
           ) : null}
           {tab === "location" ? (
-            <ul className="space-y-2">
-              {(
-                popupSample?.locationHighlights ??
-                property?.nearbyAmenities.map(
-                  (item) => `${item.name} · ${item.distanceKm} km`,
-                ) ?? [projectLocation]
-              ).map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#c6a46c]" />
-                  {item}
-                </li>
-              ))}
-            </ul>
+            <div className={panel}>
+              <p className={`${panelLabel} mb-2.5`}>Nearby landmarks</p>
+              <ul>
+                {(
+                  popupSample?.locationHighlights ??
+                  property?.nearbyAmenities.map(
+                    (item) => `${item.name} · ${item.distanceKm} km`,
+                  ) ?? [projectLocation]
+                ).map((item, index) => (
+                  <li
+                    key={item}
+                    className={`flex min-w-0 items-center gap-2.5 py-2 ${
+                      index === 0 ? "" : "border-t border-[#f0ece3]"
+                    }`}
+                  >
+                    <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-[#c6a46c]" />
+                    <span className="min-w-0 flex-1 wrap-break-word">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
           {tab === "amenities" ? (
-            <div className="grid grid-cols-2 gap-2">
-              {(
-                popupSample?.amenities ??
-                property?.features ??
-                property?.nearbyAmenities.map((item) => item.name) ?? [
-                  "Details available on request",
-                ]
-              ).map((item) => (
-                <span
-                  key={item}
-                  className={`${t.sub} rounded-lg border border-[#ded9cf] bg-white px-2.5 py-2.5 text-[#5c5348]`}
-                >
-                  {item}
-                </span>
-              ))}
+            <div className={panel}>
+              <p className={panelLabel}>Amenities</p>
+              {/* Exactly two rows, side by side. `grid-flow-col` fills the
+                  first row then the second, so the list scrolls sideways
+                  instead of growing taller as amenities are added. */}
+              <ul className="ila-tabs-scroll -mx-1 mt-2.5 grid auto-cols-max grid-flow-col grid-rows-2 gap-1.5 overflow-x-auto px-1 pb-1 [grid-auto-columns:max-content] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {(
+                  (apiAmenities.length ? apiAmenities : null) ??
+                  popupSample?.amenities ??
+                  property?.features ??
+                  property?.nearbyAmenities.map((item) => item.name) ?? [
+                    "Details available on request",
+                  ]
+                ).map((item) => (
+                  <li
+                    key={item}
+                    className={`${t.sub} flex items-center rounded-full border border-[#e5ddcd] bg-[#faf7f0] px-3 py-1.5 font-medium text-[#5c5348]`}
+                  >
+                    {item}
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
           {tab === "developer" ? (
-            <div className="rounded-xl border border-[#ded9cf] bg-white p-4">
-              <strong className="block text-sm font-semibold text-[#24231f]">
-                {popupSample?.developer ?? "Developer information"}
-              </strong>
-              <p className="mt-1">
-                {popupSample
-                  ? `${popupSample.developerExperience} · ${popupSample.projectsCompleted} projects completed`
-                  : "Developer details available on the property page."}
-              </p>
+            <div className={panel}>
+              <p className={`${panelLabel} mb-2.5`}>Developer</p>
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f1e5c9] text-base text-[#8a6d34]">
+                  ◆
+                </span>
+                <div className="min-w-0">
+                  <strong className="block wrap-break-word text-sm font-semibold text-[#24231f]">
+                    {popupSample?.developer ?? "Developer information"}
+                  </strong>
+                  <p className="mt-0.5 wrap-break-word text-xs text-[#77736a]">
+                    {popupSample
+                      ? `${popupSample.developerExperience} · ${popupSample.projectsCompleted} projects completed`
+                      : "Developer details available on the property page."}
+                  </p>
+                </div>
+              </div>
             </div>
           ) : null}
         </div>
 
         <div className="mt-5 space-y-2">
-          {property ? (
+          {viewPropertyId ? (
             <Link
-              href={`/properties/${property.id}`}
-              className={`${t.action} flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#24231f] px-3 py-3.5 font-semibold text-white shadow-sm transition active:scale-[0.99]`}
+              href={`/properties/${viewPropertyId}`}
+              className={`${t.action} group flex w-full items-center justify-center gap-2 rounded-xl bg-[#24231f] px-3 py-3.5 font-semibold text-white shadow-[0_8px_20px_rgba(36,35,31,0.18)] transition hover:bg-[#2f2e29] active:scale-[0.99]`}
             >
               View Project
-              <ArrowIcon className="h-4 w-4" />
+              <ArrowIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
             </Link>
           ) : null}
           <div className="grid grid-cols-2 gap-2">
             <Link
               href="#brochure"
-              className={`${t.action} flex items-center justify-center rounded-xl border border-[#ded9cf] bg-white px-2 py-3.5 text-center font-medium text-[#24231f]`}
+              className={`${t.action} flex items-center justify-center rounded-xl border border-[#ded9cf] bg-white px-2 py-3.5 text-center font-medium text-[#24231f] transition hover:border-[#c6a46c] hover:bg-[#faf6ec]`}
             >
               Brochure
             </Link>
             <Link
               href="#loan-calculator"
-              className={`${t.action} flex items-center justify-center rounded-xl border border-[#ded9cf] bg-white px-2 py-3.5 text-center font-medium text-[#24231f]`}
+              className={`${t.action} flex items-center justify-center rounded-xl border border-[#ded9cf] bg-white px-2 py-3.5 text-center font-medium text-[#24231f] transition hover:border-[#c6a46c] hover:bg-[#faf6ec]`}
             >
               Loan Calculator
             </Link>
@@ -582,7 +695,7 @@ function PropertySheet({
             type="button"
             aria-expanded
             onClick={onToggle}
-            className={`${t.action} ${t.actionPad} mt-4 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#ded9cf] bg-white px-3 font-semibold text-[#24231f] transition hover:bg-[#eee9dd] active:scale-[0.99]`}
+            className={`${t.action} ${t.actionPad} mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#ded9cf] bg-white px-3 font-semibold text-[#5c5348] transition hover:bg-[#eee9dd] active:scale-[0.99]`}
           >
             Show less
             <ChevronIcon className="h-4 w-4 rotate-180" />
@@ -592,85 +705,73 @@ function PropertySheet({
     );
   }
 
+  // Minimized phone sheet. Deliberately two short bands — identity, then one
+  // tappable status strip — so it occupies only the bottom sliver of the map
+  // and leaves the layout it describes visible.
   return (
     <div className={className}>
-      <div className="flex gap-4">
+      <div className="flex items-center gap-2.5">
         {popupImage ? (
-          <div
-            className={`${dense ? "h-28 w-[6.5rem]" : "h-32 w-[8.5rem]"} relative shrink-0 overflow-hidden rounded-2xl border border-[#ded9cf] bg-[#e8e4dc]`}
-          >
+          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-[#ded9cf] bg-[#e8e4dc]">
             <Image
               src={popupImage.src}
               alt={popupImage.alt}
               fill
-              sizes={dense ? "104px" : "136px"}
+              sizes="48px"
               className="object-cover"
             />
-            <span
-              className={`${t.eyebrow} absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pt-8 pb-2 font-semibold tracking-wide text-white uppercase`}
-            >
-              {availablePlots}/{totalPlots} free
+            <span className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent" />
+            <span className="absolute inset-x-0 bottom-0 pb-0.5 text-center text-[9px] font-bold text-white">
+              {availablePlots}/{totalPlots}
             </span>
           </div>
         ) : null}
-        <div className={`min-w-0 flex-1 ${dense ? "pr-8" : ""}`}>
+
+        <div className="min-w-0 flex-1">
           <h3
-            className={`${t.name} text-balance leading-tight font-semibold tracking-tight text-[#24231f]`}
+            className={`${t.name} line-clamp-1 text-balance font-semibold tracking-tight text-[#24231f]`}
           >
             {projectName}
           </h3>
           <p
-            className={`${t.location} mt-1.5 flex items-start gap-1.5 text-[#77736a]`}
+            className={`${t.location} mt-0.5 flex items-center gap-1 text-[#77736a]`}
           >
-            <PinIcon className="mt-[0.15em] h-3.5 w-3.5 shrink-0 text-[#c6a46c]" />
-            <span className="min-w-0 break-words">{projectLocation}</span>
+            <PinIcon className="h-3 w-3 shrink-0 text-[#c6a46c]" />
+            <span className="min-w-0 truncate">{projectLocation}</span>
           </p>
-          <div className="mt-2.5 flex flex-wrap items-baseline gap-x-1.5">
+          <div className="mt-0.5 flex items-baseline gap-1.5">
             <strong
-              className={`${t.price} min-w-0 break-words font-bold tracking-tight text-[#24231f]`}
+              className={`${t.price} min-w-0 truncate font-bold tracking-tight text-[#24231f]`}
             >
               {price}
             </strong>
-            <span className={`${t.sub} break-words font-medium text-[#77736a]`}>
+            <span className={`${t.sub} min-w-0 truncate font-medium text-[#77736a]`}>
               · from {starting}
             </span>
           </div>
-          <div className="mt-2.5">{chips}</div>
         </div>
       </div>
 
-      <div className={`mt-3.5 grid grid-cols-3 divide-x divide-[#ded9cf] rounded-2xl border border-[#ded9cf] bg-white ${t.statPad}`}>
-        {[
-          { label: "Plots", value: `${availablePlots}/${totalPlots}` },
-          { label: "Acres", value: projectExtent },
-          { label: "Size", value: plotSize },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            className="min-w-0 px-3 text-center first:pl-0 last:pr-0"
-          >
-            <strong
-              className={`${t.statValue} block break-words font-bold text-[#24231f]`}
-            >
-              {stat.value}
-            </strong>
-            <span
-              className={`${t.statLabel} mt-1 block break-words font-semibold tracking-[0.1em] text-[#77736a] uppercase`}
-            >
-              {stat.label}
-            </span>
-          </div>
-        ))}
-      </div>
-
+      {/* Status and key numbers on one fixed-height row. The row is still
+          tappable, but the expand affordance now lives in the control row
+          above, so no chevron is needed here. */}
       <button
         type="button"
         aria-expanded={false}
         onClick={onToggle}
-        className={`${t.action} ${t.actionPad} mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#ded9cf] bg-white px-3 font-semibold text-[#24231f] transition hover:bg-[#eee9dd] active:scale-[0.99]`}
+        className="mt-2 flex w-full items-center rounded-lg border border-[#e6e0d4] bg-white/70 px-2 py-1.5 text-left transition active:scale-[0.99]"
       >
-        View full details
-        <ChevronIcon className="h-4 w-4" />
+        <span className="flex w-full min-w-0 items-center gap-1.5">
+          <span className="inline-flex max-w-[7rem] shrink-0 items-center gap-1 truncate rounded-full bg-[#f2f7f2] px-1.5 py-0.5 text-[9px] font-semibold text-[#1f5c45]">
+            <span className="h-1 w-1 shrink-0 rounded-full bg-[#1f8a68]" />
+            {property?.reraRegistered ? "RERA" : approval}
+          </span>
+          <span
+            className={`${t.sub} min-w-0 truncate font-semibold text-[#77736a]`}
+          >
+            {availablePlots} avail · {projectExtent} · {plotSize}
+          </span>
+        </span>
       </button>
     </div>
   );
@@ -724,7 +825,7 @@ function PropertyCard({
           {detail?.property_type || item.property_type || "Development"}
           {detail?.rera_registered ? " · RERA" : ""}
         </p>
-        <h3 className="mt-0.5 text-sm leading-snug font-semibold break-words text-[#171717]">
+        <h3 className="mt-0.5 text-sm leading-snug font-semibold wrap-break-word text-[#171717]">
           {item.name}
         </h3>
         <p className="mt-0.5 text-xs font-semibold text-[#171717]">
@@ -742,7 +843,7 @@ function PropertyCard({
         {location ? (
           <p className="mt-1 flex items-start gap-1 text-xs font-medium text-[#3f3a34]">
             <PinIcon className="mt-[0.15em] h-3.5 w-3.5 shrink-0 text-[#5c5348]" />
-            <span className="min-w-0 break-words">{location}</span>
+            <span className="min-w-0 wrap-break-word">{location}</span>
           </p>
         ) : null}
       </div>
@@ -848,7 +949,6 @@ export default function MapSection() {
   const [propertySheetTab, setPropertySheetTab] = useState<SheetTab>("about");
   const [searchOpen, setSearchOpen] = useState(false);
   const [mapFullscreen, setMapFullscreen] = useState(false);
-  const [fullscreenHintActive, setFullscreenHintActive] = useState(true);
   const mapFullscreenRef = useRef(false);
   mapFullscreenRef.current = mapFullscreen;
   const applyInteractionsRef = useRef<() => void>(() => {});
@@ -869,6 +969,11 @@ export default function MapSection() {
   const [remoteStatus, setRemoteStatus] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
+  // The phone property sheet is portalled to <body> so it overlays the whole
+  // page instead of being clipped by the map section's `overflow-hidden`.
+  // A portal needs a real DOM, so hold off until after the client mount —
+  // rendering one during SSR would throw on `document`.
+  const [portalReady, setPortalReady] = useState(false);
 
   // Only the selected live property is shown. The static ESTATE_PROJECTS entries
   // (Sark Green, Green Meadows) are demo/reference layouts and are excluded.
@@ -912,15 +1017,6 @@ export default function MapSection() {
     }, 2500);
   };
 
-  // Mobile fullscreen control highlight — 8s only
-  useEffect(() => {
-    if (!fullscreenHintActive) return;
-    const timer = window.setTimeout(() => {
-      setFullscreenHintActive(false);
-    }, 8000);
-    return () => window.clearTimeout(timer);
-  }, [fullscreenHintActive]);
-
   // Property picker: GET /api/properties, then the selected property.
   //  1. list properties            GET /api/properties
   //  2. click a property           GET /api/properties/{id}
@@ -963,25 +1059,29 @@ export default function MapSection() {
     }) => {
       let { layoutPreviewUrl, tifUrl, cords } = input;
 
-      // Nothing to attach, so there is nothing to retry either.
-      if (!layoutPreviewUrl && !tifUrl) return;
+      // Prefer the TIFF supplied by the API. It is the authoritative layout
+      // image and is decoded locally before being handed to MapLibre. The
+      // preview is only a fallback for properties that do not have a TIFF.
+      let imageUrl = tifUrl ?? layoutPreviewUrl;
+      let useTiff = Boolean(tifUrl);
+      if (!imageUrl) return;
 
       for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const raster = layoutPreviewUrl
-          ? await loadLayoutPreviewRaster({
+        const currentImageUrl = imageUrl;
+        if (!currentImageUrl) return;
+        const raster = useTiff
+          ? await loadLayoutRaster({
               propertyId: input.propertyId,
-              previewUrl: layoutPreviewUrl,
+              tifUrl: currentImageUrl,
               cords,
               signal: input.signal,
             })
-          : tifUrl
-            ? await loadLayoutRaster({
-                propertyId: input.propertyId,
-                tifUrl,
-                cords,
-                signal: input.signal,
-              })
-            : undefined;
+          : await loadLayoutPreviewRaster({
+              propertyId: input.propertyId,
+              previewUrl: currentImageUrl,
+              cords,
+              signal: input.signal,
+            });
 
         if (input.signal.aborted) return;
 
@@ -1011,6 +1111,8 @@ export default function MapSection() {
         layoutPreviewUrl = refreshed.layoutPreviewUrl;
         tifUrl = refreshed.tifUrl;
         cords = refreshed.layoutCords;
+        imageUrl = tifUrl ?? layoutPreviewUrl;
+        useTiff = Boolean(tifUrl);
       }
     },
     [],
@@ -1040,6 +1142,7 @@ export default function MapSection() {
       setActiveProjectId(null);
       setSelectedProjectId(null);
       setSelectedId(null);
+      setActivePropertyDetail(null);
       setUnitsCount(0);
 
       try {
@@ -1280,6 +1383,39 @@ export default function MapSection() {
     return getPropertyById(propertyId);
   }, [activeProject]);
 
+  // The catalogue response can already contain popup-ready fields such as
+  // price_label, amenities, total_plots, and area_range. Merge that row with
+  // the richer detail response so the sheet displays whichever API response
+  // supplied each field.
+  const activePopupApiProperty = useMemo<ApiProperty | null>(() => {
+    if (!activePropertyId) return null;
+    const detail =
+      activePropertyDetail?.id === activePropertyId
+        ? activePropertyDetail
+        : null;
+    const listItem = propertyList.find((item) => item.id === activePropertyId);
+    if (!detail) return null;
+
+    return {
+      ...detail,
+      ...(listItem?.price_label !== undefined
+        ? { price_label: listItem.price_label }
+        : {}),
+      ...(listItem?.amenities !== undefined
+        ? { amenities: listItem.amenities }
+        : {}),
+      ...(listItem?.total_plots !== undefined
+        ? { total_plots: listItem.total_plots }
+        : {}),
+      ...(listItem?.available_plots_count !== undefined
+        ? { available_plots_count: listItem.available_plots_count }
+        : {}),
+      ...(listItem?.area_range !== undefined
+        ? { area_range: listItem.area_range }
+        : {}),
+    };
+  }, [activePropertyDetail, activePropertyId, propertyList]);
+
   const layoutOpen = Boolean(activeProject);
 
   const counts = useMemo(() => {
@@ -1350,6 +1486,10 @@ export default function MapSection() {
   const openPanel = () => {
     setPanelOpen(true);
   };
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
 
   // Keep map height CSS-stable on mobile (svh). Avoid JS height locking —
   // resizing on scroll/chrome show-hide looks unprofessional.
@@ -2206,7 +2346,7 @@ export default function MapSection() {
         className={
           mapFullscreen
             ? "ila-map-frame ila-map-frame--fullscreen relative min-h-0 flex-1 overflow-hidden bg-neutral-200"
-            : "ila-map-frame relative mx-2 mb-2 min-h-[18rem] flex-1 overflow-hidden rounded-xl border border-black/10 bg-neutral-200 shadow-[0_12px_36px_rgba(15,23,42,0.14)] md:absolute md:inset-3 md:m-0 md:min-h-0 md:rounded-xl"
+            : "ila-map-frame relative mx-2 mb-2 min-h-72 flex-1 overflow-hidden rounded-xl border border-black/10 bg-neutral-200 shadow-[0_12px_36px_rgba(15,23,42,0.14)] md:absolute md:inset-3 md:m-0 md:min-h-0 md:rounded-xl"
         }
       >
         <div ref={mapContainerRef} className="absolute inset-0 h-full w-full" />
@@ -2245,7 +2385,7 @@ export default function MapSection() {
                   {loadingLabel.title}
                 </p>
                 {loadingLabel.detail ? (
-                  <p className="max-w-[15rem] truncate text-[11px] font-medium text-[#5c5348]">
+                  <p className="max-w-60 truncate text-[11px] font-medium text-[#5c5348]">
                     {loadingLabel.detail}
                   </p>
                 ) : null}
@@ -2287,24 +2427,28 @@ export default function MapSection() {
         ) : null}
 
         {panelOpen ? (
-          <aside className="pointer-events-none absolute inset-y-0 left-0 z-20 hidden w-[22rem] flex-col py-3 pl-3 md:flex sm:py-4">
+          <aside className="pointer-events-none absolute inset-y-0 left-0 z-20 hidden w-88 flex-col py-3 pl-3 md:flex sm:py-4">
             <div className="pointer-events-auto relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[8px_0_28px_rgba(15,23,42,0.14)]">
-              <button
-                type="button"
-                aria-label="Close developments panel"
-                onClick={closePanel}
-                className="absolute top-2 right-2 z-30 flex h-8 w-8 items-center justify-center rounded-lg bg-[#171717] text-white transition hover:bg-[#333333]"
-              >
-                <CloseIcon className="h-3.5 w-3.5" />
-              </button>
+              {activeProject ? (
+                <button
+                  type="button"
+                  aria-label="Back to all developments"
+                  onClick={closeLayout}
+                  className="absolute top-2 left-2 z-30 flex items-center gap-1.5 rounded-lg bg-[#171717] px-2.5 py-1.5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:bg-[#333333]"
+                >
+                  <ArrowIcon className="h-3.5 w-3.5 rotate-180" />
+                  <span>Back</span>
+                </button>
+              ) : null}
 
               {activeProject ? (
                 // The property card replaces both the heading and the plot
                 // list while a layout is open on the desktop sidebar.
-                <div className="ila-scroll min-h-0 max-h-full shrink overflow-y-auto overscroll-contain border-b border-black/10 px-3 pt-4 pr-11 pb-4 sm:px-4 sm:pr-12">
+                <div className="ila-scroll min-h-0 max-h-full shrink overflow-y-auto overscroll-contain border-b border-black/10 px-3 pt-12 pb-4 sm:px-4 sm:pt-12">
                   <PropertySheet
                     project={activeProject}
                     property={activeProperty}
+                    apiProperty={activePopupApiProperty}
                     expanded
                     dense={false}
                     collapsible={false}
@@ -2369,7 +2513,7 @@ export default function MapSection() {
                   className="flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
                 >
                   {activeProject
-                    ? `Enquire About ${activeProject.name}`
+                    ? "Visit Property"
                     : "View All Properties"}
                   <ArrowIcon className="h-4 w-4" />
                 </Link>
@@ -2446,46 +2590,92 @@ export default function MapSection() {
         </div>
         </div>
 
-        {/* Mobile development popup — shown when a property marker is tapped */}
-        {selectedProject && !selectedPlot ? (
-          <div className="pointer-events-none fixed inset-0 z-[100] flex items-end md:hidden">
-            {/* No scrim: the layout behind the sheet is the point, so the map
-                stays undimmed and fully interactive. The ✕ closes the sheet. */}
-            <div
-              className={`pointer-events-auto relative z-[101] flex w-full flex-col overflow-hidden rounded-t-[1.75rem] border-t border-[#ded9cf] bg-[#f5f2ea] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-14px_40px_rgba(36,35,31,0.20)] transition-[height,max-height] duration-300 ${propertySheetExpanded ? "h-[calc(100dvh-0.75rem)] max-h-[calc(100dvh-0.75rem)]" : "h-[13rem] max-h-[13rem]"}`}
-            >
-              <div className="flex shrink-0 justify-center pt-2.5 pb-1" aria-hidden>
-                <span className="h-1 w-10 rounded-full bg-black/20" />
-              </div>
-              <button
-                type="button"
-                aria-label="Close property details"
-                onClick={() => {
-                  setSelectedProjectId(null);
-                  setActiveProjectId(null);
-                  setPropertySheetExpanded(false);
-                }}
-                className="absolute top-2 right-3 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-white/70 bg-white/85 text-[#24231f] shadow-sm backdrop-blur transition active:scale-95"
+        {/* Mobile development popup — shown when a property marker is tapped.
+            Suppressed in fullscreen, where the map is the whole point and a
+            sheet over it would cover the layout being explored.
+
+            Portalled to <body> so it is a true page-level overlay. Nested in
+            here it was bounded by the map frame's `overflow-hidden`, which
+            clipped the sheet and made it a child of a card instead of a
+            surface in its own right. `fixed` from <body> escapes every
+            clipping ancestor, so `inset-x-2` lines the sheet up with the map
+            card's `mx-2` gutters while still belonging to the page.
+            `bottom-0` docks it to the viewport edge, so the square bottom
+            corners read as intentional rather than as a card floating above
+            the fold. Height uses percentages and `pb` uses the safe-area
+            inset — never `dvh`, which resizes the sheet whenever the mobile
+            browser shows or hides its URL bar. */}
+        {portalReady && selectedProject && !selectedPlot && !mapFullscreen
+          ? createPortal(
+              <div
+                className={`pointer-events-auto fixed inset-x-2 bottom-0 z-[200] flex flex-col overflow-hidden rounded-t-[1.5rem] border-x border-t border-[#ded9cf] bg-[#f5f2ea] pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-12px_32px_rgba(36,35,31,0.18)] transition-[height,max-height] duration-300 md:hidden ${propertySheetExpanded ? "h-[88%] max-h-[88%]" : "h-48 max-h-48"}`}
               >
-                <CloseIcon className="h-3.5 w-3.5" />
-              </button>
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-4">
-                <PropertySheet
-                  project={selectedProject}
-                  property={selectedProperty}
-                  expanded={propertySheetExpanded}
-                  dense
-                  tab={propertySheetTab}
-                  onTabChange={setPropertySheetTab}
-                  onToggle={() => setPropertySheetExpanded((open) => !open)}
-                />
-              </div>
-            </div>
-          </div>
-        ) : null}
+                {/* Controls sit in normal flow above the body, so the card no longer needs
+                    side padding to clear a floating button. Close on the left,
+                    maximize on the right, grabber centred between two equal
+                    slots — the row is symmetric, so the grabber stays centred
+                    whether or not the right slot is filled. */}
+                <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-2 pb-1">
+                  <button
+                    type="button"
+                    aria-label="Close property details"
+                    onClick={() => {
+                      setSelectedProjectId(null);
+                      setActiveProjectId(null);
+                      setPropertySheetExpanded(false);
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-white/85 text-[#24231f] shadow-sm backdrop-blur transition active:scale-95"
+                  >
+                    <CloseIcon className="h-3 w-3" />
+                  </button>
+
+                  {propertySheetExpanded ? (
+                    <span className="h-1 w-10 rounded-full bg-black/15" aria-hidden />
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label="Show full property details"
+                      aria-expanded={false}
+                      onClick={() => setPropertySheetExpanded(true)}
+                      className="flex h-4 w-20 items-center justify-center rounded-full transition active:scale-95"
+                    >
+                      <span className="h-1 w-10 rounded-full bg-black/30" />
+                    </button>
+                  )}
+
+                  {propertySheetExpanded ? (
+                    <span className="h-7 w-7" aria-hidden />
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label="Maximize property details"
+                      aria-expanded={false}
+                      onClick={() => setPropertySheetExpanded(true)}
+                      className="flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-white/85 text-[#24231f] shadow-sm backdrop-blur transition active:scale-95"
+                    >
+                      <ExpandIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-3">
+                  <PropertySheet
+                    project={selectedProject}
+                    property={selectedProperty}
+                    apiProperty={activePopupApiProperty}
+                    expanded={propertySheetExpanded}
+                    dense
+                    tab={propertySheetTab}
+                    onTabChange={setPropertySheetTab}
+                    onToggle={() => setPropertySheetExpanded((open) => !open)}
+                  />
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
         {/* Mobile bottom-sheet plot details — compact first, expandable on demand */}
         {selectedPlot ? (
-          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] md:hidden">
+          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-60 md:hidden">
             <div className="pointer-events-auto max-h-[42vh] overflow-y-auto animate-sheet-up rounded-t-2xl border-t border-black/10 bg-[#d9d2c7] shadow-[0_-12px_40px_rgba(15,23,42,0.28)] pb-[env(safe-area-inset-bottom)]">
               <div className="flex justify-center pt-2.5 pb-1" aria-hidden>
                 <span className="h-1 w-10 rounded-full bg-black/20" />
@@ -2561,7 +2751,7 @@ export default function MapSection() {
             so desktop needs its own card or a selected plot has no detail. */}
         {selectedPlot ? (
           <div
-            className="pointer-events-auto absolute bottom-3 z-20 hidden w-[19rem] overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_12px_36px_rgba(15,23,42,0.22)] md:block"
+            className="pointer-events-auto absolute bottom-3 z-20 hidden w-76 overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_12px_36px_rgba(15,23,42,0.22)] md:block"
             style={{ left: panelOpen ? DESKTOP_PANEL_RESERVED + 12 : 12 }}
           >
             <div className="relative px-3 pt-3 pb-3">
@@ -2633,12 +2823,9 @@ export default function MapSection() {
               type="button"
               aria-label="Open map fullscreen"
               onClick={() => {
-                setFullscreenHintActive(false);
                 setMapFullscreen(true);
               }}
-              className={`pointer-events-auto flex h-10 w-10 items-center justify-center rounded-lg border border-black/15 bg-[#d9d2c7] text-[#171717] shadow-[0_8px_20px_rgba(15,23,42,0.14)] transition hover:bg-[#cfc3a8] ${
-                fullscreenHintActive ? "ila-fullscreen-hint" : ""
-              }`}
+              className="pointer-events-auto ila-fullscreen-hint flex h-10 w-10 items-center justify-center rounded-lg border border-black/15 bg-[#d9d2c7] text-[#171717] shadow-[0_8px_20px_rgba(15,23,42,0.14)] transition hover:bg-[#cfc3a8]"
             >
               <ExpandIcon className="h-4 w-4" />
             </button>

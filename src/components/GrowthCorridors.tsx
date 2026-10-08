@@ -426,7 +426,6 @@ export default function GrowthCorridors() {
                   {locations.map((location, index) => {
                     const isActive = location.id === activeLocationId;
                     const mappable = hasCoordinates(location);
-                    const coords = formatCoords(location);
 
                     return (
                       <div
@@ -468,16 +467,6 @@ export default function GrowthCorridors() {
                             </div>
                           ) : null}
 
-                          {coords ? (
-                            <div>
-                              <dt className="text-[9px] font-semibold tracking-[0.16em] text-[#8a909e] uppercase">
-                                Coordinates
-                              </dt>
-                              <dd className="text-[12px] text-[#4a5060]">
-                                {coords}
-                              </dd>
-                            </div>
-                          ) : null}
                         </dl>
 
                         {/* Selecting anywhere on the card opens the map for
@@ -650,6 +639,16 @@ export default function GrowthCorridors() {
 
             {/* Map — full-bleed on mobile, inset card beside the list on desktop */}
             <div className="relative min-h-[46vh] flex-1 overflow-hidden bg-[#dfe3ea] lg:min-h-0 lg:rounded-2xl lg:border lg:border-black/8">
+              <button
+                type="button"
+                onClick={() => setMapMode(false)}
+                className="absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-2 text-[10px] font-semibold tracking-[0.12em] text-[#0f1114] uppercase shadow-[0_4px_16px_rgba(15,17,20,0.14)] backdrop-blur-sm transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a84c]"
+                aria-label="Back to locations"
+              >
+                <span aria-hidden>←</span>
+                Back
+              </button>
+
               <div
                 ref={mapContainerRef}
                 className="absolute inset-0 h-full w-full"

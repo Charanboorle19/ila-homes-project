@@ -9,6 +9,7 @@ import type {
 } from "@/data/properties";
 import {
   type ApiLifeStageFit,
+  type ApiPropertyDocument,
   type ApiProperty,
 } from "@/services/propertiesService";
 
@@ -79,6 +80,20 @@ export type LifeStageSource = {
   status: "pending" | "ready" | "unavailable";
   fit?: ApiLifeStageFit | null;
 };
+
+export function apiDocumentsToRecords(
+  documents: ApiPropertyDocument[],
+): PropertyDocument[] {
+  return documents.map((document) => ({
+    id: document.id,
+    label: document.name,
+    href: document.storage_reference ?? undefined,
+    documentType: document.document_type ?? undefined,
+    sizeBytes: document.size_bytes ?? undefined,
+    visibility: document.visibility ?? undefined,
+    createdAt: document.created_at ?? undefined,
+  }));
+}
 
 /**
  * The API names its personas; the page's goals have their own ids. Every alias
@@ -382,6 +397,7 @@ export function apiPropertyToRecord(
   property: ApiProperty,
   /** Buyer fit from /life-stage-fit and whether it has resolved. */
   lifeStage?: LifeStageSource | null,
+  documents?: PropertyDocument[],
 ): PropertyRecord {
   const meta = (property.metadata ?? {}) as Record<string, unknown>;
 
@@ -549,7 +565,7 @@ export function apiPropertyToRecord(
           ],
     connectivityScore,
     nearbyAmenities: PLACEHOLDER_NEARBY,
-    documents: verificationRows(property, meta),
+    documents: documents ?? verificationRows(property, meta),
     neighbourhood: {
       mapLabel: location,
       badge: "Locality",

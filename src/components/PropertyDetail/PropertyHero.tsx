@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { forwardRef } from "react";
 import type { GalleryItem, PropertyRecord } from "@/data/properties";
+import { isPropertyUuid } from "@/services/propertiesService";
+import ShareButton from "@/components/PropertyDetail/ShareButton";
 
 type PropertyHeroProps = {
   property: PropertyRecord;
@@ -110,6 +112,22 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
                   </a>
                 </div>
               </div>
+
+              {/*
+                The share panel sits below the price row, not inside the CTA
+                row. At the wide breakpoint .pd-hero__price-row is a row, so a
+                full-width sibling here competes with .pd-hero__price-block for
+                space and squeezes the price into a four-line wrap.
+              */}
+              {isPropertyUuid(property.id) ? (
+                <ShareButton
+                  propertyId={property.id}
+                  propertyName={property.name}
+                  message={`Please check this property: ${property.name}${
+                    property.location ? `, ${property.location}` : ""
+                  }.`}
+                />
+              ) : null}
             </div>
 
             <div className="pd-hero__gallery">

@@ -26,9 +26,13 @@ import "./PropertyDetail.css";
 
 type PropertyPageViewProps = {
   property: PropertyRecord;
+  documentsState?: "loading" | "ready" | "error";
 };
 
-export default function PropertyPageView({ property }: PropertyPageViewProps) {
+export default function PropertyPageView({
+  property,
+  documentsState = "ready",
+}: PropertyPageViewProps) {
   const heroRef = useRef<HTMLElement | null>(null);
 
   // PROPERTY_VIEW on entry, TIME_ON_PROPERTY + PROPERTY_REVISIT on exit.
@@ -68,7 +72,7 @@ export default function PropertyPageView({ property }: PropertyPageViewProps) {
       <FutureNeighbourhoodMap property={property} />
       <Lifestyle key={property.id} property={property} />
       <PriceEmiFuture property={property} />
-      <LegalDocuments property={property} />
+      <LegalDocuments property={property} documentsState={documentsState} />
       <SatelliteBeforeAfter property={property} />
       <BuyingJourneySteps />
       <SimilarProperties items={similar} />

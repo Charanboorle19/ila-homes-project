@@ -8,9 +8,9 @@ The Next.js App Router frontend uses client-side service modules to call a tenan
 
 ## 2. Backend/API integration
 
-**Service:** ILA backend API. **Purpose:** properties, units/plots, locations, documents, Buyer Fit, nearby places, visitors, sessions, favourites, and analytics. **Where:** `src/services/apiClient.ts`, `propertiesService.ts`, `locationsService.ts`, `favoritesService.ts`, `visitorService.ts`, `services/analytics/tracker.ts`, `MapSection.tsx`, `GrowthCorridors.tsx`, `PropertiesList.tsx`, and `ApiPropertyView.tsx`.
+**Service:** ILA backend API. **Purpose:** properties, units/plots, locations, documents, Buyer Fit, nearby places, active tenant Instagram reels, visitors, sessions, favourites, and analytics. **Where:** `src/services/apiClient.ts`, `propertiesService.ts`, `locationsService.ts`, `tenantReelsService.ts`, `favoritesService.ts`, `visitorService.ts`, `services/analytics/tracker.ts`, `MapSection.tsx`, `GrowthCorridors.tsx`, `FromTheField.tsx`, `PropertiesList.tsx`, and `ApiPropertyView.tsx`.
 
-**Base/config:** `NEXT_PUBLIC_API_URL` is required; trailing slashes are removed. Requests are `${NEXT_PUBLIC_API_URL}${path}`. Confirmed paths are `GET /api/properties`, `GET /api/properties/{id}`, `GET /api/properties/{id}/units?limit=all`, `GET /api/properties/{id}/documents`, `GET /api/properties/{id}/life-stage-fit`, `GET /api/properties/{id}/nearby-places`, `GET /api/locations`, location-filtered `GET /api/properties`, visitor/session POSTs, favourites GET/POST/DELETE, and `POST /api/events/batch`.
+**Base/config:** `NEXT_PUBLIC_API_URL` is required; trailing slashes are removed. Requests are `${NEXT_PUBLIC_API_URL}${path}`. Confirmed paths are `GET /api/properties`, `GET /api/properties/{id}`, `GET /api/properties/{id}/units?limit=all`, `GET /api/properties/{id}/documents`, `GET /api/properties/{id}/life-stage-fit`, `GET /api/properties/{id}/nearby-places`, `GET /api/locations`, `GET /api/tenant/reels/active`, location-filtered `GET /api/properties`, visitor/session POSTs, favourites GET/POST/DELETE, and `POST /api/events/batch`.
 
 `apiFetch` sends `Accept: application/json`, `ngrok-skip-browser-warning: true`, `X-Tenant-Domain`, optional JSON content type, and optional `Authorization: Bearer ...`. It supports abort signals and keepalive, parses JSON or returns `{ raw }`, and throws `ApiError` for non-OK responses. Missing data is normalized by service functions; callers own loading/error/fallback states. API UUID path ids are URL-encoded; slugs are not accepted for property detail. Backend authorization semantics and complete schemas are UNKNOWN — needs verification. Calls are primarily client-side.
 
@@ -54,7 +54,7 @@ Events require a visitor code, use `X-Visitor-Code`, common tenant headers, opti
 
 ## 12. WhatsApp integration
 
-**Service:** direct WhatsApp web links. **Where:** `PropertyHero`, `PropertyFinalCta`, `StickyBottomCta`, `WhatsAppBudgetModal`, `ShortlistShare`, and `propertyUtils.ts`. **URL:** `https://wa.me/?text=${encodeURIComponent(text)}`. Messages are generated locally for enquiry, site visit, calculator budget, or static shortlist sharing. No SDK, token, login, lead API, booking, or reservation exists. Links may open a new tab and applicable actions emit analytics. Popup blocking or unavailable WhatsApp behavior is UNKNOWN — needs verification. Client-side only.
+**Service:** direct WhatsApp web links plus tracked property-share creation. **Where:** `PropertyHero`, `PropertyFinalCta`, `StickyBottomCta`, `WhatsAppBudgetModal`, `ShortlistShare`, `shareService.ts`, and `propertyUtils.ts`. The final WhatsApp URL is `https://wa.me/?text=${encodeURIComponent(text)}`. Enquiry, site-visit, and calculator messages are generated locally; `ShortlistShare` first calls `POST /api/shares` once per selected API property UUID, adds the resulting `/property/{tracking_token}/view` links to the message, and then opens WhatsApp. No SDK, token, login, booking, or reservation exists. Links may open a new tab and applicable actions emit analytics. Popup blocking or unavailable WhatsApp behavior is UNKNOWN — needs verification. Client-side orchestration with API-backed tracked shares.
 
 ## 13. Email integration
 
@@ -74,7 +74,7 @@ Confirmed remote resources are OpenFreeMap styles, Esri satellite tiles, presign
 
 - `NEXT_PUBLIC_API_URL` — required external ILA API base URL; no fallback, and module initialization throws if missing.
 - `SITE_DOMAIN` — server-side tenant hostname fallback when `window.location.hostname` is unavailable; missing server-side tenant resolution throws.
-- `NEXT_PUBLIC_ILA_PROPERTY_ID` — required configured property id used by `ilaApiConfig.ts`, units URL helper, and related shortlist analytics/static configuration.
+- `NEXT_PUBLIC_ILA_PROPERTY_ID` — required configured property id used by `ilaApiConfig.ts`, the units URL helper, and analytics fallback configuration; shortlist selection and tracked sharing use API property UUIDs.
 - `NEXT_PUBLIC_SATELLITE_TILES_URL` — optional satellite tile template; defaults to Esri World Imagery.
 - `NODE_ENV` — controls production cookie `Secure` and non-production analytics diagnostics.
 

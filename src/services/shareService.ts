@@ -92,6 +92,19 @@ export async function createPropertyShare(input: {
   return data;
 }
 
+/** Creates one tracked share for each API property UUID in a shortlist. */
+export async function createPropertyShares(input: {
+  entityIds: string[];
+  message: string;
+  signal?: AbortSignal;
+}): Promise<ShareResult[]> {
+  return Promise.all(
+    [...new Set(input.entityIds)].map((entityId) =>
+      createPropertyShare({ entityId, message: input.message, signal: input.signal }),
+    ),
+  );
+}
+
 /**
  * Turns a tracking token into the public share URL a visitor pastes or forwards.
  *

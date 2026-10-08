@@ -1,10 +1,10 @@
 # Shortlist / WhatsApp Share feature
 
-This document describes the current homepage `ShortlistShare` implementation only. It is based on the inspected TypeScript/React source, stylesheet, static layout data, homepage integration, and directly related analytics/configuration files. It does not describe a redesigned shortlist, a backend shortlist service, or the separate Property Details wishlist/share controls.
+This document describes the current homepage `ShortlistShare` implementation only. It is based on the inspected TypeScript/React source, stylesheet, property-list API, tracked-share service, homepage integration, and directly related analytics/configuration files. It does not describe a server-side shortlist collection or the separate Property Details wishlist/share controls.
 
 ## 1. Feature purpose
 
-`ShortlistShare` lets a visitor select static property layouts, keep the selection while the component is mounted, and send the selected layout summary to WhatsApp. The section presents the flow as “Save your shortlist. Share it on WhatsApp in one tap.” It does not create a server-side shortlist, require login, navigate to a shortlist route, or submit an enquiry.
+`ShortlistShare` loads property records from the API, lets a visitor select properties while the component is mounted, creates a tracked share for each selected API property, and sends the selected property summaries and tracked URLs to WhatsApp. The section presents the flow as “Save your shortlist. Share it on WhatsApp in one tap.” It does not persist a shortlist collection, require login, or submit an enquiry.
 
 ## 2. Where it appears
 
@@ -30,11 +30,12 @@ Therefore, Shortlist / WhatsApp Share appears immediately after the homepage Buy
 
 ## 4. Component/file paths
 
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\ShortlistShare.tsx` — component, static shortlist projection, state, selection handlers, WhatsApp URL creation, touch/wheel behavior, markup, and analytics calls.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\ShortlistShare.tsx` — component, API-property projection, state, selection handlers, tracked WhatsApp URL creation, touch/wheel behavior, markup, and analytics calls.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\ShortlistShare.css` — feature layout, option/card styling, selected/disabled states, scrolling, and responsive rules.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — homepage import and render position.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\data\propertyLayouts.ts` — source records and `LayoutId` values used to build the shortlist options.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\ilaApiConfig.ts` — source of `ILA_PROPERTY_ID`, used as the analytics `property_id`; it is not used to load shortlist records.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` — API property-list request and `PropertyListItem` type used to load shortlist options.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\shareService.ts` — tracked share creation and public tracking-URL construction.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\ilaApiConfig.ts` — source of `ILA_PROPERTY_ID`, used only as the analytics fallback property id.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\tracker.ts` — analytics transport called by the component.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\share on what'sapp.gif` — WhatsApp-sharing visual asset.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Family Dreams Over a New Community.png`, `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Golden-Hour Family Homecoming.png`, `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Golden Hour Real Estate Growth.png`, and `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Golden-Hour View of Planned Cityscape.png` — mobile option-card images.
@@ -43,7 +44,7 @@ Therefore, Shortlist / WhatsApp Share appears immediately after the homepage Buy
 
 The default-exported homepage component is `ShortlistShare` from `ShortlistShare.tsx`.
 
-Internal implementation names include `ShortlistPlot`, `PROPERTIES`, `FEATURES`, `INITIAL_PINNED`, `buildShareText`, `togglePlot`, `shareOnWhatsApp`, `renderChoose`, and `handlePanelsWheel`.
+Internal implementation names include `ShortlistPlot`, `PROPERTY_IMAGES`, `FEATURES`, `toPlot`, `buildShareText`, `togglePlot`, `shareOnWhatsApp`, `renderChoose`, and `handlePanelsWheel`.
 
 ## 6. Props
 
@@ -64,92 +65,84 @@ The section visibly contains:
 - A `Choose plots` kicker.
 - Heading: `Select properties to shortlist`.
 - Supporting copy: `Tap any property to add or remove it from your WhatsApp shortlist.`
-- Seven selectable property/layout options.
-- Each option’s name, location, metadata, and `Appreciation score: {score}/100`.
-- A selected-count message: `{n} plot` or `{n} plots selected`; with zero selections: `Select plots on the right to build your shortlist`.
+- API-loaded selectable property options.
+- Each option’s name, slug-derived location, metadata, and description/highlight.
+- A selected-count message based on the number of selected properties; loading, empty, and fetch-error messages are shown when applicable.
 - A share button in the left panel labelled `Share on WhatsApp`.
 - A second share button in the choose-plots panel whose label changes between `Shared — open again`, `Select plots to share`, and `Share {n} plot(s) →`.
 - A WhatsApp-sharing GIF on the desktop/right media panel.
 
-## 8. Property/layout data source
+## 8. Property data source
 
-`PROPERTIES` is a module-level array created by mapping `propertyLayouts` from `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\data\propertyLayouts.ts`. Each item is projected into:
+The component calls `fetchProperties` from `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` on mount with `status=ALL`, `page=1`, and `perPage=100`. The returned `PropertyListItem` records are projected into:
 
 ```ts
 type ShortlistPlot = {
-  id: LayoutId;
+  id: string;
   name: string;
   location: string;
   meta: string;
   highlight: string;
-  score: number;
   image: StaticImageData;
 };
 ```
 
-The projection uses `layout.id`, `layout.label`, `layout.location`, and `${layout.plotSizes} · ${layout.priceRange} · ${layout.tag}`. `highlight` is copied but is not rendered in the inspected JSX. Scores come from the local `APPRECIATION` map, defaulting to `70`; option images cycle through four imported local assets. The feature does not fetch property/layout data from an API.
+The projection uses the API `id`, `name`, `slug`, `property_type`, `price_label`/formatted price, and `description`. Option images cycle through four imported local assets; these images are presentation placeholders and do not represent API property galleries. No static property records or preset property selections are used by the component.
 
 ## 9. Shortlist behavior
 
-Every one of the seven static `PROPERTIES` entries can be shortlisted. Clicking an option calls `togglePlot(plot.id)`. If the id is already in `pinned`, it is removed; otherwise it is appended. The option’s `aria-pressed`, check mark, border/background, and selected class update from the resulting membership.
-
-The component does not filter by availability: the currently available `sark-green-plains` layout and the six `Updating Soon` layouts are all selectable.
+Every property returned by the API list response can be shortlisted. Clicking an option calls `togglePlot(plot.id)`. If the API UUID is already in `pinned`, it is removed; otherwise it is appended. The option’s `aria-pressed`, check mark, border/background, and selected class update from the resulting membership. The selection starts empty and is held in memory only.
 
 ## 10. Share behavior
 
-The feature has two visible share buttons, both wired to the same `shareOnWhatsApp` function. Sharing is allowed only when at least one layout is selected. The function creates a text-only WhatsApp URL, opens it in a new window, sets `shared` to `true`, and records `WHATSAPP_SHARE_CLICK`.
+The feature has two visible share buttons, both wired to the same asynchronous `shareOnWhatsApp` function. Sharing is allowed only when at least one property is selected. The function calls `createPropertyShares` once per selected API UUID in parallel, converts each returned tracking token with `buildShareUrl`, adds those URLs to the WhatsApp message, opens WhatsApp in a new window, sets `shared` to `true`, and records `WHATSAPP_SHARE_CLICK`.
 
-There is no generic share dialog, share route, native share fallback, or copied-link feedback in this component.
+There is no generic share dialog, native share fallback, or copied-link feedback in this component. The generated links target `/property/{tracking_token}/view`, where the existing tracked-share route resolves the property.
 
 ## 11. WhatsApp behavior
 
-`shareOnWhatsApp` calls:
+After tracked shares are created, `shareOnWhatsApp` opens:
 
 ```ts
 const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
 window.open(url, "_blank", "noopener,noreferrer");
 ```
 
-The exact text is generated by `buildShareText(selected)` and is described in section 18. The implementation does not use a phone-number-specific `wa.me/{number}` route.
+The exact text is generated by `buildShareText(selected, urls)` and includes one tracked URL for each selected property. The implementation does not use a phone-number-specific `wa.me/{number}` route.
 
 ## 12. Selection state
 
-Selection is represented by an array of `LayoutId` values. It starts with two selected layouts:
-
-```ts
-const INITIAL_PINNED: LayoutId[] = [
-  "nallagandla-enclave",
-  "kokapet-heights",
-];
-```
-
-The order of newly added ids follows click order. Removing an item filters it out. There is no maximum selection count and no requirement to select only available layouts.
+Selection is represented by an array of API property UUID strings and starts empty. The order of newly added ids follows click order. Removing an item filters it out. There is no maximum selection count.
 
 ## 13. State variables
 
 The component declares:
 
-- `pinned` / `setPinned`: `LayoutId[]`, initialized from `INITIAL_PINNED`.
+- `properties` / `setProperties`: API-loaded `ShortlistPlot[]`.
+- `pinned` / `setPinned`: `string[]` of selected API property UUIDs, initialized empty.
 - `shared` / `setShared`: boolean, initialized to `false`; controls the inner share-button label.
+- `loading`: indicates the initial property-list request.
+- `sharing`: indicates tracked share creation and disables sharing while links are prepared.
+- `error`: displays property-loading or sharing errors.
 - `mobilePanelsRef`: ref to the mobile `.shortlist-share__panels` element.
 
-There is no separate loading, error, API result, route, storage, or modal state.
+The component has no persistent storage, shortlist route, or modal state.
 
 ## 14. Derived values
 
-`selected` is memoized with `useMemo`:
+`selected` is memoized from the API-loaded properties and selected UUIDs:
 
 ```ts
-PROPERTIES.filter((plot) => pinned.includes(plot.id))
+properties.filter((plot) => pinned.includes(plot.id))
 ```
 
 It is the ordered set of full `ShortlistPlot` objects corresponding to the selected ids. `isOn` is derived per option with `pinned.includes(plot.id)`. The count and button labels derive from `pinned.length`; the share message derives from `selected`.
 
 ## 15. Functions
 
-- `buildShareText(plots)` formats the WhatsApp message.
-- `togglePlot(id)` adds/removes a layout id, resets `shared` to `false`, and sends shortlist analytics.
-- `shareOnWhatsApp()` returns immediately for an empty selection; otherwise builds the message, opens WhatsApp, sets `shared`, and sends share analytics.
+- `buildShareText(plots, urls)` formats the WhatsApp message with one tracked URL per property.
+- `togglePlot(id)` adds/removes an API property UUID, resets `shared` to `false`, and sends shortlist analytics.
+- `shareOnWhatsApp()` returns immediately for an empty selection; otherwise creates tracked shares, builds the message, opens WhatsApp, sets `shared`, and sends share analytics.
 - `renderChoose(instance)` renders the desktop or mobile chooser and its share button.
 - `handlePanelsWheel(event)` passes wheel scrolling to the page when the chooser is at a scroll boundary.
 - The `useEffect`-local functions `onTouchStart`, `onTouchMove`, and `restoreOverflow` manage nested mobile panel scrolling.
@@ -169,25 +162,25 @@ This state is separate from Property Details keys such as `ila-wishlist-{id}` an
 
 ## 18. Share URL/message construction
 
-`buildShareText` maps each selected plot to:
+`buildShareText` maps each selected property to:
 
 ```text
 • {plot.name} · {plot.location}
   {plot.meta}
-  Appreciation: {plot.score}/100
+  {urls[index]}
 ```
 
 It joins the message as:
 
 ```text
-My shortlisted plots via ILA Homes
+My shortlisted properties via ILA Homes
 
 {one formatted block per selected plot}
 
-Open the shortlist to review together.
+Open the links to review together.
 ```
 
-The final WhatsApp URL is exactly `https://wa.me/?text=${encodeURIComponent(text)}`. No shortlist URL, property-detail route, or deep link is appended to the message.
+The final WhatsApp URL is exactly `https://wa.me/?text=${encodeURIComponent(text)}`. Each message block contains a tracked `/property/{tracking_token}/view` URL; no single shortlist collection URL is generated.
 
 ## 19. Navigation behavior
 
@@ -195,37 +188,37 @@ The option controls are buttons and do not navigate. The share action opens the 
 
 ## 20. Loading behavior
 
-There is no feature-specific loading state. `propertyLayouts` and the imported image modules are synchronously available module data/assets. The share button does not show a pending state while `window.open` executes.
+The component starts in a loading state while `fetchProperties` requests up to 100 API properties. During sharing, the button displays `Preparing links…` and is disabled until all selected share requests complete.
 
 ## 21. Error behavior
 
-There is no explicit error state, error message, try/catch around `window.open`, or fallback if WhatsApp cannot open. Analytics calls are made directly; tracker-level failure behavior is outside this component. Browser popup blocking and runtime failures are UNKNOWN — needs verification.
+Property-fetch failures display `Properties could not be loaded. Please try again.` and sharing failures display `Sharing failed. Please try again.` Abort errors from unmount are ignored. Browser popup blocking and runtime failures after `window.open` are UNKNOWN — needs verification.
 
 ## 22. Empty-state behavior
 
-The component starts with two selected layouts, so an empty selection is not the initial state. If the user removes all selections, the left count text becomes `Select plots on the right to build your shortlist`; both share buttons are disabled, and the inner button says `Select plots to share`. There is no separate empty-results panel or “no properties” state because the seven static options remain visible.
+The component starts with no selected properties. If the user removes all selections, both share buttons are disabled and the inner button says `Select properties to share`. If the API returns no items, the chooser displays an empty-results message rather than static options.
 
 ## 23. Reset behavior
 
-Clicking a selected option removes only that option. Any selection change calls `setShared(false)`, so a prior `Shared — open again` label returns to the count-based label. Remounting the component resets `pinned` to `INITIAL_PINNED` and `shared` to `false`. There is no visible reset-all button.
+Clicking a selected option removes only that option. Any selection change calls `setShared(false)`, so a prior `Shared — open again` label returns to the count-based label. Remounting the component resets the API-loaded list, selection, and sharing state. There is no visible reset-all button.
 
 ## 24. Analytics
 
 `ShortlistShare.tsx` directly imports and calls `trackEvent`.
 
-- Add: `SHORTLIST_ADD` with `property_id: ILA_PROPERTY_ID` and metadata `{ layout_id, property_id: ILA_PROPERTY_ID, section_type: "shortlist_whatsapp" }`.
+- Add: `SHORTLIST_ADD` with the selected API UUID as `property_id` and metadata `{ property_id, section_type: "shortlist_whatsapp" }`.
 - Remove: `SHORTLIST_REMOVE` with the same metadata shape.
-- WhatsApp share: `WHATSAPP_SHARE_CLICK` with `property_id: ILA_PROPERTY_ID` and metadata `{ shortlist_count, layout_ids, property_id: ILA_PROPERTY_ID, section_type: "shortlist_whatsapp" }`.
+- WhatsApp share: `WHATSAPP_SHARE_CLICK` with the first selected API UUID as `property_id` and metadata `{ shortlist_count, property_ids, section_type: "shortlist_whatsapp" }`.
 
 The component has no `data-track` attributes. `ILA_PROPERTY_ID` is read from `NEXT_PUBLIC_ILA_PROPERTY_ID` through `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\ilaApiConfig.ts`. Exact server delivery, batching, and failure handling are owned by the analytics tracker and are UNKNOWN — needs verification.
 
 ## 25. Relationship with Find Your Plot
 
-`FindYourPlot` appears immediately before `BuyingJourney`, while `ShortlistShare` appears after `BuyingJourney`. Both use static layout-oriented data and share `LayoutId` concepts through `propertyLayouts.ts`, but `ShortlistShare` does not receive `FindYourPlot` results, import its state, or automatically shortlist its result cards. No shared selection state or callback is present.
+`FindYourPlot` appears immediately before `BuyingJourney`, while `ShortlistShare` appears after `BuyingJourney`. `ShortlistShare` loads its own API property list; it does not receive `FindYourPlot` results, import its state, or automatically shortlist its result cards. No shared selection state or callback is present.
 
 ## 26. Relationship with MapSection
 
-`MapSection` is a separate API-backed/map-driven homepage feature. `ShortlistShare` does not import `MapSection`, its map state, `PropertyRecord`, plot units, or map selection callbacks. Although analytics uses `ILA_PROPERTY_ID` as the required property id and the shortlist layouts have static `LayoutId` values, no runtime synchronization between map selections and `pinned` is implemented.
+`MapSection` is a separate API-backed/map-driven homepage feature. `ShortlistShare` does not import `MapSection`, its map state, `PropertyRecord`, plot units, or map selection callbacks. Although both features can load API properties, no runtime synchronization between map selections and `pinned` is implemented.
 
 ## 27. Relationship with Property Details
 
@@ -275,28 +268,28 @@ There is no explicit live announcement for each selection change, no focus manag
 
 ## 34. Dependencies
 
-Direct dependencies are React hooks and types, Next.js `Image`, local static image assets, `propertyLayouts`/`LayoutId`, `ILA_PROPERTY_ID`, `trackEvent`, browser `window.open`, DOM touch/wheel/scroll APIs, and `ShortlistShare.css`. No API client, router, localStorage helper, session helper, Web Share API, Clipboard API, enquiry helper, MapLibre component, or external modal library is imported by `ShortlistShare.tsx`.
+Direct dependencies are React hooks and types, Next.js `Image`, local static image assets, `fetchProperties`/`PropertyListItem`, `createPropertyShares`/`buildShareUrl`, `ILA_PROPERTY_ID`, `trackEvent`, browser `window.open`, DOM touch/wheel/scroll APIs, and `ShortlistShare.css`. No router, localStorage helper, Web Share API, Clipboard API, enquiry helper, MapLibre component, or external modal library is imported by `ShortlistShare.tsx`.
 
 ## 35. Known issues
 
-- The shortlist is initialized with `nallagandla-enclave` and `kokapet-heights` rather than starting empty, despite the UI copy describing save-as-you-browse behavior.
-- Selection is not persisted and is not synchronized with Find Your Plot, MapSection, Property Details wishlist state, or API inventory.
-- The “Shareable link” feature copy says that anyone opening it sees the same shortlist, but the current WhatsApp URL contains only encoded text and no shortlist link or state-bearing URL. The claim is not implemented by this component.
-- All seven static layouts are selectable, including layouts whose status is `Updating Soon`.
-- There is no explicit loading or error feedback for `window.open`; popup blocking behavior is UNKNOWN — needs verification.
-- The feature calls `window.open` directly and has no native Web Share API, clipboard fallback, or alternate share channel.
-- The `highlight` field is included in `ShortlistPlot` but is not displayed.
+- The shortlist is loaded from one API page (`status=ALL`, `page=1`, `per_page=100`); properties beyond that response are not shown.
+- Selection is not persisted and is not synchronized with Find Your Plot, MapSection, or Property Details wishlist state.
+- The API `slug` is currently used as the location display because the list item does not provide a dedicated location label; this should be reviewed against the API's intended location fields.
+- Option images are local rotating placeholders rather than API-specific property images.
+- Tracked-share creation depends on visitor readiness and fails if no visitor code or tracking token is available.
+- Popup blocking behavior after successful link creation is UNKNOWN — needs verification.
+- The feature has no native Web Share API or clipboard fallback.
 - Exact analytics delivery/failure behavior is outside the component and UNKNOWN — needs verification.
 - Automated test coverage for this feature is UNKNOWN — needs verification.
 
 ## 36. Important constraints
 
 - Preserve the current component name/default export `ShortlistShare` and homepage placement unless the homepage integration intentionally changes.
-- Treat `pinned` as the current in-memory `LayoutId[]` state; do not assume it is a persisted wishlist/favourites store.
-- Preserve the seven-layout `propertyLayouts` source and the current `INITIAL_PINNED` values when documenting the current behavior.
-- Preserve the exact WhatsApp construction `https://wa.me/?text=${encodeURIComponent(text)}` and the `buildShareText` wording if the current implementation is being referenced.
-- Keep shortlist analytics event names `SHORTLIST_ADD`, `SHORTLIST_REMOVE`, and `WHATSAPP_SHARE_CLICK`, including the current `ILA_PROPERTY_ID` metadata contract.
-- Keep the distinction between this static homepage feature and the API/map-driven `MapSection`, Property Details `PropertyFinalCta`, and Property Enquiry actions.
+- Treat `pinned` as the current in-memory API property UUID array; do not assume it is a persisted wishlist/favourites store.
+- Preserve the `fetchProperties({ status: "ALL", page: 1, perPage: 100 })` request and the API `id` values used for selection and share creation.
+- Preserve the exact WhatsApp construction `https://wa.me/?text=${encodeURIComponent(text)}` and include one `buildShareUrl` result for every selected property.
+- Keep shortlist analytics event names `SHORTLIST_ADD`, `SHORTLIST_REMOVE`, and `WHATSAPP_SHARE_CLICK`, using selected API UUIDs in the property-id fields.
+- Keep the distinction between this homepage feature and the API/map-driven `MapSection`, Property Details `PropertyFinalCta`, and Property Enquiry actions.
 - Preserve the `max-width: 980px` mobile switch and the additional `max-width: 640px` intro adjustment when referring to current responsive behavior.
-- Do not document a route, API persistence, native share fallback, clipboard fallback, or shared Wishlist/Favourites state unless separately confirmed in source.
-- This documentation file is the only file created for this task; application code was not modified.
+- Do not document shortlist persistence, native share fallback, clipboard fallback, or shared Wishlist/Favourites state unless separately confirmed in source.
+- Keep tracked-share creation in `shareService.ts`; do not post slugs or local layout ids as `entity_id`.

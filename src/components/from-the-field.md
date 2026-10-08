@@ -4,7 +4,7 @@ This document describes the homepage **From the field** section, which presents 
 
 ## Purpose
 
-The section is a social-media-style showcase intended to make the property experience feel current and grounded in real locations. Its message is:
+The section is a social-media-style showcase intended to make the property experience feel current and grounded in real locations. It loads the tenant's currently active Instagram reel from the public tenant API and keeps the profile card alongside it. Its message is:
 
 ```text
 From the field
@@ -12,15 +12,16 @@ Hear it straight from the ground
 Short walkthroughs. Real plots. No filters.
 ```
 
-The section does not embed Instagram content or fetch posts dynamically. It uses local thumbnail assets and static metadata, with links to Instagram opened in a new browser tab.
+The section does not embed Instagram content. It fetches one active reel link dynamically, uses a local decorative thumbnail, and opens the canonical Instagram URL in a new browser tab.
 
 ## Source and homepage placement
 
 | Responsibility | Source |
 | --- | --- |
-| React component and default content | [`src/components/FromTheField.jsx`](../src/components/FromTheField.jsx) |
+| React component and rendering states | [`src/components/FromTheField.tsx`](./FromTheField.tsx) |
 | Section styling and responsive rules | [`src/components/FromTheField.css`](../src/components/FromTheField.css) |
-| Homepage integration | [`src/pages/HomePage.jsx`](../src/pages/HomePage.jsx) |
+| Active reel API service | [`src/services/tenantReelsService.ts`](../services/tenantReelsService.ts) |
+| Homepage integration | [`src/app/page.tsx`](../app/page.tsx) |
 
 `HomePage` renders the section after `EmiAppreciation` and before `PlotsWithPulse`:
 
@@ -37,14 +38,13 @@ The component imports `FromTheField.css` directly, so the homepage does not requ
 The component renders a labelled `<section>` containing:
 
 1. An introductory header.
-2. A reels area containing three linked vertical cards.
+2. A reels area containing one linked vertical card when an active tenant reel is available.
 3. An Instagram profile card containing the account image, handle, bio, follow link, and static counts.
 
-The default component props are:
+The component props are:
 
 ```js
 {
-  reels,
   handle = '@ila.homes',
   profileUrl,
   profileImage,
@@ -53,46 +53,39 @@ The default component props are:
 }
 ```
 
-The props make the component reusable with different reel data, account information, and profile imagery if the content later becomes data-driven.
+The props configure account information and profile imagery. Reel data is loaded from the active tenant reel API rather than passed as static component data.
 
-## Reel cards
+## Active reel card
 
-The default reel list contains:
+The component calls:
 
-| Title | Location | Duration |
-| --- | --- | ---: |
-| Plot A3 | Mansanpally | 0:42 |
-| Corner plot walk | Kokapet Heights | 0:58 |
-| Road-facing lot | Nallagandla | 0:36 |
+```http
+GET /api/tenant/reels/active
+```
 
-Each reel record has this shape:
+The request is public and is routed through `apiFetch`, which sends `Accept: application/json` and the current `X-Tenant-Domain` header. The service accepts the documented response shape:
 
-```js
+```ts
 {
-  thumbnail,
-  title,
-  location,
-  duration,
-  reelUrl,
+  success: true,
+  data: {
+    id: string,
+    reel_url: string,
+    is_active: boolean,
+  } | null,
 }
 ```
 
-Each card is an anchor element and:
+Only one card is rendered, preventing duplicate static reel content. The card:
 
-- Opens `reelUrl` in a new tab using `target="_blank"`.
+- Opens `reel_url` in a new tab using `target="_blank"`.
 - Uses `rel="noopener noreferrer"` for external-link safety.
-- Builds an accessible label in the form `Watch reel: location · title`.
-- Displays the duration in the top-right corner.
+- Uses the accessible label `Watch the latest ILA Homes reel`.
+- Uses a local thumbnail as decorative presentation imagery.
 - Displays a decorative play icon in the center.
-- Displays the location and title at the bottom of the card.
+- Displays `Latest ILA Homes reel` at the bottom of the card.
 
-At present, all three default cards use the same Instagram profile URL:
-
-```text
-https://www.instagram.com/ila.homes?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==
-```
-
-They are not individual Instagram reel URLs yet.
+The API normalizes Instagram URLs to the canonical `/reel/{shortcode}/` format. Non-Instagram URLs are preserved by the backend according to the documented contract.
 
 ## Instagram profile card
 
@@ -133,10 +126,10 @@ The section uses a light warm background with gold accents:
 
 ## Responsive behavior
 
-At viewport widths of `900px` and below:
+At viewport widths of `980px` and below:
 
 - The two-column layout becomes a single column.
-- The reel cards become a horizontally scrollable row.
+- The active reel card becomes a horizontally scrollable row when present.
 - Horizontal scrolling uses scroll snapping.
 - Scrollbars are hidden visually while touch scrolling remains enabled.
 - Each card uses a compact mobile width of up to `12.5rem`.
@@ -150,7 +143,7 @@ The implementation includes:
 
 - A semantic section labelled by its heading through `aria-labelledby`.
 - A reels container with `role="list"`.
-- Each reel anchor is exposed as a list item and has an explicit `aria-label`.
+- The active reel anchor is exposed as a list item and has an explicit `aria-label`.
 - Decorative thumbnail images use empty alt text.
 - Decorative play icons are hidden with `aria-hidden="true"`.
 - Keyboard-visible focus styles for reel cards and the Instagram CTA.
@@ -158,17 +151,16 @@ The implementation includes:
 - Reduced-motion rules disable card scaling, image zoom, and CTA transitions for users who request reduced motion.
 
 ## Current limitations
+The section still has static profile presentation values, but the reel link is API-backed:
 
-The section is currently a static content presentation:
-
-- Reel titles, locations, durations, follower count, and reel count are hard-coded defaults.
+- Follower count and reel count remain hard-coded display values.
+- The active reel endpoint is a tenant API endpoint, not the Instagram API.
+- The reel thumbnail and display label are presentation fallbacks; the reel URL comes from the API.
 - Instagram data is not fetched from the Instagram API.
-- The displayed `26K+` followers and `50+` reels are not live values.
-- The three reel cards currently link to the Instagram profile rather than specific reels.
-- The local thumbnails may not exactly match the media available at the external Instagram destination.
-- There is no loading, error, or unavailable-content state for external Instagram links.
-
-For production, individual reel URLs and reviewed content metadata should replace the shared profile URL. If live counts or media are required, they should come from an approved content-management or social-media integration rather than being read directly from the client.
+- A `data: null` response hides the reel card while retaining the profile card.
+- Loading and fetch-error states are shown in the reel area.
+- The local thumbnail may not exactly match the media available at the external Instagram destination.
+If live profile counts or media thumbnails are required, they should come from an approved content-management or social-media integration rather than be read directly from the client.
 
 ## Verification checklist
 
@@ -182,10 +174,12 @@ Manual checks:
 
 1. Confirm the section appears after the EMI calculator on the homepage.
 2. Confirm the heading and lede are visible.
-3. Confirm all three reel cards show their thumbnail, duration, play icon, and location/title label.
-4. Activate each reel card with keyboard focus and verify its focus styling and accessible label.
-5. Confirm each card opens Instagram in a new tab.
+3. Confirm the active reel card shows its thumbnail, play icon, and latest-reel label when the API returns data.
+4. Activate the reel card with keyboard focus and verify its focus styling and accessible label.
+5. Confirm the card opens the API-provided Instagram reel URL in a new tab.
 6. Confirm the profile card displays `@ila.homes`, the bio, CTA, and static counts.
 7. Confirm the Instagram CTA opens the profile URL in a new tab.
-8. Test the desktop two-column layout and the mobile horizontal reel scroller.
-9. Test with reduced-motion preferences enabled.
+8. Confirm `data: null` hides only the reel card and keeps the profile card visible.
+9. Test loading and API-error states.
+10. Test the desktop two-column layout and the mobile horizontal reel scroller.
+11. Test with reduced-motion preferences enabled.

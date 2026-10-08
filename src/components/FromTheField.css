@@ -90,6 +90,14 @@
   min-width: 0;
 }
 
+.from-field__state {
+  align-self: center;
+  margin: 0;
+  color: var(--ff-fog);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
 .from-field__card {
   position: relative;
   display: block;

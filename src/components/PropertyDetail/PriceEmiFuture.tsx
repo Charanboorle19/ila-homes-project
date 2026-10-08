@@ -1,12 +1,25 @@
 "use client";
 
 import React, { useState, useId, useMemo, useRef } from "react";
-import type { PropertyRecord } from "@/data/properties";
 import WhatsAppBudgetModal from "@/components/WhatsAppBudgetModal";
 import { formatInr, futureValue } from "@/lib/propertyUtils";
 import { trackEvent } from "@/services/analytics/tracker";
+import "./PropertyDetail.css";
 
 const ANNUAL_APPRECIATION = 0.11;
+
+/**
+ * The calculator reads only the property's name and price.
+ *
+ * Narrowing the prop to those two fields is what lets the homepage render this
+ * exact component from a `GET /api/properties` list row, instead of a second
+ * calculator that would drift. A full `PropertyRecord` still satisfies this
+ * shape, so the property detail page is unaffected.
+ */
+export type EmiCalculatorProperty = {
+  name: string;
+  price: number;
+};
 
 interface AmortizationYearRow {
   year: number;
@@ -28,8 +41,10 @@ interface AmortizationMonthRow {
 
 export default function PriceEmiFuture({
   property,
+  showAmortizationSchedule = true,
 }: {
-  property: PropertyRecord;
+  property: EmiCalculatorProperty;
+  showAmortizationSchedule?: boolean;
 }) {
   const purchasePriceId = useId();
   const downPaymentId = useId();
@@ -812,6 +827,7 @@ export default function PriceEmiFuture({
         </div>
 
         {/* Amortization Schedule Section (Below Main Calculator Cards) */}
+        {showAmortizationSchedule ? (
         <div className="mt-10 rounded-2xl border border-black/10 bg-white p-5 sm:p-7 shadow-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-black/10 pb-5">
             <div>
@@ -940,6 +956,7 @@ export default function PriceEmiFuture({
             </div>
           )}
         </div>
+        ) : null}
       </div>
 
       <WhatsAppBudgetModal

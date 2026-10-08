@@ -309,6 +309,7 @@
 .shortlist-share__panels {
   display: grid;
   flex: 1 1 auto;
+  gap: 0.65rem;
   grid-template-columns: 1fr;
   gap: 0.55rem;
   align-content: start;
@@ -341,21 +342,25 @@
   background: #6f7683;
 }
 
-/* Desktop plot cards — text stack with leading checkbox */
+/* Property cards — shared image/name/location/meta design across breakpoints */
 .shortlist-share__option {
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
   align-items: stretch;
-  gap: 0.35rem;
+  gap: 0.7rem;
   width: 100%;
+  min-height: 7rem;
   box-sizing: border-box;
-  padding: 0.85rem 0.9rem;
+  padding: 0.45rem;
   border: 1px solid rgba(15, 17, 20, 0.1);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.78);
+  background: #ffffff;
   color: inherit;
   text-align: left;
   cursor: pointer;
+  isolation: isolate;
+  overflow: hidden;
   transition:
     background 0.2s ease,
     border-color 0.2s ease;
@@ -371,26 +376,55 @@
   background: rgba(255, 248, 232, 0.95);
 }
 
-.shortlist-share__option-top {
+.shortlist-share__option-media {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 7rem;
+  min-height: 6.1rem;
+  align-self: stretch;
+  overflow: hidden;
+  border-radius: 9px;
+  background: #ebecef;
+  box-shadow: inset 0 0 0 1px rgba(15, 17, 20, 0.06);
+}
+
+.shortlist-share__option-image {
+  display: block;
+  object-fit: cover;
+  object-position: center;
+}
+
+.shortlist-share__option-body {
+  position: relative;
+  z-index: 1;
   display: flex;
-  align-items: flex-start;
-  gap: 0.65rem;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.1rem 0.35rem 0.1rem 0;
 }
 
 .shortlist-share__option-check {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  z-index: 2;
   display: grid;
   place-items: center;
-  flex: 0 0 auto;
-  width: 1.35rem;
-  height: 1.35rem;
-  margin-top: 0.1rem;
-  border: 1px solid rgba(15, 17, 20, 0.18);
-  border-radius: 6px;
-  background: #ffffff;
-  color: #0f1114;
-  font-size: 0.72rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 5px;
+  background: rgba(15, 17, 20, 0.35);
+  color: #ffffff;
+  font-size: 0.68rem;
   font-weight: 700;
   line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(2px);
   transition:
     background 0.2s ease,
     border-color 0.2s ease,
@@ -433,7 +467,7 @@
   font-size: 0.74rem;
   font-weight: 400;
   line-height: 1.4;
-  padding-left: 2rem;
+  padding-left: 0;
 }
 
 .shortlist-share__option-score {
@@ -446,13 +480,6 @@
 .shortlist-share__option.is-selected .shortlist-share__option-score {
   color: #8a6b3a;
   font-weight: 700;
-}
-
-/* Mobile image-card pieces stay unused on desktop */
-.shortlist-share__option-media,
-.shortlist-share__option-body,
-.shortlist-share__option-image {
-  display: none;
 }
 
 .shortlist-share__wa-btn {
@@ -502,6 +529,26 @@
   }
 
   .shortlist-share__right {
+    display: block;
+    height: auto;
+    max-height: none;
+  }
+
+  .shortlist-share__right .shortlist-share__detail-inner {
+    display: block;
+    min-height: 0;
+    max-height: none;
+    padding: 0 var(--space) 1.5rem;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+  }
+
+  .shortlist-share__right .shortlist-share__copy {
+    display: none;
+  }
+
+  .shortlist-share__right .shortlist-share__media {
     display: none;
   }
 
@@ -536,6 +583,12 @@
     background-position: center center;
     background-size: cover;
     filter: none;
+  }
+
+  .shortlist-share__intro-bg-image {
+    display: block;
+    object-fit: cover;
+    object-position: center;
   }
 
   .shortlist-share__intro-bg::after {
@@ -753,10 +806,6 @@
     background: rgba(255, 248, 232, 0.95);
   }
 
-  .shortlist-share__choose-mobile .shortlist-share__option-top {
-    display: none;
-  }
-
   .shortlist-share__choose-mobile .shortlist-share__option-media {
     position: relative;
     z-index: 1;
@@ -824,15 +873,14 @@
   }
 
   .shortlist-share__choose-mobile .shortlist-share__option-name {
+    display: block;
     color: var(--ss-ink);
     font-size: 0.78rem;
     font-weight: 600;
     line-height: 1.25;
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    line-clamp: 1;
-    -webkit-box-orient: vertical;
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .shortlist-share__choose-mobile .shortlist-share__option-loc {
@@ -854,6 +902,7 @@
   }
 
   .shortlist-share__choose-mobile .shortlist-share__option-score {
+    display: none;
     font-size: 0.62rem;
     padding-left: 0;
   }

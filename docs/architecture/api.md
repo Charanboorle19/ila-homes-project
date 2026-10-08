@@ -4,7 +4,7 @@ This document describes the API architecture currently implemented in the reposi
 
 ## 1. API architecture purpose
 
-The application uses a browser-oriented service layer over an external ILA API. The service layer provides property catalogue/detail data, units and plot geometry, locations, documents, Buyer Fit, nearby places, tracked property shares, anonymous visitor/session identity, favourites, and analytics. Static property records remain a separate source for local property ids and fallback presentation.
+The application uses a browser-oriented service layer over an external ILA API. The service layer provides property catalogue/detail data, units and plot geometry, locations, documents, Buyer Fit, nearby places, property features and feature-based property matching, the active tenant Instagram reel, tracked property shares, public lead creation, public site-visit booking, anonymous visitor/session identity, favourites, and analytics. Static property records remain a separate source for local property ids and fallback presentation; the homepage `ShortlistShare` component now uses the API property list directly.
 
 The application also exposes one same-origin Next.js route, `/api/layout-image`, which proxies validated presigned S3 layout images for browser/MapLibre use.
 
@@ -19,6 +19,8 @@ The external request form is `${NEXT_PUBLIC_API_URL}${path}`, where `path` is an
 `src/services/apiClient.ts` exports `apiFetch<T>(path, options)`. It defaults to `GET`, serializes a defined body as JSON, passes `signal` and optional `keepalive`, and parses the response by reading text then attempting JSON parsing. Non-JSON successful responses are returned as `{ raw: text }`; empty responses return `null`.
 
 `fetchUnits` is also exported from this module as a convenience wrapper for `/api/properties/{id}/units?limit=all`; the main property service has its own units helper for paged requests.
+
+`src/services/tenantReelsService.ts` exports `fetchActiveTenantReel`, which calls the public `GET /api/tenant/reels/active` endpoint. The endpoint requires no bearer token and returns one active reel or `data: null`.
 
 ## 4. Authentication
 
@@ -66,7 +68,7 @@ Service consumers decide whether to surface or absorb failures. Property detail 
 - **Required headers:** common `apiFetch` headers; no endpoint-specific header.
 - **Response:** `{ success?: boolean, data?: { items?: PropertyListItem[]; total?: number; page?: number; per_page?: number } }` for the generic list, and `PropertySummary[]` fields for the location query.
 - **Transformation:** missing items become `[]`; total defaults to item count (generic) or `0` (location); echoed pagination values fall back to request values; generic service derives `totalPages` with `ceil(total/perPage)` and a minimum of 1.
-- **Consumers:** `MapSection`, `PropertiesList`, `GrowthCorridors` through `fetchPropertiesByLocation`.
+- **Consumers:** `MapSection`, `PropertiesList`, `ShortlistShare`, and `GrowthCorridors` through `fetchPropertiesByLocation`.
 - **Errors:** propagated by the service; callers set list error state. Empty/missing data is normalized to an empty list.
 
 ### `GET /api/properties/{id}`
@@ -148,6 +150,39 @@ The detail endpoint is the `GET /api/properties/{id}` operation above. It is not
 - **Consumers:** `ApiPropertyView`, `propertyMapper`, `LifeStageMatch`.
 - **Errors:** independent failure becomes `unavailable`; the rest of the detail page remains usable. The backend scoring formula and exact property-id validation are UNKNOWN — needs verification.
 
+### `GET /api/features`
+
+- **Path parameters/query:** none.
+- **Required headers:** common `apiFetch` headers. No bearer token; the endpoint is public. The guide's examples pass `credentials: "include"`, and `fetchActiveFeatures` does the same via the opt-in `apiFetch` option.
+- **Response:** `{ success?: boolean, data?: PropertyFeature[] }`. Only `active = true` rows, already ordered by `sort_order` then `name`, so no client-side filtering or sorting is applied.
+- **Feature shape:** `id`, `key`, `name`, `description` (`string | null`), `active`, `sort_order`, `created_at`, `updated_at`. Only `key`, `name` and `description` are read by the UI. Use `key` when submitting to the matching endpoint — never the display name.
+- **Transformation:** `fetchActiveFeatures` in `featuresService.ts` returns `response.data ?? []`.
+- **Consumer:** the `FindYourPlot` homepage section, whose preference chips are these rows.
+
+### `POST /api/match-properties`
+
+- **Request body:** `{ features: string[] }` — feature **keys**. Duplicate keys are removed by the backend, so callers need not deduplicate.
+- **Required headers:** common `apiFetch` headers, including `Content-Type: application/json`, which `apiFetch` attaches when a body is present. No bearer token; the endpoint is public. `findPropertiesByFeatures` also passes `credentials: "include"` per the guide.
+- **Response:** `{ success?: boolean, data?: { items: PropertyMatch[]; total: number } }`, where `PropertyMatch` is `property_id`, `property_name`, `slug`, `match_score` (`number | null`), `feature_scores`.
+- **Matching semantics:** a property must carry a score for **every** requested key, so multiple selections are **AND**, not OR. Each additional key narrows the result set.
+- **Scoring:** `match_score` is the mean of the requested feature scores, rounded to two decimals. **The scale is 0–10, not 0–100** — multiply by 10 before rendering it as a percentage. Individual feature scores are also 0–10, and `0` is a valid score, not a missing one.
+- **Naming caveat:** on this endpoint `feature_scores[].feature_id` is returned as an empty string and `feature_scores[].feature_name` contains the feature **key**. Display names must be resolved by mapping `feature_key` against `GET /api/features`.
+- **Ordering:** featured properties first, then newest first. No local re-sorting should be applied.
+- **Empty selection:** an empty array returns no matches rather than all properties. `findPropertiesByFeatures` short-circuits this locally and returns `{ items: [], total: 0 }` without a request.
+- **Summary data only:** no image, price, plot size or location is included. Fetching the full property per result is an N+1 and is not done.
+- **Transformation:** `findPropertiesByFeatures` in `featuresService.ts` returns `response.data ?? { items: [], total: 0 }`. The consumer treats `total: 0` as a valid empty result and renders an explanatory empty state rather than an error.
+- **Consumer:** the `FindYourPlot` homepage section.
+- **Errors:** `{ success: false, error: { code, message } }`, converted by `apiFetch` into `ApiError`. Documented statuses are `404`, `422` and `500`. No per-endpoint error codes are enumerated.
+
+### `GET /api/properties/{property_id}/feature-scores`
+
+- **Path parameters:** `property_id`, URL-encoded.
+- **Required headers:** common `apiFetch` headers. No bearer token; `fetchPropertyFeatureScores` passes `credentials: "include"` per the guide.
+- **Response:** `{ success?: boolean, data?: FeatureScore[] }`, where `FeatureScore` is `feature_id`, `feature_key`, `feature_name`, `score` (0–10). Unlike the matching endpoint, `feature_id` and `feature_name` are populated here.
+- **Transformation:** `fetchPropertyFeatureScores` in `featuresService.ts` returns `response.data ?? []`.
+- **Consumer:** none yet. The service function is implemented and typed but nothing calls it; it is intended for a property-detail integration. A property with no active feature scores returns an empty array, not a `404`.
+- **Errors:** `404` if the property does not exist.
+
 ## 16. Analytics APIs
 
 ### `POST /api/visitors`
@@ -219,8 +254,30 @@ No direct `POST /api/events` call was found in the current source; the tracker c
 - **Required headers:** common `apiFetch` headers plus `X-Visitor-Code`.
 - **Response:** `{ success?: boolean, data?: { share_id?: string; tracking_token?: string; tracking_url?: string; share_type?: string } }`.
 - **Transformation:** `createPropertyShare` in `shareService.ts` returns `response.data` and throws when `tracking_token` is absent. `buildShareUrl` turns the token into `{origin}/property/{tracking_token}/view`; the returned `tracking_url` field is not used for display.
-- **Consumers:** `ShareButton` in the property detail hero.
+- **Consumers:** `ShareButton` in the property detail hero and `ShortlistShare` on the homepage. `ShortlistShare` calls the batch helper to create one share for each selected API property UUID.
 - **Errors:** missing visitor code throws before the request. The response's relative `tracking_url` value is `/api/shares/{token}`, which suggests a read path exists, but that is a path only — see the entry below.
+
+### `POST /api/leads`
+
+- **Path parameters/query:** none.
+- **Request body:** `{ name, mobile, email, message, property_id, unit_id, metadata }`. Only `name` (1–255 chars) and `mobile` (5–20 chars) are required. The backend applies `source = PUBLIC_FORM` and `status = NEW`.
+- **Required headers:** common `apiFetch` headers plus `X-Visitor-Code`.
+- **Response:** `201 Created` with `{ success?: boolean, data?: Lead }`, where `Lead` is `id`, `name`, `status`, `property_id`, `unit_id`, `created_at`. Consumers should rely on `id`, `status` and `name`; the endpoint may return further fields.
+- **Transformation:** `createPublicLead` in `leadsService.ts` returns `response.data` and throws when `data.id` is absent. The property detail form maps its `Phone number` field to `mobile` and its `Description` field to `message`, sends `email` and `unit_id` as `null`, and sends `metadata` as `{ form_name, page_url, property_name }`. Optional values are always `null`, never empty strings.
+- **Consumers:** `PropertyFinalCta`'s enquiry form, which renders on both `/properties/{propertyId}` and `/property/{trackingToken]/view`.
+- **Errors:** `{ success: false, error: { code, message } }`, converted by `apiFetch` into `ApiError` carrying `status`, `code` and `message`. Notable codes: `VISITOR_CODE_REQUIRED` (401/422), `VALIDATION_ERROR` (422), `INVALID_MOBILE` (422), `PROPERTY_NOT_FOUND` (404), `RATE_LIMIT_EXCEEDED` (429), `FORBIDDEN` (403, when `assigned_to` is sent). The form special-cases the rate limit and otherwise surfaces the backend message.
+- **Constraints:** the client must never send `assigned_to`, must send optional values as `null`, and must only send `property_id` when it is an active property UUID.
+
+### `POST /api/site-visits`
+
+- **Path parameters/query:** none. Public endpoint; no bearer token required.
+- **Request body:** `{ property_id, scheduled_at, visitor: { name, mobile, email }, unit_id, notes }`. `property_id` (active UUID), `scheduled_at` (ISO 8601, must be in the future), `visitor.name` and `visitor.mobile` are required; the rest are optional.
+- **Required headers:** common `apiFetch` headers. `X-Visitor-Code` is **optional** — when omitted the API identifies or creates the visitor from the submitted name and mobile — so `bookPublicSiteVisit` sends it only when a code already exists rather than awaiting visitor readiness.
+- **Response:** `201 Created` with `{ success?: boolean, data?: SiteVisit }`. `SiteVisit` includes `id`, `status`, `scheduled_at`, `property_name`, `property_id`, `unit_id`, `visitor_name`, `notes`, `created_at`, plus optional agent/unit display fields. Confirmation UI should rely on `id`, `scheduled_at`, `status` and `property_name`.
+- **Transformation:** `bookPublicSiteVisit` in `siteVisitsService.ts` returns `response.data` and throws when `data.id` is absent. The form converts the `datetime-local` wall-clock value with `toISOString()` before sending, and sends `unit_id` as `null` and `email` as `null`, reusing the optional description as `notes`.
+- **Consumer:** the booking control in `PropertyFinalCta`, which renders on both `/properties/{propertyId}` and `/property/{trackingToken}/view`.
+- **Existing-entity behavior:** the endpoint creates or reuses the visitor profile, reuses their existing lead for that property rather than duplicating it, and creates a lead with `source = PUBLIC_FORM` and `status = SITE_VISIT` only when none exists. It therefore **replaces** `POST /api/leads` for a booking rather than following it.
+- **Errors:** `{ success: false, error: { code, message } }`, converted by `apiFetch` into `ApiError`. Codes: `VALIDATION_ERROR`, `PROPERTY_NOT_FOUND`, `UNIT_NOT_FOUND`, `VISITOR_NOT_FOUND`, `LEAD_NOT_FOUND`, `TENANT_ID_MISSING` (500). A past slot is rejected with `scheduled_at must be in the future`.
 
 ### `GET /api/shares/{tracking_token}`
 
@@ -248,9 +305,13 @@ No direct `POST /api/events` call was found in the current source; the tracker c
 
 - `src/services/apiClient.ts` — base request wrapper, tenant resolution, bearer token handling, response parsing, `ApiError`, and units convenience helper.
 - `src/services/propertiesService.ts` — property lists, location-property lists, property detail, documents, units, Buyer Fit, nearby places, anchors, and price formatting.
+- `src/services/featuresService.ts` — the public feature APIs: `fetchActiveFeatures` (`GET /api/features`), `findPropertiesByFeatures` (`POST /api/match-properties`), `fetchPropertyFeatureScores` (`GET /api/properties/{id}/feature-scores`), and the `PropertyFeature`, `FeatureScore`, `PropertyMatch` and `PropertyMatchResult` types.
+- `src/services/tenantReelsService.ts` — the public active tenant reel API and `TenantReel` type.
 - `src/services/locationsService.ts` — locations request and pagination/coordinate helpers.
 - `src/services/favoritesService.ts` — visitor-scoped favourite operations.
 - `src/services/shareService.ts` — tracked share creation (`POST /api/shares`), tracking-token resolution (`GET /api/shares/{tracking_token}`), and the public share-URL builder.
+- `src/services/leadsService.ts` — public lead creation (`POST /api/leads`), the `CreatePublicLeadRequest` and `Lead` types, and `LEAD_ERROR_CODES`.
+- `src/services/siteVisitsService.ts` — public site-visit booking (`POST /api/site-visits`), the `BookPublicSiteVisitRequest` and `SiteVisit` types, and `SITE_VISIT_ERROR_CODES`.
 - `src/services/visitorService.ts` — visitor creation and session start.
 - `src/services/propertyMapper.ts` — API-to-`PropertyRecord` normalization.
 - `src/services/analytics/events.ts` — event vocabulary and sendability rules.
@@ -326,6 +387,17 @@ The application depends on the external ILA API configured by `NEXT_PUBLIC_API_U
 - Do not prefetch or cache `GET /api/shares/{tracking_token}` until it is confirmed whether reading it records the share as viewed.
 - Keep API favourites distinct from Property Details localStorage wishlist flags and homepage in-memory shortlist state.
 - Keep documents and Buyer Fit independent from the main detail request and retain their current partial-failure behavior.
+- Public lead creation must not send `assigned_to`; the backend answers `403 FORBIDDEN`. Send optional values as `null` rather than empty strings, and only send `property_id` when it is an active property UUID — a catalogue slug would fail with `404 PROPERTY_NOT_FOUND`.
+- Keep `POST /api/leads` and `POST /api/site-visits` as alternatives in the property detail form. The site-visit endpoint already creates or reuses the visitor's lead for the property, so submitting both for one interaction would duplicate the enquiry.
+- Feature matching is **AND**. Never present `POST /api/match-properties` as an OR filter, never treat `total: 0` as a failure, and never treat a feature score of `0` as missing.
+- Always scale `match_score` and `feature_scores[].score` by 10 before rendering a percentage. The API range is 0–10.
+- Submit feature **keys** to `/api/match-properties`, never display names or feature ids. On the matching endpoint `feature_name` carries the key and `feature_id` is empty, so resolve display names against `GET /api/features`. On `/api/properties/{id}/feature-scores` both fields are populated.
+- Do not locally re-sort or re-slice feature results; the endpoint already orders featured-first then newest and decides the result count.
+- Abort superseded feature searches. Without it a slow earlier request can settle after a faster later one and render the wrong selection.
+- Handle the documented statuses distinctly: `404` (property not found), `422` (request body failed schema validation — a client bug, not user error), `500` (tenant/database or unexpected server error). `featureApiErrorMessage` in `featuresService` does this.
+- `apiFetch` gained an opt-in `credentials` field for endpoints whose guide specifies `credentials: "include"`. It is undefined by default, so no existing call changed. Note that `"include"` cross-origin requires the API to send `Access-Control-Allow-Credentials`, otherwise the browser rejects the request as a CORS failure.
+- Do not emit `ENQUIRY_SUBMIT`; the tracker rejects it as not permitted from the public API. `POST /api/leads` records the submission server-side instead.
+- `apiFetch` sends no `credentials`, so the `visitor_code` cookie is not transmitted to the API. All visitor-scoped calls rely on the explicit `X-Visitor-Code` header instead. If `/api/leads` requires cookie-based identification, `apiFetch` must first gain a `credentials` option.
 - Do not treat API `visibility`, `fit_percentage`, proposed nearby places, presigned URLs, or analytics event names as stronger backend guarantees than the inspected client establishes.
 - The `/api/layout-image` proxy must remain restricted to HTTPS Amazon S3 object hosts, omit browser cookies upstream, enforce the 60 MB limit, and return `Cache-Control: private, no-store` as currently implemented.
 - Do not infer undocumented endpoints, request bodies, authentication guarantees, pagination models, or backend formulas; those items are `UNKNOWN — needs verification` unless confirmed in source.

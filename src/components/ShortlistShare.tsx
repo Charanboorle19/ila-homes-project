@@ -1,33 +1,17 @@
 "use client";
 
 import Image, { type StaticImageData } from "next/image";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type WheelEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import shareWhatsappGif from "@/app/assets/share on what'sapp.gif";
-import { trackEvent } from "@/services/analytics/tracker";
-import { ILA_PROPERTY_ID } from "@/lib/ilaApiConfig";
 import familyCommunityImg from "@/app/assets/Family Dreams Over a New Community.png";
 import familyHomecomingImg from "@/app/assets/Golden-Hour Family Homecoming.png";
 import realEstateGrowthImg from "@/app/assets/Golden Hour Real Estate Growth.png";
 import plannedCityscapeImg from "@/app/assets/Golden-Hour View of Planned Cityscape.png";
-import { propertyLayouts, type LayoutId } from "@/data/propertyLayouts";
+import { trackEvent } from "@/services/analytics/tracker";
+import { fetchProperties, type PropertyListItem } from "@/services/propertiesService";
+import { buildShareUrl, createPropertyShares } from "@/services/shareService";
+import { ILA_PROPERTY_ID } from "@/lib/ilaApiConfig";
 import "./ShortlistShare.css";
-
-const APPRECIATION: Partial<Record<LayoutId, number>> = {
-  "sark-green-plains": 94,
-  "singapore-township": 76,
-  "nallagandla-enclave": 82,
-  "kokapet-heights": 91,
-  "khajaguda-residency": 74,
-  "patancheru-gateway": 88,
-  "mansanpally-meadows": 79,
-};
 
 const PROPERTY_IMAGES: StaticImageData[] = [
   familyCommunityImg,
@@ -37,24 +21,31 @@ const PROPERTY_IMAGES: StaticImageData[] = [
 ];
 
 type ShortlistPlot = {
-  id: LayoutId;
+  id: string;
   name: string;
   location: string;
   meta: string;
   highlight: string;
-  score: number;
   image: StaticImageData;
 };
 
-const PROPERTIES: ShortlistPlot[] = propertyLayouts.map((layout, index) => ({
-  id: layout.id,
-  name: layout.label,
-  location: layout.location,
-  meta: `${layout.plotSizes} · ${layout.priceRange} · ${layout.tag}`,
-  highlight: layout.highlight,
-  score: APPRECIATION[layout.id] ?? 70,
-  image: PROPERTY_IMAGES[index % PROPERTY_IMAGES.length],
-}));
+function toPlot(property: PropertyListItem, index: number): ShortlistPlot {
+  const price = property.price
+    ? `₹${property.price.toLocaleString("en-IN")}`
+    : "Price on request";
+
+  return {
+    id: property.id,
+    name: property.name,
+    location: property.slug || "Property details available",
+    meta: [property.property_type, property.price_label ?? price]
+      .filter(Boolean)
+      .join(" · "),
+    highlight:
+      property.description || "Property details available from ILA Homes.",
+    image: PROPERTY_IMAGES[index % PROPERTY_IMAGES.length],
+  };
+}
 
 const FEATURES = [
   {
@@ -70,340 +61,281 @@ const FEATURES = [
   {
     number: "03",
     title: "Shareable link",
-    copy: "Anyone who opens it sees the same shortlist, with full context.",
+    copy: "Each property gets its own trackable link.",
   },
 ] as const;
 
-const INITIAL_PINNED: LayoutId[] = [
-  "nallagandla-enclave",
-  "kokapet-heights",
-];
-
-function buildShareText(plots: ShortlistPlot[]) {
-  const lines = plots.map(
-    (plot) =>
-      `• ${plot.name} · ${plot.location}\n  ${plot.meta}\n  Appreciation: ${plot.score}/100`,
-  );
+function buildShareText(plots: ShortlistPlot[], urls: string[]) {
   return [
-    "My shortlisted plots via ILA Homes",
+    "My shortlisted properties via ILA Homes",
     "",
-    ...lines,
+    ...plots.map(
+      (plot, index) =>
+        `• ${plot.name} · ${plot.location}\n  ${plot.meta}\n  ${urls[index]}`,
+    ),
     "",
-    "Open the shortlist to review together.",
+    "Open the links to review together.",
   ].join("\n");
 }
 
 export default function ShortlistShare() {
-  const [pinned, setPinned] = useState<LayoutId[]>(INITIAL_PINNED);
+  const [properties, setProperties] = useState<ShortlistPlot[]>([]);
+  const [pinned, setPinned] = useState<string[]>([]);
   const [shared, setShared] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [sharing, setSharing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const mobilePanelsRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchProperties({
+      status: "ALL",
+      page: 1,
+      perPage: 100,
+      signal: controller.signal,
+    })
+      .then((result) => setProperties(result.items.map(toPlot)))
+      .catch((requestError: unknown) => {
+        if (
+          !(requestError instanceof DOMException && requestError.name === "AbortError")
+        ) {
+          setError("Properties could not be loaded. Please try again.");
+        }
+      })
+      .finally(() => setLoading(false));
+
+    return () => controller.abort();
+  }, []);
+
   const selected = useMemo(
-    () => PROPERTIES.filter((plot) => pinned.includes(plot.id)),
-    [pinned],
+    () => properties.filter((plot) => pinned.includes(plot.id)),
+    [properties, pinned],
   );
 
   useEffect(() => {
-    const el = mobilePanelsRef.current;
-    if (!el) return;
+    const element = mobilePanelsRef.current;
+    if (!element) return;
 
     let startY = 0;
-
     const onTouchStart = (event: TouchEvent) => {
       startY = event.touches[0]?.clientY ?? 0;
     };
-
     const onTouchMove = (event: TouchEvent) => {
       if (event.touches.length !== 1) return;
-
       const currentY = event.touches[0]?.clientY ?? startY;
       const deltaY = currentY - startY;
-      const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
-      const atTop = el.scrollTop <= 0;
-      const atBottom = el.scrollTop >= maxScroll - 1;
-
-      // At list bounds → release nested scroll so the page can continue
-      if ((deltaY > 0 && atTop) || (deltaY < 0 && atBottom) || maxScroll <= 0) {
-        el.style.overflowY = "hidden";
-      } else {
-        el.style.overflowY = "auto";
-      }
+      const maxScroll = Math.max(0, element.scrollHeight - element.clientHeight);
+      const atTop = element.scrollTop <= 0;
+      const atBottom = element.scrollTop >= maxScroll - 1;
+      element.style.overflowY =
+        (deltaY > 0 && atTop) || (deltaY < 0 && atBottom) || maxScroll <= 0
+          ? "hidden"
+          : "auto";
     };
-
     const restoreOverflow = () => {
-      el.style.overflowY = "";
+      element.style.overflowY = "";
     };
 
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: true });
-    el.addEventListener("touchend", restoreOverflow, { passive: true });
-    el.addEventListener("touchcancel", restoreOverflow, { passive: true });
+    element.addEventListener("touchstart", onTouchStart, { passive: true });
+    element.addEventListener("touchmove", onTouchMove, { passive: true });
+    element.addEventListener("touchend", restoreOverflow, { passive: true });
+    element.addEventListener("touchcancel", restoreOverflow, { passive: true });
 
     return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", restoreOverflow);
-      el.removeEventListener("touchcancel", restoreOverflow);
-      el.style.overflowY = "";
+      element.removeEventListener("touchstart", onTouchStart);
+      element.removeEventListener("touchmove", onTouchMove);
+      element.removeEventListener("touchend", restoreOverflow);
+      element.removeEventListener("touchcancel", restoreOverflow);
+      element.style.overflowY = "";
     };
   }, []);
 
-  const togglePlot = (id: LayoutId) => {
+  const togglePlot = (id: string) => {
     const wasPinned = pinned.includes(id);
-
-    setPinned((prev) => {
-      if (prev.includes(id)) return prev.filter((item) => item !== id);
-      return [...prev, id];
-    });
+    setPinned((current) =>
+      wasPinned ? current.filter((item) => item !== id) : [...current, id],
+    );
     setShared(false);
 
     trackEvent({
       event_type: wasPinned ? "SHORTLIST_REMOVE" : "SHORTLIST_ADD",
-      // The API requires a property_id on shortlist events; the live map
-      // property is the layout these plots belong to.
-      property_id: ILA_PROPERTY_ID,
-      metadata: {
-        layout_id: id,
-        property_id: ILA_PROPERTY_ID,
-        section_type: "shortlist_whatsapp",
-      },
+      property_id: id || ILA_PROPERTY_ID,
+      metadata: { property_id: id, section_type: "shortlist_whatsapp" },
     });
   };
 
-  const shareOnWhatsApp = () => {
-    if (selected.length === 0) return;
-    const text = buildShareText(selected);
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-    setShared(true);
+  const shareOnWhatsApp = async () => {
+    if (!selected.length || sharing) return;
 
-    trackEvent({
-      event_type: "WHATSAPP_SHARE_CLICK",
-      property_id: ILA_PROPERTY_ID,
-      metadata: {
-        shortlist_count: selected.length,
-        layout_ids: selected.map((item) => item.id),
-        property_id: ILA_PROPERTY_ID,
-        section_type: "shortlist_whatsapp",
-      },
-    });
-  };
-
-  const introStyle = {
-    "--ss-intro-image": `url("${(shareWhatsappGif as StaticImageData).src}")`,
-  } as CSSProperties;
-
-  const handlePanelsWheel = (event: WheelEvent<HTMLDivElement>) => {
-    const el = event.currentTarget;
-    const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
-    const atTop = el.scrollTop <= 0;
-    const atBottom = el.scrollTop >= maxScroll - 1;
-
-    if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
-      // Pass scroll to the page once the list can't move further
-      window.scrollBy({ top: event.deltaY });
+    setSharing(true);
+    setError(null);
+    try {
+      const shares = await createPropertyShares({
+        entityIds: selected.map((plot) => plot.id),
+        message: "Please review these properties",
+      });
+      const origin = window.location.origin;
+      const urls = shares.map((share) =>
+        buildShareUrl(share.tracking_token!, origin),
+      );
+      const text = buildShareText(selected, urls);
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(text)}`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+      setShared(true);
+      trackEvent({
+        event_type: "WHATSAPP_SHARE_CLICK",
+        property_id: selected[0].id,
+        metadata: {
+          shortlist_count: selected.length,
+          property_ids: selected.map((item) => item.id),
+          section_type: "shortlist_whatsapp",
+        },
+      });
+    } catch {
+      setError("Sharing failed. Please try again.");
+    } finally {
+      setSharing(false);
     }
   };
 
-  const renderChoose = (instance: "mobile" | "desktop") => (
+  const renderChoose = (instance: "desktop" | "mobile") => (
     <div className="shortlist-share__choose">
-      <header className="shortlist-share__detail-head">
-        <p className="shortlist-share__detail-kicker">Choose plots</p>
-        <h3 className="shortlist-share__detail-title">
-          Select properties to shortlist
-        </h3>
-        <p className="shortlist-share__detail-summary">
-          Tap any property to add or remove it from your WhatsApp shortlist.
-        </p>
-      </header>
-
+      <p className="shortlist-share__choose-label">Choose plots to share</p>
       <div
+        className="shortlist-share__options"
         ref={instance === "mobile" ? mobilePanelsRef : undefined}
-        className="shortlist-share__panels"
-        role="group"
-        aria-label="All properties"
-        onWheel={instance === "mobile" ? handlePanelsWheel : undefined}
       >
-        {PROPERTIES.map((plot) => {
-          const isOn = pinned.includes(plot.id);
-          if (instance === "desktop") {
-            return (
-              <button
-                key={`${instance}-${plot.id}`}
-                type="button"
-                className={`shortlist-share__option${isOn ? " is-selected" : ""}`}
-                aria-pressed={isOn}
-                onClick={() => togglePlot(plot.id)}
-              >
-                <span className="shortlist-share__option-top">
-                  <span
-                    className="shortlist-share__option-check"
-                    aria-hidden="true"
-                  >
-                    {isOn ? "✓" : ""}
-                  </span>
-                  <span className="shortlist-share__option-copy">
-                    <span className="shortlist-share__option-name">
-                      {plot.name}
-                    </span>
-                    <span className="shortlist-share__option-loc">
-                      {plot.location}
-                    </span>
-                  </span>
-                </span>
-                <span className="shortlist-share__option-meta">{plot.meta}</span>
-                <span className="shortlist-share__option-score">
-                  Appreciation score: {plot.score}/100
-                </span>
-              </button>
-            );
-          }
-
+        {properties.map((plot) => {
+          const isSelected = pinned.includes(plot.id);
           return (
             <button
               key={`${instance}-${plot.id}`}
               type="button"
-              className={`shortlist-share__option shortlist-share__option--media${isOn ? " is-selected" : ""}`}
-              aria-pressed={isOn}
+              className={`shortlist-share__option${
+                isSelected ? " is-selected" : ""
+              }`}
+              aria-pressed={isSelected}
               onClick={() => togglePlot(plot.id)}
             >
               <span className="shortlist-share__option-media">
                 <Image
+                  className="shortlist-share__option-image"
                   src={plot.image}
                   alt=""
                   fill
-                  sizes="140px"
-                  className="shortlist-share__option-image"
+                  sizes="(max-width: 768px) 5.75rem, 7rem"
                 />
-                <span
-                  className="shortlist-share__option-check"
-                  aria-hidden="true"
-                >
-                  {isOn ? "✓" : ""}
+                <span className="shortlist-share__option-check" aria-hidden="true">
+                  {isSelected ? "✓" : ""}
                 </span>
               </span>
               <span className="shortlist-share__option-body">
                 <span className="shortlist-share__option-copy">
-                  <span className="shortlist-share__option-name">
-                    {plot.name}
-                  </span>
-                  <span className="shortlist-share__option-loc">
-                    {plot.location}
-                  </span>
+                  <span className="shortlist-share__option-name">{plot.name}</span>
+                  <span className="shortlist-share__option-loc">{plot.location}</span>
                 </span>
                 <span className="shortlist-share__option-meta">{plot.meta}</span>
-                <span className="shortlist-share__option-score">
-                  Appreciation score: {plot.score}/100
-                </span>
               </span>
             </button>
           );
         })}
       </div>
-
       <button
         type="button"
         className="shortlist-share__wa-btn"
         onClick={shareOnWhatsApp}
-        disabled={pinned.length === 0}
+        disabled={!selected.length || sharing}
       >
-        {shared
-          ? "Shared — open again"
-          : pinned.length === 0
-            ? "Select plots to share"
-            : `Share ${pinned.length} ${pinned.length === 1 ? "plot" : "plots"} →`}
+        {sharing
+          ? "Preparing links…"
+          : shared
+            ? "Shared — open again"
+            : !selected.length
+              ? "Select properties to share"
+              : `Share ${selected.length} ${selected.length === 1 ? "property" : "properties"} →`}
       </button>
     </div>
   );
 
+  const introStyle = { "--accent": "#c9a84c" } as CSSProperties;
+  const countText = loading
+    ? "Loading properties…"
+    : error ??
+      (pinned.length
+        ? `${pinned.length} ${pinned.length === 1 ? "property" : "properties"} selected`
+        : properties.length
+          ? "Select properties on the right to build your shortlist"
+          : "No properties are currently available");
+
   return (
-    <section
-      className="shortlist-share"
-      id="shortlist-share"
-      aria-label="Shortlist and share"
-    >
+    <section className="shortlist-share" id="shortlist-share" aria-label="Shortlist and share">
       <div className="shortlist-share__frame">
         <div className="shortlist-share__left">
           <header className="shortlist-share__intro" style={introStyle}>
-            <div className="shortlist-share__intro-bg" aria-hidden="true" />
+            <div className="shortlist-share__intro-bg" aria-hidden="true">
+              <Image
+                className="shortlist-share__intro-bg-image"
+                src={shareWhatsappGif}
+                alt=""
+                fill
+                sizes="100vw"
+                unoptimized
+              />
+            </div>
             <div className="shortlist-share__intro-content">
               <h2 className="shortlist-share__heading">
                 Save your shortlist. Share it on WhatsApp in one tap.
               </h2>
             </div>
           </header>
-
-          <ol
-            className="shortlist-share__features"
-            aria-label="How shortlist sharing works"
-          >
+          <ol className="shortlist-share__features" aria-label="How shortlist sharing works">
             {FEATURES.map((feature, index) => (
               <li key={feature.number} className="shortlist-share__feature-item">
                 <div className="shortlist-share__feature">
-                  <span
-                    className="shortlist-share__feature-index"
-                    aria-hidden="true"
-                  >
+                  <span className="shortlist-share__feature-index" aria-hidden="true">
                     {feature.number}
                   </span>
                   <span className="shortlist-share__feature-body">
-                    <span className="shortlist-share__feature-title">
-                      {feature.title}
-                    </span>
-                    <span className="shortlist-share__feature-copy">
-                      {feature.copy}
-                    </span>
+                    <span className="shortlist-share__feature-title">{feature.title}</span>
+                    <span className="shortlist-share__feature-copy">{feature.copy}</span>
                   </span>
                 </div>
                 {index < FEATURES.length - 1 ? (
-                  <span
-                    className="shortlist-share__feature-line"
-                    aria-hidden="true"
-                  />
+                  <span className="shortlist-share__feature-line" aria-hidden="true" />
                 ) : null}
               </li>
             ))}
           </ol>
-
-          <div className="shortlist-share__choose-mobile">
-            {renderChoose("mobile")}
-          </div>
-
-          <p className="shortlist-share__count">
-            {pinned.length === 0
-              ? "Select plots on the right to build your shortlist"
-              : `${pinned.length} ${pinned.length === 1 ? "plot" : "plots"} selected`}
-          </p>
-
+          <div className="shortlist-share__choose-mobile">{renderChoose("mobile")}</div>
+          <p className="shortlist-share__count">{countText}</p>
           <button
             type="button"
             className="shortlist-share__share"
             onClick={shareOnWhatsApp}
-            disabled={pinned.length === 0}
+            disabled={!selected.length || sharing}
           >
-            Share on WhatsApp
-            <span aria-hidden="true">→</span>
+            Share on WhatsApp <span aria-hidden="true">→</span>
           </button>
         </div>
-
         <aside className="shortlist-share__right" aria-live="polite">
           <div className="shortlist-share__detail-inner">
             <div className="shortlist-share__copy">
-              <div className="shortlist-share__choose-desktop">
-                {renderChoose("desktop")}
-              </div>
+              <div className="shortlist-share__choose-desktop">{renderChoose("desktop")}</div>
             </div>
-
             <div className="shortlist-share__media">
               <div className="shortlist-share__media-frame">
                 <Image
                   className="shortlist-share__media-image"
                   src={shareWhatsappGif}
-                  alt="Sharing dream plots with family on WhatsApp"
+                  alt="Sharing properties with family on WhatsApp"
                   fill
-                  sizes="(max-width: 980px) 0px, 28vw"
+                  sizes="(max-width: 980px) 100vw, 28vw"
                   unoptimized
-                  priority={false}
                 />
               </div>
             </div>

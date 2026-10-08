@@ -1,0 +1,155 @@
+# Public Tenant Instagram Reel API
+
+This endpoint returns the currently active Instagram reel configured for the tenant website.
+
+## Get the active reel
+
+```http
+GET /api/tenant/reels/active
+```
+
+This is a public endpoint. No bearer token or visitor code is required.
+
+## Headers
+
+The endpoint does not require an `Authorization` header or `X-Visitor-Code` header.
+
+The recommended header is:
+
+```http
+Accept: application/json
+```
+
+When the API serves multiple tenants and tenant resolution is based on a tenant-domain header, also send:
+
+```http
+X-Tenant-Domain: your-tenant-domain.com
+```
+
+Use the actual tenant domain configured by the platform. If the request is made to a tenant-specific API hostname, the tenant-domain header may not be necessary.
+
+### cURL example
+
+```bash
+curl -X GET \
+  "https://your-domain.com/api/tenant/reels/active" \
+  -H "Accept: application/json"
+```
+
+Replace `your-domain.com` with the tenant's API domain.
+
+### cURL with tenant-domain header
+
+```bash
+curl -X GET \
+  "https://your-api-domain.com/api/tenant/reels/active" \
+  -H "Accept: application/json" \
+  -H "X-Tenant-Domain: your-tenant-domain.com"
+```
+
+## Successful response
+
+When an active reel exists:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "6f2a4b77-7d2a-4e0a-9f4c-123456789abc",
+    "reel_url": "https://www.instagram.com/reel/DU0g6-5iD3Y/",
+    "is_active": true
+  }
+}
+```
+
+## Response fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | UUID of the tenant reel record |
+| `reel_url` | string | Canonical Instagram reel URL |
+| `is_active` | boolean | Indicates that the reel is currently active |
+
+## Instagram URL normalization
+
+Instagram URLs are returned in the canonical format:
+
+```text
+https://www.instagram.com/reel/{shortcode}/
+```
+
+For example, if the stored URL is:
+
+```text
+https://www.instagram.com/ila.homes/reel/DU0g6-5iD3Y/
+```
+
+The GET response returns:
+
+```text
+https://www.instagram.com/reel/DU0g6-5iD3Y/
+```
+
+The username path is removed. Existing canonical reel URLs are returned in the same canonical format. Non-Instagram URLs are preserved unchanged.
+
+## No active reel
+
+If there is no active reel, the endpoint returns a successful response with `data: null`:
+
+```json
+{
+  "success": true,
+  "data": null
+}
+```
+
+Frontend clients should handle this state by hiding the reel section or displaying a fallback.
+
+## Frontend example
+
+```ts
+type TenantReel = {
+  id: string;
+  reel_url: string;
+  is_active: boolean;
+};
+
+async function getActiveTenantReel(): Promise<TenantReel | null> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/tenant/reels/active`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json"
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Unable to load active reel: ${response.status}`);
+  }
+
+  const body = await response.json();
+  return body.data as TenantReel | null;
+}
+
+const reel = await getActiveTenantReel();
+
+if (reel) {
+  window.open(reel.reel_url, "_blank", "noopener,noreferrer");
+}
+```
+
+## API route
+
+The endpoint is implemented at:
+
+```text
+GET /api/tenant/reels/active
+```
+
+The corresponding backend route is:
+
+```text
+C:\Users\Lenovo\Downloads\realestate\app\routes\tenant_reels.py
+```

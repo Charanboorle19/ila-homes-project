@@ -4,7 +4,7 @@ This document describes the current Wishlist / Favourites-related implementation
 
 ## 1. Feature purpose
 
-The current implementation lets a visitor save API-backed properties as favourites from the Property List, mark a Property Details record as being in a local wishlist, or mark it as interested. The homepage `ShortlistShare` section separately lets a visitor select static layout records and share a text summary through WhatsApp.
+The current implementation lets a visitor save API-backed properties as favourites from the Property List, mark a Property Details record as being in a local wishlist, or mark it as interested. The homepage `ShortlistShare` section separately lets a visitor select API property UUIDs and share tracked property links through WhatsApp.
 
 There is no single Wishlist page, no confirmed cross-feature favourites route, and no unified client-side store combining these behaviors.
 
@@ -25,9 +25,10 @@ No favourite control is confirmed in `MapSection` or the map `PropertySheet`.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PropertyFinalCta.tsx` — local-storage `Save to wishlist`, `I'm interested`, and `Share property` controls.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PropertyPageView.tsx` — renders `PropertyFinalCta` for the current `PropertyRecord`.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PropertyDetail.css` — shared Property Details chip styling.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\ShortlistShare.tsx` — separate homepage static shortlist selection and WhatsApp sharing.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\ShortlistShare.tsx` — separate homepage API-backed shortlist selection and tracked WhatsApp sharing.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\ShortlistShare.css` — homepage Shortlist / Share layout and responsive styling.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\data\propertyLayouts.ts` — static layout records used by `ShortlistShare`.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` — API property-list records used by `ShortlistShare`.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\shareService.ts` — tracked share creation used by `ShortlistShare`.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\events.ts` — allowed favourite and shortlist event names.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\useClickTracking.ts` — delegated analytics handling for Property Details data attributes.
 
@@ -38,7 +39,7 @@ The relevant component names are:
 - `PropertiesList` — default export for the API catalogue.
 - `PropertyPageView` — shared Property Details composition component.
 - `PropertyFinalCta` — Property Details wishlist, interested, share, and enquiry CTA component.
-- `ShortlistShare` — separate homepage static shortlist/share component.
+- `ShortlistShare` — separate homepage API-backed shortlist/share component; its in-memory selection is not the wishlist/favourites state.
 
 The API service functions are `fetchFavorites`, `saveFavorite`, and `removeFavorite`.
 
@@ -64,7 +65,7 @@ The Property List favourite system is API-backed. It loads the current anonymous
 
 The Property Details Wishlist and Interested controls use the supplied `PropertyRecord` only to identify the property and construct a storage key. They do not call the favourites API.
 
-`ShortlistShare` uses the static `propertyLayouts` data source. It does not load API property records or API favourite records.
+`ShortlistShare` uses the API property-list data source. It does not load API favourite records and does not share the Property List's saved state.
 
 ## 7. What can be favourited
 
@@ -72,7 +73,7 @@ The Property List saves an API property entity identified by its API `property.i
 
 The Property Details `Save to wishlist` button stores a flag for the current `PropertyRecord.id`. It does not save a plot/layout object or a complete property record.
 
-The separate homepage Shortlist selects static `LayoutId` values from `propertyLayouts`. Those layout selections are not the API favourite entity and are not the Property Details wishlist entity.
+The separate homepage Shortlist selects API property UUID values from its own property-list request. Those selections are not the API favourite entity and are not the Property Details wishlist entity.
 
 ## 8. Add/remove behavior
 
@@ -82,7 +83,7 @@ If already saved, it awaits `removeFavorite(propertyId)`, then deletes the id fr
 
 In `PropertyFinalCta`, `toggle(kind)` computes the inverse of either `wishlist` or `interested`, immediately updates the corresponding React state, and writes `"1"` for active or `"0"` for inactive to localStorage. It does not call an API and does not remove the key when toggled off.
 
-In `ShortlistShare`, `togglePlot` adds or removes a static `LayoutId` from the in-memory `pinned` array and emits separate shortlist analytics.
+In `ShortlistShare`, `togglePlot` adds or removes an API property UUID from the in-memory `pinned` array and emits separate shortlist analytics.
 
 ## 9. Favourite state
 
@@ -186,7 +187,7 @@ The button exposes its state through `aria-pressed` and is disabled while its id
 
 Property Details uses `Save to wishlist` / `In wishlist` and `I'm interested` / `Marked interested`, with the active state represented by the `is-active` class and `aria-pressed`.
 
-Shortlist options use selected/unselected styling and `aria-pressed`; its share button is enabled only when at least one layout is selected.
+Shortlist options use selected/unselected styling and `aria-pressed`; its share button is enabled only when at least one API property is selected.
 
 ## 18. Loading behavior
 
@@ -194,7 +195,7 @@ Shortlist options use selected/unselected styling and `aria-pressed`; its share 
 
 Property Details does not show a Wishlist-specific loading state. The localStorage read runs in `useEffect`, so the initial boolean state is false until the effect reads the stored value.
 
-ShortlistShare has no loading state. Static layouts are available from the module data immediately.
+ShortlistShare loads up to 100 API properties and shows loading, empty, and fetch-error states. Tracked-share creation also has a pending button state and a sharing-error message.
 
 ## 19. Error behavior
 
@@ -243,7 +244,7 @@ Property Details Wishlist and Interested buttons both emit `PROPERTY_FAVORITE` t
 
 `Share property` emits `PROPERTY_SHARE` with `button_location: "property_final_cta"`.
 
-ShortlistShare directly emits `SHORTLIST_ADD` or `SHORTLIST_REMOVE` with `property_id: ILA_PROPERTY_ID` and metadata containing `layout_id`, `property_id: ILA_PROPERTY_ID`, and `section_type: "shortlist_whatsapp"`. WhatsApp sharing emits `WHATSAPP_SHARE_CLICK` with the same property metadata plus `shortlist_count` and `layout_ids`.
+ShortlistShare directly emits `SHORTLIST_ADD` or `SHORTLIST_REMOVE` with the selected API UUID as `property_id` and metadata containing `property_id` and `section_type: "shortlist_whatsapp"`. WhatsApp sharing emits `WHATSAPP_SHARE_CLICK` with the first selected API UUID as `property_id`, plus `shortlist_count`, `property_ids`, and `section_type` metadata.
 
 ## 24. Relationship with Property List
 
@@ -265,7 +266,7 @@ Property Enquiry uses WhatsApp and email links with separate `ENQUIRY_CLICK` and
 
 ## 27. Relationship with Shortlist / Share
 
-The homepage `ShortlistShare` feature is separate from both API favourites and Property Details Wishlist. It selects static `LayoutId` records, starts with two pinned layouts, and sends a text summary to WhatsApp.
+The homepage `ShortlistShare` feature is separate from both API favourites and Property Details Wishlist. It selects API property UUIDs, starts with no pinned properties, creates one tracked share per selected property, and sends the resulting links to WhatsApp.
 
 It does not read or write `ila-wishlist-{id}` / `ila-interested-{id}`, does not call the favourites API, and does not synchronize with `PropertiesList`, `MapSection`, or Property Details. Wishlist and Shortlist are not the same system in the current implementation.
 
@@ -317,7 +318,7 @@ The API favourite implementation depends on React, the internal `apiFetch` clien
 
 Property Details depends on React, `PropertyRecord`, browser `localStorage`, the internal WhatsApp/mailto helpers, and delegated analytics tracking.
 
-ShortlistShare depends on React hooks, Next.js `Image`, static image assets, `propertyLayouts`, `LayoutId`, `ILA_PROPERTY_ID`, `trackEvent`, browser window/touch/wheel APIs, and `ShortlistShare.css`.
+ShortlistShare depends on React hooks, Next.js `Image`, static image assets, `fetchProperties`, `createPropertyShares`, `buildShareUrl`, `ILA_PROPERTY_ID`, `trackEvent`, browser window/touch/wheel APIs, and `ShortlistShare.css`.
 
 ## 34. Known issues
 
@@ -326,15 +327,15 @@ ShortlistShare depends on React hooks, Next.js `Image`, static image assets, `pr
 - API favourite analytics are not directly instrumented in the inspected Property List button; exact backend-side analytics behavior is UNKNOWN — needs verification.
 - Property Details localStorage failures are silently ignored, so a blocked or unavailable storage area produces no user-visible error.
 - Property Details writes `"0"` rather than removing an inactive Wishlist or Interested key.
-- `ShortlistShare` is initialized with two selected layouts, is not persisted, and is not synchronized with API properties or Property Details.
-- The homepage copy describes a shareable link, but the current implementation creates a text-only WhatsApp URL and no state-bearing shortlist link.
+- `ShortlistShare` starts with no selected properties, is not persisted, and is not synchronized with MapSection, Find Your Plot, or Property Details.
+- The homepage feature creates one tracked property link per selected API UUID before composing the WhatsApp message; it does not create a persistent shortlist collection.
 - The exact backend behavior when a saved API property no longer exists is UNKNOWN — needs verification. The inspected client only receives the favourites response and does not implement a deleted-property cleanup flow.
 - Exact browser popup-blocking behavior for ShortlistShare is UNKNOWN — needs verification.
 
 ## 35. Important constraints
 
 - Preserve the distinction between API favourites, Property Details localStorage Wishlist/Interested flags, and homepage Shortlist / WhatsApp Share.
-- Treat the API favourite entity as the API property UUID sent in `property_id`; do not document the static `LayoutId` shortlist as the same entity.
+- Treat the API favourite entity as the API property UUID sent in `property_id`; do not document the homepage shortlist selection as the same entity.
 - Preserve the API routes and visitor header: `GET /api/favorites`, `POST /api/favorites` with `{ property_id }`, `DELETE /api/favorites/{id}`, and `X-Visitor-Code`.
 - Preserve localStorage key formats `ila-wishlist-{id}` and `ila-interested-{id}` and values `"1"` / `"0"` when describing the Property Details implementation.
 - Do not claim that favourites are shared between Property List, Property Details, MapSection, ShortlistShare, or another component unless a future implementation explicitly adds that connection.

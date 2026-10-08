@@ -1342,7 +1342,22 @@
   text-align: left;
 }
 
-.pd-final__actions,
+/*
+ * The sticky CTA is `position: fixed` across the bottom of the viewport, so the
+ * last section must reserve room for it. Without this the enquiry form's submit
+ * row sits underneath the bar: the buttons are painted over by a higher z-index
+ * fixed element, so a click never reaches them and the button looks completely
+ * inert — no focus, no request, no message.
+ *
+ * --pd-sticky-clearance is published by StickyBottomCta from the bar's measured
+ * height, so it stays correct when the actions wrap onto a second row on narrow
+ * screens and when the mobile safe-area inset changes. It defaults to 0, so
+ * dismissing the bar removes the reserved space instead of leaving a gap.
+ */
+.pd-final {
+  padding-bottom: var(--pd-sticky-clearance, 0px);
+}
+
 .pd-final__toggles {
   display: flex;
   flex-wrap: wrap;
@@ -1354,6 +1369,142 @@
   margin: 0.75rem 0 0;
   color: var(--pd-muted);
   font-size: 0.86rem;
+}
+
+/*
+ * Enquiry form. Name and phone sit side by side on wide layouts and the
+ * optional description spans the full width beneath them, so the two required
+ * answers come first and the block stays scannable.
+ */
+.pd-form {
+  margin-top: 1.4rem;
+  padding: 1.25rem 1.25rem 1.4rem;
+  border: 1px solid var(--pd-line);
+  border-radius: 0.9rem;
+  background: rgba(244, 241, 234, 0.5);
+  box-shadow:
+    0 1px 2px rgba(23, 23, 23, 0.04),
+    0 10px 28px rgba(23, 23, 23, 0.05);
+}
+
+.pd-form__row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.9rem;
+}
+
+.pd-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.pd-form__label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  color: var(--pd-ink);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Sits inside the label row, so "Optional" reads as part of the field name
+   rather than as a separate note competing with the input. */
+.pd-form__hint {
+  color: var(--pd-muted);
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pd-form__input {
+  width: 100%;
+  min-height: 2.85rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--pd-line);
+  border-radius: 0.6rem;
+  background: var(--pd-surface);
+  color: var(--pd-ink);
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pd-form__input::placeholder {
+  color: rgba(92, 88, 82, 0.65);
+}
+
+.pd-form__input:focus {
+  outline: none;
+  border-color: var(--pd-gold);
+  box-shadow: 0 0 0 3px rgba(198, 164, 108, 0.22);
+}
+
+.pd-form__input[aria-invalid="true"] {
+  border-color: #a3352b;
+}
+
+.pd-form__input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px rgba(163, 53, 43, 0.18);
+}
+
+.pd-form__textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.pd-form__error {
+  margin: 0;
+  color: #a3352b;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.pd-form__field--wide {
+  margin-top: 0.9rem;
+}
+
+.pd-form__field--wide .pd-form__hint {
+  margin-top: 0.15rem;
+}
+
+.pd-form__submit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1.15rem;
+}
+
+/* The visit-slot control is a normal full-width field inside .pd-form, so the
+   booking button sits beside the callback button in .pd-form__submit. */
+
+/*
+ * Submission outcome. Only "sent" is styled as good news, so a failure can
+ * never be mistaken for a receipt.
+ */
+.pd-form__status {
+  margin: 0.85rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.55rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.pd-form__status--sent {
+  border: 1px solid #bcd9c6;
+  background: rgba(242, 247, 242, 0.9);
+  color: #1f5c45;
+}
+
+.pd-form__status--error {
+  border: 1px solid rgba(163, 53, 43, 0.32);
+  background: rgba(253, 242, 240, 0.9);
+  color: #a3352b;
 }
 
 .pd-final__quote {
@@ -1432,6 +1583,12 @@
 
 /* Lifestyle: point cards left, single image right. */
 @media (min-width: 760px) {
+  /* Name and phone side by side once there is room; the description always
+     spans the full width so the optional field reads as a separate step. */
+  .pd-form__row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .pd-lifestyle__layout {
     grid-template-columns: 0.85fr 1.15fr;
     align-items: start;

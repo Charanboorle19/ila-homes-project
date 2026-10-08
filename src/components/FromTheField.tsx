@@ -1,44 +1,14 @@
+"use client";
+
 import Image, { type StaticImageData } from "next/image";
-import mansanpallyThumb from "@/app/assets/plots-pulse/mansanpally.jpg";
-import kokapetThumb from "@/app/assets/plots-pulse/kokapet.jpg";
-import nallagandlaThumb from "@/app/assets/plots-pulse/nallagandla.jpg";
+import { useEffect, useState } from "react";
+import reelFallbackThumb from "@/app/assets/plots-pulse/mansanpally.jpg";
 import defaultProfile from "@/app/assets/about-panel/hero-property.jpg";
+import { fetchActiveTenantReel } from "@/services/tenantReelsService";
 import "./FromTheField.css";
 
 const INSTAGRAM_URL =
   "https://www.instagram.com/ila.homes?utm_source=ig_web_button_share_sheet&stkn=ZDNlZDc0MzIxNw==";
-
-type Reel = {
-  thumbnail: StaticImageData;
-  title: string;
-  location: string;
-  duration: string;
-  reelUrl: string;
-};
-
-const DEFAULT_REELS: Reel[] = [
-  {
-    thumbnail: mansanpallyThumb,
-    title: "Plot A3",
-    location: "Mansanpally",
-    duration: "0:42",
-    reelUrl: INSTAGRAM_URL,
-  },
-  {
-    thumbnail: kokapetThumb,
-    title: "Corner plot walk",
-    location: "Kokapet Heights",
-    duration: "0:58",
-    reelUrl: INSTAGRAM_URL,
-  },
-  {
-    thumbnail: nallagandlaThumb,
-    title: "Road-facing lot",
-    location: "Nallagandla",
-    duration: "0:36",
-    reelUrl: INSTAGRAM_URL,
-  },
-];
 
 function PlayIcon() {
   return (
@@ -54,7 +24,6 @@ function PlayIcon() {
 }
 
 type FromTheFieldProps = {
-  reels?: Reel[];
   handle?: string;
   profileUrl?: string;
   profileImage?: StaticImageData;
@@ -63,13 +32,31 @@ type FromTheFieldProps = {
 };
 
 export default function FromTheField({
-  reels = DEFAULT_REELS,
   handle = "@ila.homes",
   profileUrl = INSTAGRAM_URL,
   profileImage = defaultProfile,
   followers = "26K+",
   reelCount = "50+",
 }: FromTheFieldProps) {
+  const [activeReelUrl, setActiveReelUrl] = useState<string | null>(null);
+  const [reelLoading, setReelLoading] = useState(true);
+  const [reelError, setReelError] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchActiveTenantReel(controller.signal)
+      .then((reel) => setActiveReelUrl(reel?.reel_url ?? null))
+      .catch((requestError: unknown) => {
+        if (!(requestError instanceof DOMException && requestError.name === "AbortError")) {
+          setReelError(true);
+        }
+      })
+      .finally(() => setReelLoading(false));
+
+    return () => controller.abort();
+  }, []);
+
   return (
     <section data-section="live_activity" className="from-field" aria-labelledby="from-field-heading">
       <div className="from-field__frame">
@@ -84,35 +71,32 @@ export default function FromTheField({
         </header>
 
         <div className="from-field__grid">
-          <div className="from-field__reels" role="list">
-            {reels.map((reel) => {
-              const label = `${reel.location} · ${reel.title}`;
-              return (
+          <div className="from-field__reels" role="list" aria-live="polite">
+            {reelLoading ? <p className="from-field__state" role="status">Loading the latest reel…</p> : null}
+            {!reelLoading && reelError ? <p className="from-field__state" role="alert">The latest reel is unavailable right now.</p> : null}
+            {!reelLoading && !reelError && activeReelUrl ? (
                 <a
-                  key={`${reel.location}-${reel.title}`}
                   className="from-field__card"
-                  href={reel.reelUrl}
+                  href={activeReelUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   role="listitem"
-                  aria-label={`Watch reel: ${label}`}
+                  aria-label="Watch the latest ILA Homes reel"
                 >
                   <Image
                     className="from-field__thumb"
-                    src={reel.thumbnail}
+                    src={reelFallbackThumb}
                     alt=""
                     fill
                     sizes="(max-width: 640px) 66vw, (max-width: 980px) 58vw, (max-width: 1100px) 14vw, 18vw"
                     draggable={false}
                   />
-                  <span className="from-field__duration">{reel.duration}</span>
                   <span className="from-field__play" aria-hidden="true">
                     <PlayIcon />
                   </span>
-                  <span className="from-field__tag">{label}</span>
+                  <span className="from-field__tag">Latest ILA Homes reel</span>
                 </a>
-              );
-            })}
+            ) : null}
           </div>
 
           <aside className="from-field__profile" aria-label="Instagram profile">

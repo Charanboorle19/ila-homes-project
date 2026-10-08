@@ -108,6 +108,8 @@ When ready, it calls `apiPropertyToRecord(property, lifeStage, documents.items)`
 - Similar local records: `getSimilarProperties` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\similar.ts`.
 - Derived helpers: `formatInr`, `computeConnectivityScore`, `futureValue`, `whatsappUrl`, and `siteVisitMailto` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\propertyUtils.ts`.
 - Share: `createPropertyShare` and `buildShareUrl` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\shareService.ts`; visitor readiness from `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\visitorReady.ts` and `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\visitor.ts`.
+- Leads: `createPublicLead` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\leadsService.ts`, used by the final-CTA callback form on both property routes.
+- Site visits: `bookPublicSiteVisit` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\siteVisitsService.ts`, used by the same form's booking control.
 
 ## 13. Exact data fields used
 
@@ -128,6 +130,8 @@ Nested fields used include gallery `id/src/alt`; lifestyle `id/caption/src/alt`;
 - `GET /api/properties/{id}/life-stage-fit` — API Buyer Fit scores.
 - `GET /api/properties/{id}/nearby-places` — Future Neighbourhood landmarks for UUID properties.
 - `POST /api/shares` — mints a tracked share link for a property. See §37a.
+- `POST /api/leads` — creates the public lead from the final-CTA callback form. See §37.
+- `POST /api/site-visits` — books a site visit from the same form. See §37.
 
 The first three are called directly by `ApiPropertyView`/its rendered child. `FutureNeighbourhoodMap` also fetches nearby places; for a local property its current code uses the fallback sample UUID `6429f090-c01d-4bcc-9145-b9bfb8595843`.
 
@@ -215,13 +219,31 @@ The page uses React `useEffect`, `useMemo`, `useRef`, `useState`, `useId`, and `
 - `Lifestyle`: `activeId`, `paused`.
 - `PriceEmiFuture`: `purchasePrice`, `downPaymentMode`, `downPaymentPct`, `downPaymentFlat`, `annualRate`, `tenureUnit`, `tenureValue`, `amortizationMode`, `isAmortizationExpanded`, `budgetOpen`; it also has generated ids and `printAreaRef`.
 - `SatelliteBeforeAfter`: `activeYear`, `mapReady`, `mapError`, and map/marker refs.
-- `PropertyFinalCta`: `wishlist`, `interested`, `shareNote`.
-- `StickyBottomCta`: `visible`, `dismissed`.
+- `PropertyFinalCta`: `wishlist`, `shareNote`, `fields` (`{ name, phone, description, scheduledAt }`), `errors`, `status` and `statusMessage` for the callback, `visitStatus`, `visitMessage` and `visitError` for the booking.
+- `StickyBottomCta`: `visible`, `dismissed`, plus `barRef`. It measures the rendered bar with a `ResizeObserver` and publishes `--pd-sticky-clearance` on `document.documentElement` (bar height + `12px`), removing the property on cleanup. `.pd-final` consumes it as `padding-bottom`. See §21a.
 - `ShareButton`: `status` (`"idle" | "loading" | "ready" | "error"`), `shareUrl`, `copied`, plus `copyTimerRef`.
 
 ## 21. Derived/normalized data
 
 `PropertyPageView` derives `gallery`, `similar`, `connectivityScore`, `activeImage`, and WhatsApp text. `PropertyHero` derives the spec row from `property.specs` or the fixed `Size/Facing/Dimensions/Road` fields. `PriceEmiFuture` derives effective down payment, percentage, principal, tenure months, monthly EMI, total interest/payment, future values, and amortization schedules. `FutureNeighbourhoodMap` derives display labels, horizon-filtered items, map GeoJSON, and demo distance from Gachibowli. `apiPropertyToRecord` supplies all API-to-record normalization.
+
+## 21a. Sticky-bar clearance
+
+`.pd-sticky` is `position: fixed; bottom: 0; z-index: 60`, so it is out of flow and overlays whatever sits at the bottom of the page. The last section is `.pd-final`, which is where the enquiry form's buttons are. Without matching bottom padding the bar paints over those buttons and swallows their clicks, and because a fixed element intercepts the event the button gives no feedback at all — no focus, no request, no message. It reads as a dead button rather than as an overlap.
+
+`StickyBottomCta` therefore measures itself and publishes the result as `--pd-sticky-clearance` on `document.documentElement`; `.pd-final` spends it as `padding-bottom`.
+
+| Concern | Behaviour |
+|---|---|
+| Measurement | `ResizeObserver` on `barRef`, so the value updates when the bar resizes |
+| Value | `Math.ceil(height + 12)`, leaving a `12px` gap above the bar |
+| Variable | `--pd-sticky-clearance`, inheritable from `documentElement` |
+| Consumer | `.pd-final { padding-bottom: var(--pd-sticky-clearance, 0px) }` |
+| When the bar is hidden | The effect runs with a null ref, removes the property, and the padding falls back to `0px` |
+| Dismissal | The close button unmounts the bar, cleanup removes the property, and the reserved space collapses rather than leaving a trailing gap |
+| Why measured, not hard-coded | The actions row is `flex-wrap: wrap` and becomes a horizontal row at `760px`, and `padding-bottom` adds `env(safe-area-inset-bottom)`. Both change the height, so a constant would stop clearing the bar at exactly the widths where the actions wrap |
+
+Reset on `property.id` change is unchanged: `dismissed` resets to `false`, so the bar returns and republishes its height.
 
 ## 22. Page sections and their order
 
@@ -301,7 +323,30 @@ EMI uses the standard principal/rate/month formula, with a zero-rate path. Futur
 
 `PropertyHero`, `PropertyFinalCta`, and `StickyBottomCta` generate `https://wa.me/?text=...` links through `whatsappUrl`. They open WhatsApp links in a new tab. Site visits also use `siteVisitMailto`, which creates a `mailto:hello@ilahomes.example` link with encoded subject/body. Analytics data attributes include `WHATSAPP_CHAT_CLICK` and `ENQUIRY_CLICK` on applicable CTAs.
 
-`PropertyFinalCta`'s `Share property` chip is deliberately excluded from that behaviour. It uses the Web Share API where available and otherwise copies `window.location.href` to the clipboard. It never opens a chat app: there is no `whatsappUrl` fallback in the share path. Dismissing the native share sheet rejects with `AbortError`, which is treated as a deliberate "no" and returns without setting a note or running any fallback — previously the bare `catch` fell through to `window.open(whatsappUrl(...))`, so cancelling the share sheet launched WhatsApp and any clipboard failure turned "Share property" into an unsolicited chat.
+`PropertyFinalCta`'s `Share property` chip is deliberately excluded from that section's enquiry behaviour. It uses the Web Share API where available and otherwise copies `window.location.href` to the clipboard. It never opens a chat app: there is no `whatsappUrl` fallback in the share path. Dismissing the native share sheet rejects with `AbortError`, which is treated as a deliberate "no" and returns without setting a note or running any fallback.
+
+### Final-CTA enquiry form
+
+`PropertyFinalCta`'s "Next step / Ready to explore" section presents an enquiry **form** rather than enquiry links. Because both routes render the same `PropertyPageView`, the form appears identically on `/properties/{propertyId}` and `/property/{trackingToken}/view`.
+
+**Fields, in order:**
+
+1. `Name` — required.
+2. `Phone number` — required, `type="tel"`, `inputMode="tel"`, `autoComplete="tel"`. Validated as 10–15 digits after stripping spaces, dashes, brackets and a leading `+`, so `+91 98765 43210` passes.
+3. `Description` — **optional**, a 3-row textarea spanning the full width and placed last so the two required answers come first. It carries an inline `Optional` marker in the label row and an `aria-describedby` hint. It is never validated.
+
+**Behavior:** `noValidate` with custom validation so the messages match the page's voice rather than the browser's locale-dependent bubbles. A field's error clears as soon as it is edited. Errors are rendered as text and wired with `aria-invalid` plus `aria-describedby`; ids come from `useId`. Fields and errors reset when `property.id` changes. The submission note is announced through `role="status"`.
+
+**Two submission paths, as alternatives.** The form posts either a callback request to `POST /api/leads` or a booking to `POST /api/site-visits`. They are alternatives rather than steps, because `/api/site-visits` itself creates or reuses the visitor and their existing lead for the property — so chaining both would create two interactions for one visitor. Each path has independent status and message state.
+
+- **Callback** — `createPublicLead` in `src/services/leadsService.ts`, with `X-Visitor-Code`. `Phone number` maps to `mobile`, `Description` to `message`, `email` and `unit_id` are always `null`, and `property_id` is sent only when `isPropertyUuid(property.id)` so a catalogue slug becomes `null` rather than triggering `404 PROPERTY_NOT_FOUND`.
+- **Site visit** — `bookPublicSiteVisit` in `src/services/siteVisitsService.ts`. `property_id` is **required** there, so both the slot picker and the button render only when `isPropertyUuid(property.id)`. The `datetime-local` picker is a normal full-width field inside the form, positioned after the description, because it reuses the name and phone entered above it; the button is the second child of `.pd-form__submit`. `scheduled_at` is converted from the local wall-clock value with `toISOString()`, and re-checked in the future client-side even though the control's `min` already floors it. `Description` is reused as `notes`. `X-Visitor-Code` is optional for this endpoint, so it is sent only when one already exists.
+
+`apiFetch` throws on non-2xx, so both success messages are reachable only after `201 Created`. Both buttons are `disabled` with `aria-busy` while in flight, and both preserve the draft on failure. Full detail in `docs/features/property-enquiry-form.md`.
+
+**Removed controls.** The section no longer renders `WhatsApp enquiry`, `Email site visit` (`siteVisitMailto`), `I'm interested`, or the former `WhatsApp site visit` link — the last replaced by the booking button. The `ila-interested-{id}` localStorage key is no longer written. `Save to wishlist` and `Share property` remain. `whatsappUrl` and `waVisitText` were dropped from this component; `PropertyHero` and `StickyBottomCta` still use them. `.pd-final__actions` was removed from the stylesheet because nothing renders it any more.
+
+New classes, all in `PropertyDetail.css`: `.pd-form`, `.pd-form__row`, `.pd-form__field`, `.pd-form__field--wide`, `.pd-form__label`, `.pd-form__hint`, `.pd-form__input`, `.pd-form__textarea`, `.pd-form__error`, `.pd-form__submit`, `.pd-form__status`, `.pd-form__status--sent`, `.pd-form__status--error`. The form uses the page tokens (`--pd-line`, `--pd-soft`, `--pd-surface`, `--pd-ink`, `--pd-gold`) and the same two-layer shadow as the other lifted surfaces. `.pd-form__row` is single-column by default and becomes two columns at `min-width: 760px`, matching the existing breakpoint. There is no separate wrapper class for the booking control: the slot picker is an ordinary `.pd-form__field--wide` and the booking button is the second child of `.pd-form__submit`.
 
 ## 37a. Tracked property share
 
@@ -486,6 +531,8 @@ Relevant dependencies are Next.js (`next/link`, `next/image`), React, `maplibre-
 - The tracked route resolves client-side and so has no `generateMetadata`; the shared URL carries no route-level title or description.
 - Every press of the share button mints a new share server-side. There is no reuse of a previously minted token, so repeated presses inflate the property's share count.
 - `ShareButton` has no analytics `data-track` attributes. Adding an event name that the tracker's allow-list does not contain would produce dropped-event warnings, and the share is already recorded server-side.
+- The final-CTA enquiry form posts to `POST /api/leads`. `apiFetch` sends no `credentials`, so the `visitor_code` cookie does not reach the endpoint and identification relies entirely on the `X-Visitor-Code` header — the same as every other visitor-scoped call here. If that endpoint specifically requires the cookie, `apiFetch` needs a `credentials` option.
+- `property_id` is only attached when `isPropertyUuid(property.id)`. Local catalogue properties send `null`, so those leads reach the team without a property reference.
 - Clipboard copying depends on `navigator.clipboard`, which can be blocked by permissions or in an insecure context. The field stays selectable as a fallback, but no user-facing message is shown when copying fails.
 
 ## 51. Important constraints

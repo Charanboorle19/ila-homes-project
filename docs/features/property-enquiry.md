@@ -11,7 +11,7 @@ Property Enquiry provides direct contact shortcuts for a property: start a Whats
 Current enquiry-related actions appear in:
 
 - The Property Details hero: `WhatsApp enquiry` and `Schedule site visit`.
-- The final CTA section: `WhatsApp enquiry`, `WhatsApp site visit`, and `Email site visit`.
+- The final CTA section: no WhatsApp or mailto actions remain. It now submits through the enquiry form described in `property-enquiry-form.md`, either to `POST /api/leads` (`Request a callback`) or to `POST /api/site-visits` (`Schedule site visit`). The former `WhatsApp enquiry`, `WhatsApp site visit` and `Email site visit` links have all been removed from this section.
 - The sticky bottom CTA: `Email visit` and `WhatsApp`.
 - The map `PropertySheet`: navigation to `View Project`, plus plot links labelled `Enquire about this plot` that navigate to `#contact`. These are not WhatsApp/mailto enquiry actions.
 
@@ -171,13 +171,12 @@ The hero does not generate its own messages and does not have `data-track` attri
 
 ## 15. Final CTA behavior
 
-`PropertyFinalCta` renders the `Next step` section with id `pd-final-title`. Its enquiry actions are:
+`PropertyFinalCta` renders the `Next step` section with id `pd-final-title`. It no longer contains any WhatsApp or mailto action. Its three former links — `WhatsApp enquiry`, `WhatsApp site visit` and `Email site visit` — were replaced by the enquiry form:
 
-- `WhatsApp enquiry`: generated WhatsApp text, `WHATSAPP_CHAT_CLICK`, metadata `{"button_location":"property_final_cta_whatsapp"}`.
-- `WhatsApp site visit`: generated WhatsApp site-visit text, `ENQUIRY_CLICK`, metadata `{"button_location":"property_final_cta_site_visit","channel":"whatsapp"}`.
-- `Email site visit`: `siteVisitMailto(property)`, `ENQUIRY_CLICK`, metadata `{"button_location":"property_final_cta_site_visit","channel":"email"}`.
+- `Request a callback` — `POST /api/leads` via `createPublicLead`.
+- `Schedule site visit` — `POST /api/site-visits` via `bookPublicSiteVisit`, rendered only when `isPropertyUuid(property.id)` because that endpoint requires `property_id`.
 
-All three include `data-track-property={property.id}`.
+Neither button carries `data-track` attributes; the submissions are recorded server-side. `whatsappUrl` and `siteVisitMailto` are no longer imported by this component. See `property-enquiry-form.md`.
 
 ## 16. Sticky CTA behavior
 
@@ -279,8 +278,8 @@ The map sheet falls back from a normalized property to `project.name` and `proje
 
 CTA events are attached through `data-track` attributes and are handled by the existing click-tracking utility:
 
-- `WHATSAPP_CHAT_CLICK`: final WhatsApp enquiry and sticky WhatsApp site-visit shortcut.
-- `ENQUIRY_CLICK`: final WhatsApp site visit, final email site visit, and sticky email visit.
+- `WHATSAPP_CHAT_CLICK`: sticky WhatsApp site-visit shortcut. The final-CTA `WhatsApp enquiry` link that used to carry it has been removed.
+- `ENQUIRY_CLICK`: sticky email visit only. The two final-CTA links that used to carry it — `WhatsApp site visit` and `Email site visit` — have both been removed.
 - `PROPERTY_FAVORITE`: wishlist/interested toggles.
 - `PROPERTY_SHARE`: final share button.
 

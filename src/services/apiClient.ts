@@ -66,6 +66,17 @@ export type RequestOptions = {
   tenantDomain?: string;
   signal?: AbortSignal;
   keepalive?: boolean;
+  /**
+   * Opt-in cookie sending, forwarded straight to `fetch`.
+   *
+   * Deliberately undefined by default so existing callers keep their current
+   * behaviour. `"include"` only works cross-origin if the API responds with
+   * `Access-Control-Allow-Credentials: true` and an explicit
+   * `Access-Control-Allow-Origin`; without that the browser blocks the request
+   * as a CORS failure rather than silently dropping the cookie. Only set it on
+   * endpoints confirmed to be credentialed.
+   */
+  credentials?: RequestCredentials;
 };
 
 /** Reads a bearer token if one exists. Null for anonymous visitors. */
@@ -103,6 +114,7 @@ export async function apiFetch<T = unknown>(
     tenantDomain,
     signal,
     keepalive,
+    credentials,
   } = options;
 
   const token = authToken ?? getStoredToken();
@@ -123,6 +135,7 @@ export async function apiFetch<T = unknown>(
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     ...(signal ? { signal } : {}),
     ...(keepalive ? { keepalive } : {}),
+    ...(credentials ? { credentials } : {}),
   });
 
   const text = await response.text();

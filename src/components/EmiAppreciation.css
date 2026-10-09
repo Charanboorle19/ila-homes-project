@@ -87,15 +87,20 @@
 
 .emi-appreciation__option {
   grid-column: span 2;
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.7rem;
+  position: relative;
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0.7rem;
+  min-height: 7rem;
+  padding: 0.45rem;
   border: 1px solid rgba(244, 197, 66, 0.2);
-  border-radius: 1rem;
+  border-radius: 12px;
   background: #1d1d1d;
   text-align: left;
   cursor: pointer;
+  isolation: isolate;
+  overflow: hidden;
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.25),
     0 10px 28px rgba(0, 0, 0, 0.2);
@@ -124,12 +129,15 @@
 
 .emi-appreciation__option-media {
   position: relative;
-  flex-shrink: 0;
-  width: 3.5rem;
-  height: 3.5rem;
+  z-index: 1;
+  display: block;
+  width: 7rem;
+  min-height: 6.1rem;
+  align-self: stretch;
   overflow: hidden;
-  border-radius: 0.7rem;
+  border-radius: 9px;
   background: #302b1d;
+  box-shadow: inset 0 0 0 1px rgba(244, 197, 66, 0.12);
 }
 
 .emi-appreciation__option-media img {
@@ -137,22 +145,70 @@
 }
 
 .emi-appreciation__option-copy {
+  position: relative;
+  z-index: 1;
   display: flex;
-  min-width: 0;
   flex-direction: column;
   gap: 0.15rem;
+  min-width: 0;
+}
+
+.emi-appreciation__option-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.1rem 0.35rem 0.1rem 0;
 }
 
 .emi-appreciation__option-name {
+  color: #f7f3e8;
   font-size: 0.9rem;
   font-weight: 600;
   line-height: 1.3;
 }
 
-.emi-appreciation__option-price {
+.emi-appreciation__option-location {
   color: #c8c1b2;
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.7rem;
+  font-weight: 400;
+  line-height: 1.3;
+}
+
+.emi-appreciation__option-meta {
+  color: #c8c1b2;
+  font-size: 0.74rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.emi-appreciation__option-check {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 5px;
+  background: rgba(15, 17, 20, 0.45);
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.emi-appreciation__option.is-on .emi-appreciation__option-check {
+  border-color: transparent;
+  background: #f4c542;
+  color: #171717;
 }
 
 /*
@@ -206,20 +262,339 @@
   margin-inline: 0;
 }
 
+/*
+ * Mobile bottom sheet for the calculator.
+ *
+ * Deliberately NOT portalled: `position: fixed` already escapes normal flow,
+ * and staying inside `.emi-appreciation` keeps the `--pd-ink` / `--pd-gold` /
+ * `--pd-soft` tokens and the `.pd-emi` colour overrides in scope. A portal to
+ * <body> would strip all of those and the calculator would render with the
+ * light-surface colours it was written for, on a dark sheet.
+ */
+.emi-appreciation__popup {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.emi-appreciation__popup-scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: rgba(8, 8, 8, 0.74);
+  cursor: pointer;
+  animation: emi-popup-fade-in 0.22s ease both;
+}
+
+/* The sheet rises from the bottom edge rather than fading, which reads as a
+   sheet being pulled up rather than a panel appearing. */
+.emi-appreciation__popup-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Percentage resolves against the viewport for a fixed element, so the sheet
+     resizes with the phone without the dvh/svh jump on URL-bar changes. */
+  max-height: 92%;
+  background: #111111;
+  border: 1px solid rgba(244, 197, 66, 0.28);
+  border-bottom: 0;
+  border-radius: 1.25rem 1.25rem 0 0;
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.55);
+  animation: emi-popup-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Exit: the sheet stays mounted for its own duration (POPUP_EXIT_MS in the
+   component) and plays the reverse motion instead of vanishing. */
+.emi-appreciation__popup.is-closing .emi-appreciation__popup-scrim {
+  animation: emi-popup-fade-out 0.2s ease both;
+}
+
+.emi-appreciation__popup.is-closing .emi-appreciation__popup-sheet {
+  animation: emi-popup-drop 0.2s ease both;
+}
+
+@keyframes emi-popup-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes emi-popup-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes emi-popup-rise {
+  from {
+    transform: translateY(100%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes emi-popup-drop {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+/* Grip sits on its own line above the bar so the bar can hold close, title
+   and the clear action without the title losing its optical centring. */
+.emi-appreciation__popup-grip {
+  display: block;
+  width: 2.75rem;
+  height: 0.25rem;
+  flex-shrink: 0;
+  margin: 0.5rem auto 0;
+  border-radius: 999px;
+  background: rgba(244, 197, 66, 0.35);
+}
+
+.emi-appreciation__popup-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.75rem;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  padding: 0.6rem 1rem 0.75rem;
+  border-bottom: 1px solid rgba(244, 197, 66, 0.16);
+}
+
+/* Solid gold, dark glyph. It is the sheet's only guaranteed way out, so it is
+   sized and contrasted for a thumb rather than for the layout. */
+.emi-appreciation__popup-close {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #f4c542;
+  color: #171717;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(244, 197, 66, 0.35);
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.emi-appreciation__popup-close:hover {
+  background: #ffd968;
+}
+
+.emi-appreciation__popup-close:active {
+  transform: scale(0.94);
+}
+
+.emi-appreciation__popup-close:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.emi-appreciation__popup-title {
+  min-width: 0;
+  overflow: hidden;
+  color: #f7f3e8;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emi-appreciation__popup-body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Breathing room above the calculator heading and, via the foot block below,
+     beneath the last row. Kept off the scroll container so it is not consumed
+     by the scroll range. */
+  padding: 0.75rem 1rem 0;
+}
+
+/* Last block inside the scroll area, so its padding is only reached at the
+   very end rather than acting as a fixed gutter. */
+.emi-appreciation__popup-foot {
+  display: flex;
+  justify-content: center;
+  padding: 1.25rem 0 calc(1.25rem + env(safe-area-inset-bottom));
+}
+
+/* Slim reopen bar, shown on mobile once the sheet has been dismissed. A
+   container rather than a button, because it now holds two sibling actions. */
+.emi-appreciation__reopen {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.9rem;
+  width: 100%;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(244, 197, 66, 0.32);
+  border-radius: 1rem;
+  background: #1a1a1a;
+}
+
+.emi-appreciation__reopen-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.emi-appreciation__reopen-name {
+  overflow: hidden;
+  color: #f7f3e8;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emi-appreciation__reopen-label {
+  color: #c8c1b2;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.emi-appreciation__reopen-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.emi-appreciation__reopen-open {
+  flex: 1;
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: #f4c542;
+  color: #171717;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.emi-appreciation__reopen-open:hover {
+  background: #ffd968;
+}
+
+.emi-appreciation__reopen-open:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.emi-appreciation__reopen-clear {
+  flex-shrink: 0;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid rgba(244, 197, 66, 0.45);
+  border-radius: 999px;
+  background: transparent;
+  color: #f4c542;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.emi-appreciation__reopen-clear:hover {
+  background: #f4c542;
+  color: #171717;
+}
+
+.emi-appreciation__reopen-clear:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
 @media (min-width: 640px) {
   .emi-appreciation__grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .emi-appreciation__option {
+    grid-column: span 1;
   }
 }
 
 @media (min-width: 1100px) {
   .emi-appreciation__grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 16rem));
+    justify-content: start;
+  }
+
+  .emi-appreciation__option {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    min-height: 5.8rem;
+  }
+
+  .emi-appreciation__option-media {
+    width: 5.5rem;
+    min-height: 4.9rem;
+  }
+}
+
+/* The sheet is a mobile-only presentation; from 768px the calculator renders
+   inline again. This matches MOBILE_QUERY in the component. */
+@media (min-width: 768px) {
+  .emi-appreciation__popup {
+    display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .emi-appreciation__option {
+    transition: none;
+  }
+
+  .emi-appreciation__popup-scrim,
+  .emi-appreciation__popup.is-closing .emi-appreciation__popup-scrim {
+    animation: none;
+  }
+
+  .emi-appreciation__popup-sheet,
+  .emi-appreciation__popup.is-closing .emi-appreciation__popup-sheet {
+    animation: none;
+  }
+
+  .emi-appreciation__popup-close,
+  .emi-appreciation__reopen-open,
+  .emi-appreciation__reopen-clear {
     transition: none;
   }
 }

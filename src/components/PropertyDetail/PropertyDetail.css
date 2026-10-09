@@ -1032,6 +1032,16 @@
   background-color: var(--pd-gold);
 }
 
+/* On phones, let the document own the vertical scroll instead of trapping the
+   user inside a second scroll container when the loan controls reach an edge. */
+@media (max-width: 700px) {
+  .pd-emi__controls-scroll {
+    max-height: none !important;
+    overflow-y: visible !important;
+    overscroll-behavior-y: auto !important;
+  }
+}
+
 .pd-legal__list li {
   display: flex;
   flex-wrap: wrap;

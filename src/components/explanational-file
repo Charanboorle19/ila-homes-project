@@ -1,155 +1,328 @@
-# Public Tenant Instagram Reel API
+# Property Comparison API
 
-This endpoint returns the currently active Instagram reel configured for the tenant website.
+This is the canonical documentation for comparing two to five active properties. The backend exposes a direct stateless comparison endpoint and visitor-aware favorites comparison endpoints.
 
-## Get the active reel
+## Quick comparison
+
+| API | Method | Visitor identity | Stores comparison history | Intended use |
+|---|---|---|---|---|
+| `/api/properties/compare` | `GET` | Not required | No | Direct comparison, shareable/read-only UI |
+| `/api/favorites/compare` | `POST` | Cookie or `X-Visitor-Code` | Yes | Comparison from a visitor session; records `property_comparisons` and a `COMPARE` event |
+| `/api/favorites/compare` | `GET` | Not required | No | Open a shared comparison URL |
+
+All three endpoints use the same comparison builder and return the same `properties` and grouped `metrics` format. The favorites endpoints additionally return `items`, `total`, and `share_url`.
+
+## Property ID rules
+
+- Supply **2 to 5 distinct property UUIDs**.
+- The properties must exist and have `status = 'ACTIVE'`.
+- The comparison preserves the requested property order in `data.properties`.
+- Inactive or missing properties produce a not-found response.
+- Duplicate IDs or fewer than two IDs produce a validation error.
+- Property IDs are parsed as UUIDs by the route.
+
+Although the POST request schema permits one to five array values at the Pydantic layer, the route and service require two to five distinct IDs.
+
+## Option 1: Direct stateless comparison
+
+Use this endpoint when the frontend only needs comparison data and does not need to associate the action with a visitor.
+
+### Request
 
 ```http
-GET /api/tenant/reels/active
+GET /api/properties/compare?property_ids=22000000-0000-0000-0000-000000000001,22000000-0000-0000-0000-000000000002
 ```
 
-This is a public endpoint. No bearer token or visitor code is required.
+No authentication or visitor header is required.
 
-## Headers
-
-The endpoint does not require an `Authorization` header or `X-Visitor-Code` header.
-
-The recommended header is:
+Tenant resolution still requires a valid tenant domain through `X-Tenant-Domain`, the request host, or a valid access token. Example:
 
 ```http
-Accept: application/json
+GET /api/properties/compare?property_ids=property-id-1,property-id-2
+Host: test.localhost
+X-Tenant-Domain: YOUR_TENANT_DOMAIN
 ```
 
-When the API serves multiple tenants and tenant resolution is based on a tenant-domain header, also send:
-
-```http
-X-Tenant-Domain: your-tenant-domain.com
-```
-
-Use the actual tenant domain configured by the platform. If the request is made to a tenant-specific API hostname, the tenant-domain header may not be necessary.
-
-### cURL example
-
-```bash
-curl -X GET \
-  "https://your-domain.com/api/tenant/reels/active" \
-  -H "Accept: application/json"
-```
-
-Replace `your-domain.com` with the tenant's API domain.
-
-### cURL with tenant-domain header
-
-```bash
-curl -X GET \
-  "https://your-api-domain.com/api/tenant/reels/active" \
-  -H "Accept: application/json" \
-  -H "X-Tenant-Domain: your-tenant-domain.com"
-```
-
-## Successful response
-
-When an active reel exists:
+### Response
 
 ```json
 {
   "success": true,
   "data": {
-    "id": "6f2a4b77-7d2a-4e0a-9f4c-123456789abc",
-    "reel_url": "https://www.instagram.com/reel/DU0g6-5iD3Y/",
-    "is_active": true
+    "properties": [
+      {
+        "property_id": "22000000-0000-0000-0000-000000000001",
+        "name": "Example Residency",
+        "metrics": {
+          "price": 8500000,
+          "price_per_sqft": 7083.33,
+          "area_sqft": 1200,
+          "bedrooms": 2,
+          "bathrooms": 2,
+          "property_type": "APARTMENT",
+          "location": "Whitefield",
+          "connectivity_score": 82,
+          "life_stage_fit": {
+            "FAMILY": 88,
+            "PROFESSIONAL": 76
+          },
+          "schools_nearby": 4,
+          "hospitals_nearby": 2,
+          "parks_nearby": 3,
+          "metro_distance_km": 1.8,
+          "possession": "2027-06-30",
+          "availability": true,
+          "property_status": "ACTIVE",
+          "available_inventory": 24,
+          "approval_status": "APPROVED",
+          "amenities_count": 12,
+          "builder": "Example Builders",
+          "estimated_appreciation": 9.5,
+          "maintenance_cost": 3500
+        }
+      }
+    ],
+    "currency": "INR",
+    "area_unit": "SQ_YD",
+    "metrics": []
   }
 }
 ```
 
-## Response fields
+The example shows one property for readability; a successful request must contain at least two properties. The `metrics` array contains metric-grouped values keyed by property ID.
 
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | UUID of the tenant reel record |
-| `reel_url` | string | Canonical Instagram reel URL |
-| `is_active` | boolean | Indicates that the reel is currently active |
+## Option 2: Visitor-aware comparison from favorites
 
-## Instagram URL normalization
+Use this endpoint when the comparison action should belong to the visitor session. The properties do not currently need to be favorited; the service validates that they are active and records the comparison for the resolved visitor.
 
-Instagram URLs are returned in the canonical format:
+### Request
 
-```text
-https://www.instagram.com/reel/{shortcode}/
+```http
+POST /api/favorites/compare
+Host: test.localhost
+Content-Type: application/json
+X-Visitor-Code: generated-code
 ```
 
-For example, if the stored URL is:
-
-```text
-https://www.instagram.com/ila.homes/reel/DU0g6-5iD3Y/
+```json
+{
+  "property_ids": [
+    "22000000-0000-0000-0000-000000000001",
+    "22000000-0000-0000-0000-000000000002"
+  ]
+}
 ```
 
-The GET response returns:
+The frontend should use `credentials: "include"` so the HTTP-only visitor cookie is preserved. If cookies cannot be used, send the known visitor code as `X-Visitor-Code`.
 
-```text
-https://www.instagram.com/reel/DU0g6-5iD3Y/
+### Behavior
+
+1. The visitor is identified or created using the visitor header or cookie.
+2. The visitor cookie is refreshed in the response.
+3. The property IDs are validated and active properties are loaded.
+4. A row is inserted into `property_comparisons`.
+5. A `COMPARE` visitor event is recorded with the normalized property IDs.
+6. The shared property metrics and grouped comparison metrics are returned.
+
+The comparison service does not require the properties to be present in the visitor's favorites. The endpoint name reflects its existing favorites/visitor feature area, but the current implementation accepts any valid active property IDs.
+
+## Option 3: Open or share a comparison URL
+
+The POST response returns a `share_url`. This URL is intentionally stateless and can be opened by another user without a visitor header.
+
+```http
+GET /api/favorites/compare?property_ids=22000000-0000-0000-0000-000000000001,22000000-0000-0000-0000-000000000002
 ```
 
-The username path is removed. Existing canonical reel URLs are returned in the same canonical format. Non-Instagram URLs are preserved unchanged.
+The GET endpoint:
 
-## No active reel
+- Requires two to five distinct comma-separated UUIDs.
+- Does not identify or create a visitor.
+- Does not write comparison history.
+- Does not record a visitor event.
+- Returns `share_url`, `items`, `total`, `properties`, and grouped `metrics`.
 
-If there is no active reel, the endpoint returns a successful response with `data: null`:
+## Favorites comparison response shape
+
+The POST and GET favorites endpoints return:
 
 ```json
 {
   "success": true,
-  "data": null
+  "data": {
+    "share_url": "/api/favorites/compare?property_ids=property-id-1,property-id-2",
+    "items": [
+      {
+        "id": "property-id-1",
+        "name": "Example Residency",
+        "property_type": "APARTMENT",
+        "price_from": 8500000,
+        "status": "ACTIVE",
+        "metrics": {}
+      }
+    ],
+    "total": 2,
+    "properties": [],
+    "currency": "INR",
+    "area_unit": "SQ_YD",
+    "metrics": []
+  }
 }
 ```
 
-Frontend clients should handle this state by hiding the reel section or displaying a fallback.
+`items` is a compact list for cards or summaries. `properties` is the full comparison model and should normally drive the comparison table. The response's `total` equals the number of compared properties.
 
-## Frontend example
+## Metrics returned for each property
+
+| Metric | Meaning |
+|---|---|
+| `price` | Stored property price |
+| `price_per_sqft` | `price / area`; null if price or area is unavailable |
+| `area_sqft` | Stored area |
+| `area` | Stored area in the declared `area_unit` |
+| `bedrooms` | Bedroom count |
+| `bathrooms` | Bathroom count |
+| `property_type` | Property type |
+| `location` | Locality, falling back to the property address |
+| `location_id` | Location UUID, or null |
+| `locality` | Locality name, or null |
+| `address` | Property address, or null |
+| `connectivity_score` | Calculated overall connectivity score |
+| `life_stage_fit` | Calculated fit percentages keyed by persona |
+| `schools_nearby` | Operational nearby schools count |
+| `hospitals_nearby` | Operational nearby hospitals count |
+| `parks_nearby` | Operational nearby parks count |
+| `metro_distance_km` | Distance of the first nearby transport place whose name contains `metro`; otherwise null |
+| `possession` | Possession date in ISO format, or null |
+| `availability` | Boolean; true when available inventory is greater than zero |
+| `property_status` | Current property lifecycle status; comparison only loads `ACTIVE` properties |
+| `available_inventory` | Number of available inventory units |
+| `approval_status` | Value from metadata `approval_status` or `approvalStatus` |
+| `amenities_count` | Number of stored amenities |
+| `builder` | Value from metadata `builder`, `developer`, or `builder_name` |
+| `estimated_appreciation` | Value from property metadata |
+| `maintenance_cost` | Value from property metadata |
+
+Missing values are returned as `null`. Numeric values that are whole numbers are serialized without a decimal portion where possible.
+
+## Grouped metrics format
+
+`data.metrics` contains one entry per comparable metric:
+
+```json
+{
+  "key": "price",
+  "better": "LOWER",
+  "values": {
+    "property-id-1": 8500000,
+    "property-id-2": 9200000
+  },
+  "best_property_id": "property-id-1"
+}
+```
+
+Metric values are keyed by property ID, and unavailable values remain `null`. `best_property_id` ignores nulls, follows the metric's explicit `better` direction, and is null when no property has a value. Life-stage metrics are included as `life_stage_fit.<persona>` entries in `data.metrics`; persona names preserve the configured database names such as `starting_a_family`.
+
+The service does not calculate pairwise difference records.
+
+## Validation and error handling
+
+| Situation | Expected result |
+|---|---|
+| Fewer than 2 IDs | `422` validation error |
+| More than 5 IDs | `422` validation error |
+| Duplicate IDs | `422` validation error |
+| Invalid UUID | UUID validation error, normally `422` |
+| Missing or inactive property | `404` property-not-found response |
+| Missing visitor code on POST | A visitor is identified/created by the normal cookie/header flow; the endpoint remains public |
+
+## Recommended frontend flow
+
+### Stateless comparison
 
 ```ts
-type TenantReel = {
-  id: string;
-  reel_url: string;
-  is_active: boolean;
-};
-
-async function getActiveTenantReel(): Promise<TenantReel | null> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/tenant/reels/active`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json"
-      }
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Unable to load active reel: ${response.status}`);
-  }
-
-  const body = await response.json();
-  return body.data as TenantReel | null;
-}
-
-const reel = await getActiveTenantReel();
-
-if (reel) {
-  window.open(reel.reel_url, "_blank", "noopener,noreferrer");
-}
+const ids = selectedPropertyIds.join(",");
+const response = await fetch(
+  `${API_BASE_URL}/api/properties/compare?property_ids=${encodeURIComponent(ids)}`
+);
+const body = await response.json();
+const comparison = body.data;
 ```
 
-## API route
+Use this for a comparison page that does not need visitor analytics or history.
 
-The endpoint is implemented at:
+### Visitor-aware comparison
 
-```text
-GET /api/tenant/reels/active
+```ts
+const response = await fetch(`${API_BASE_URL}/api/favorites/compare`, {
+  method: "POST",
+  credentials: "include",
+  headers: {
+    "Content-Type": "application/json",
+    ...(visitorCode ? { "X-Visitor-Code": visitorCode } : {})
+  },
+  body: JSON.stringify({ property_ids: selectedPropertyIds })
+});
+
+const body = await response.json();
+const comparison = body.data;
 ```
 
-The corresponding backend route is:
+Use this when the compare action should be associated with the same visitor identity used for favorites, leads, and site visits.
 
-```text
-C:\Users\Lenovo\Downloads\realestate\app\routes\tenant_reels.py
+## Direct cURL example
+
+```bash
+curl -X GET "YOUR_API_URL/api/properties/compare?property_ids=PROPERTY_ID_1%2CPROPERTY_ID_2" \
+  -H "Accept: application/json" \
+  -H "X-Tenant-Domain: YOUR_TENANT_DOMAIN" \
+  -H "Cache-Control: no-cache"
 ```
+
+The direct endpoint does not require a bearer token, visitor header, visitor cookie, or visitor history record.
+
+## Direct life-stage-fit endpoint
+
+To request only one property's life-stage results:
+
+```http
+GET /api/properties/{property_id}/life-stage-fit
+```
+
+Example:
+
+```bash
+curl -X GET "YOUR_API_URL/api/properties/PROPERTY_ID/life-stage-fit" \
+  -H "Accept: application/json" \
+  -H "X-Tenant-Domain: YOUR_TENANT_DOMAIN" \
+  -H "Cache-Control: no-cache"
+```
+
+The comparison response still includes the same calculated values under `properties[].metrics.life_stage_fit` and as flattened `life_stage_fit.<persona>` rows in `data.metrics`.
+
+### Display guidance
+
+- Use `properties` for the side-by-side table.
+- Use `items` for compact property cards.
+- Use `metrics` to render metric rows and `best_property_id` to highlight the directional best property.
+- Read values from `metric.values[property_id]`; do not rely on property position.
+- Treat `null` as “Not available”; do not convert it to zero.
+- Preserve the backend property order for the property columns.
+- Use the returned `share_url` rather than constructing a different route format.
+
+## Persistence and analytics
+
+Visitor-aware POST comparisons are persisted in:
+
+```sql
+property_comparisons (
+    id,
+    visitor_id,
+    property_ids,
+    created_at
+)
+```
+
+The stored `property_ids` value is JSONB containing the normalized UUID strings. The visitor event type is `COMPARE`, with the property IDs in event metadata.
+
+The direct property comparison endpoint and the shareable favorites GET endpoint do not create these records.

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Map as MapLibreMap, Marker, setWorkerUrl } from "maplibre-gl";
@@ -64,6 +65,20 @@ function ArrowIcon({ className = "" }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function PinIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }
@@ -352,38 +367,60 @@ export default function GrowthCorridors() {
                           data-track="PROPERTY_VIEW"
                           data-track-property={property.id}
                           data-track-meta={`{"source":"growth_corridors","location_slug":"${propertiesSlug}"}`}
-                          className="group flex h-full flex-col rounded-2xl border border-black/10 bg-white p-4 transition hover:border-[#c9a84c] hover:shadow-[0_8px_30px_rgba(15,17,20,0.08)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a84c]"
+                          className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#1b1d22] p-5 transition duration-300 hover:-translate-y-0.5 hover:border-[#c9a84c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a84c]"
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <h3 className="text-base font-semibold tracking-tight text-[#0f1114]">
-                              {property.name}
-                            </h3>
-                            {property.property_type ? (
-                              <span className="shrink-0 rounded-full bg-[#c9a84c]/15 px-2 py-1 text-[9px] font-semibold tracking-[0.12em] text-[#8a6a12] uppercase">
-                                {property.property_type}
-                              </span>
-                            ) : null}
-                          </div>
-
-                          {property.description ? (
-                            <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-[#4a5060]">
-                              {property.description}
-                            </p>
+                          {/* Property cover image from the location-filtered properties
+                              response. Only rendered when the API supplies
+                              one. */}
+                          {property.cover_url ? (
+                            <div aria-hidden className="absolute inset-0 z-0">
+                              <Image
+                                src={property.cover_url}
+                                alt=""
+                                fill
+                                sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                                unoptimized
+                                onError={(event) => {
+                                  event.currentTarget.style.display = "none";
+                                }}
+                                className="object-cover"
+                              />
+                              <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/62 to-black/45" />
+                            </div>
                           ) : null}
 
-                          <div className="mt-4 flex items-end justify-between gap-2 border-t border-black/8 pt-3">
-                            <span className="truncate text-[10px] text-[#8a909e]">
-                              /{property.slug}
-                            </span>
-                            <span className="shrink-0 text-sm font-semibold text-[#c9a84c]">
-                              {formatPrice(property.price)}
+                          <div className="relative z-10 flex flex-1 flex-col">
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="text-base font-semibold tracking-tight text-white">
+                                {property.name}
+                              </h3>
+                              {property.property_type ? (
+                                <span className="shrink-0 rounded-full bg-white/20 px-2 py-1 text-[9px] font-semibold tracking-[0.12em] text-white uppercase">
+                                  {property.property_type}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {property.description ? (
+                              <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-white/85">
+                                {property.description}
+                              </p>
+                            ) : null}
+
+                            <div className="mt-auto flex items-end justify-between gap-2 border-t border-white/20 pt-4">
+                              <span className="text-[9px] font-semibold tracking-[0.16em] text-white/70 uppercase">
+                                Price
+                              </span>
+                              <span className="shrink-0 text-base font-semibold text-[#c9a84c]">
+                                {formatPrice(property.price)}
+                              </span>
+                            </div>
+
+                            <span className="mt-3 inline-flex items-center gap-1.5 text-[9px] font-semibold tracking-[0.12em] text-white uppercase transition group-hover:gap-2.5">
+                              View details
+                              <ArrowIcon className="h-3 w-3" />
                             </span>
                           </div>
-
-                          <span className="mt-3 inline-flex items-center gap-1.5 text-[9px] font-semibold tracking-[0.12em] text-[#0f1114] uppercase transition group-hover:gap-2.5">
-                            View details
-                            <ArrowIcon className="h-3 w-3" />
-                          </span>
                         </Link>
                       </li>
                     ))}
@@ -428,69 +465,107 @@ export default function GrowthCorridors() {
                     const mappable = hasCoordinates(location);
 
                     return (
-                      <div
+                      <article
                         key={location.id}
-                        className={`relative flex min-w-64 flex-1 flex-col rounded-2xl border p-4 text-left transition sm:min-w-0 ${
+                        className={`group relative flex min-h-[16rem] min-w-[17.5rem] flex-1 flex-col overflow-hidden rounded-2xl border p-6 text-left transition duration-300 sm:min-w-0 ${
                           isActive
-                            ? "border-[#c9a84c] bg-white shadow-[0_8px_30px_rgba(15,17,20,0.06)]"
-                            : "border-black/10 bg-white/70"
+                            ? "border-[#c9a84c] bg-[#241f14]"
+                            : "border-white/15 bg-[#1b1d22] hover:-translate-y-0.5 hover:border-white/30"
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0f1114] text-[10px] font-bold tracking-wide text-white">
-                            {String(index + 1).padStart(2, "0")}
-                          </span>
-                          <span className="rounded-full bg-[#c9a84c]/15 px-2 py-1 text-[9px] font-semibold tracking-[0.12em] text-[#8a6a12] uppercase">
-                            {location.status}
-                          </span>
-                        </div>
-
-                        <h3 className="mt-3 truncate text-base font-semibold tracking-tight text-[#0f1114]">
-                          {location.name}
-                        </h3>
-
-                        {location.description ? (
-                          <p className="mt-1.5 line-clamp-3 text-[13px] leading-relaxed text-[#4a5060]">
-                            {location.description}
-                          </p>
+                        {/* Locality cover image from GET /api/locations, used as the
+                            card background. Rendered only when the API supplies
+                            one — most localities return cover_url: null, and
+                            those cards fall back to their own dark surface
+                            rather than a stock image. The article already
+                            clips its own rounded corners, so no extra wrapper
+                            is needed. */}
+                        {location.cover_url ? (
+                          <div aria-hidden className="absolute inset-0 z-0">
+                            <Image
+                              src={location.cover_url}
+                              alt=""
+                              fill
+                              sizes="(min-width: 1024px) 33vw, (min-width: 640px) 42vw, 280px"
+                              // Presigned cover URLs expire, so they are loaded
+                              // directly rather than through the optimizer cache.
+                              unoptimized
+                              // A presigned URL past its 3600s expiry answers 403.
+                              // Without this the failed image renders as a broken
+                              // frame over the card; hiding it falls back to the
+                              // card's own dark surface, same as a null cover_url.
+                              onError={(event) => {
+                                event.currentTarget.style.display = "none";
+                              }}
+                              className="object-cover"
+                            />
+                            {/* Dark scrim keeps the card copy above 4.5:1 over
+                                any photo. */}
+                            <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/62 to-black/45" />
+                          </div>
                         ) : null}
 
-                        <dl className="mt-4 space-y-1.5 border-t border-black/8 pt-3">
+                        {/* Gold rail marks the selected locality. */}
+                        <span
+                          aria-hidden
+                          className={`absolute inset-y-0 left-0 z-20 w-[3px] transition-opacity ${
+                            isActive ? "bg-[#c9a84c] opacity-100" : "opacity-0"
+                          }`}
+                        />
+
+                        <div className="relative z-10 flex flex-1 flex-col">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20 text-[11px] font-bold tabular-nums tracking-wide text-white">
+                              {String(index + 1).padStart(2, "0")}
+                            </span>
+                            <span className="rounded-full bg-white/20 px-2.5 py-1 text-[9px] font-semibold tracking-[0.12em] text-white uppercase">
+                              {location.status}
+                            </span>
+                          </div>
+
+                          {/* Locality name is the card's primary identifier, so
+                              it carries the most weight in the card. */}
+                          <h3 className="mt-4 text-2xl font-bold tracking-tight text-white lg:text-[1.75rem]">
+                            {location.name}
+                          </h3>
+
+                          {/* Address sits directly above the Explore action. It is
+                              rendered in full — no line clamp — because a
+                              truncated address lost the district and pincode,
+                              which are the parts a buyer actually compares.
+                              Kept at 12px so the full text still fits the
+                              card without crowding the button. */}
                           {location.address ? (
-                            <div>
-                              <dt className="text-[9px] font-semibold tracking-[0.16em] text-[#8a909e] uppercase">
-                                Address
-                              </dt>
-                              <dd className="text-[12px] leading-snug text-[#4a5060]">
-                                {location.address}
-                              </dd>
-                            </div>
+                            <p className="mt-2.5 flex items-start gap-1.5 text-[12px] leading-relaxed font-medium text-white">
+                              <PinIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#c9a84c]" />
+                              <span className="min-w-0">{location.address}</span>
+                            </p>
                           ) : null}
 
-                        </dl>
-
-                        {/* Selecting anywhere on the card opens the map for
-                            this locality, so there is no explicit CTA button. */}
-                        <button
-                          type="button"
-                          onClick={() => selectLocation(location)}
-                          disabled={!mappable}
-                          aria-label={`View ${location.name} on map`}
-                          data-track="MAP_MARKER_CLICK"
-                          data-track-meta={`{"location_id":"${location.id}","location_slug":"${location.slug}","section_type":"growth_corridors"}`}
-                          className="group mt-4 flex w-full items-center justify-between gap-2 rounded-xl border border-black/10 bg-white/60 px-3 py-2.5 text-left transition hover:border-[#c9a84c] hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <span className="truncate text-[11px] text-[#4a5060]">
-                            {mappable ? `/${location.slug}` : "No map location"}
-                          </span>
-                          <span className="flex items-center gap-1.5 text-[9px] font-semibold tracking-[0.12em] text-[#0f1114] uppercase">
-                            Explore
-                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#c9a84c] text-[#0f1114]">
-                              <ArrowIcon className="h-3 w-3" />
-                            </span>
-                          </span>
-                        </button>
-                      </div>
+                          {/* The Explore action stays the card's primary, gold CTA.
+                              mt-auto pins it to the bottom so every button in a
+                              row aligns, and pt-5 guarantees a gap above it —
+                              mt-auto alone collapses to zero once the card has
+                              no free space left, which is what made the button
+                              collide with the address. */}
+                          <div className="mt-auto pt-5">
+                            <button
+                              type="button"
+                              onClick={() => selectLocation(location)}
+                              disabled={!mappable}
+                              aria-label={`View ${location.name} on map`}
+                              data-track="MAP_MARKER_CLICK"
+                              data-track-meta={`{"location_id":"${location.id}","location_slug":"${location.slug}","section_type":"growth_corridors"}`}
+                              className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#c9a84c] px-4 py-3 text-[10px] font-bold tracking-[0.14em] text-[#0f1114] uppercase shadow-[0_6px_18px_rgba(201,168,76,0.35)] transition hover:bg-[#d4b57e] hover:shadow-[0_10px_26px_rgba(201,168,76,0.45)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0f1114] disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-white/60 disabled:shadow-none"
+                            >
+                              <span>{mappable ? "Explore" : "No map location"}</span>
+                              {mappable ? (
+                                <ArrowIcon className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                              ) : null}
+                            </button>
+                          </div>
+                        </div>
+                      </article>
                     );
                   })}
                 </div>
@@ -656,27 +731,50 @@ export default function GrowthCorridors() {
 
               {activeLocation ? (
                 <div
-                  className="absolute inset-x-3 bottom-3 z-10 rounded-2xl bg-white/95 p-4 shadow-[0_8px_30px_rgba(15,17,20,0.12)] backdrop-blur-sm sm:inset-x-auto sm:right-3 sm:bottom-3 sm:max-w-sm"
+                  className="absolute inset-x-3 bottom-3 z-10 overflow-hidden rounded-2xl bg-[#1b1d22] p-4 shadow-[0_8px_30px_rgba(15,17,20,0.12)] sm:inset-x-auto sm:right-3 sm:bottom-3 sm:max-w-sm"
                   aria-live="polite"
                 >
-                  <p className="text-[9px] font-semibold tracking-[0.18em] text-[#a6862e] uppercase">
-                    {activeLocation.status}
-                  </p>
-                  <h3 className="mt-1 text-lg font-semibold tracking-tight text-[#0f1114]">
-                    {activeLocation.name}
-                  </h3>
-
-                  {activeLocation.description ? (
-                    <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-[#4a5060]">
-                      {activeLocation.description}
-                    </p>
+                  {/* Same locality cover image, with the same scrim, so the
+                      map overlay matches the list card it came from.
+                      Only rendered when the API supplies one. */}
+                  {activeLocation.cover_url ? (
+                    <div aria-hidden className="absolute inset-0 z-0">
+                      <Image
+                        src={activeLocation.cover_url}
+                        alt=""
+                        fill
+                        sizes="(min-width: 640px) 24rem, 100vw"
+                        unoptimized
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                        }}
+                        className="object-cover"
+                      />
+                      <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/62 to-black/45" />
+                    </div>
                   ) : null}
 
-                  {activeLocation.address ? (
-                    <p className="mt-2 text-[11px] text-[#8a909e]">
-                      {activeLocation.address}
+                  <div className="relative z-10">
+                    <p className="text-[9px] font-semibold tracking-[0.18em] text-[#c9a84c] uppercase">
+                      {activeLocation.status}
                     </p>
-                  ) : null}
+                    <h3 className="mt-1 text-lg font-semibold tracking-tight text-white">
+                      {activeLocation.name}
+                    </h3>
+
+                    {activeLocation.description ? (
+                      <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-white/85">
+                        {activeLocation.description}
+                      </p>
+                    ) : null}
+
+                    {activeLocation.address ? (
+                      <p className="mt-2 flex items-start gap-1.5 text-[12px] leading-relaxed font-medium text-white">
+                        <PinIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#c9a84c]" />
+                        <span className="min-w-0">{activeLocation.address}</span>
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
             </div>

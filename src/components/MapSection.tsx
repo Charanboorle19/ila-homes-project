@@ -1418,6 +1418,25 @@ export default function MapSection() {
 
   const layoutOpen = Boolean(activeProject);
 
+  /**
+   * Detail-page target for the sidebar CTA. `PropertySheet` resolves its own
+   * "View Project" link the same way (local record first, API UUID second); the
+   * sidebar footer reads it from here so both point at the same property.
+   */
+  const activePropertyHref = useMemo(() => {
+    const id =
+      activeProperty?.id ??
+      activePopupApiProperty?.id ??
+      activePropertyDetail?.id ??
+      activePropertyId;
+    return id ? `/properties/${id}` : null;
+  }, [
+    activePopupApiProperty?.id,
+    activeProperty?.id,
+    activePropertyDetail?.id,
+    activePropertyId,
+  ]);
+
   const counts = useMemo(() => {
     const plots = activeProject
       ? activeProject.plots
@@ -1476,6 +1495,11 @@ export default function MapSection() {
     setPropertySheetExpanded(false);
     setFilter("all");
     setQuery("");
+    // Closing a popup must return the map to its regular zoomed-out portfolio
+    // view. Clearing the fitted-signature guard forces the pins effect to
+    // re-fit (and drop the satellite basemap) even though the pins themselves
+    // have not moved.
+    fittedPinsRef.current = "";
   };
 
   const closePanel = () => {
@@ -2508,11 +2532,15 @@ export default function MapSection() {
               )}
 
               <div className="shrink-0 border-t border-black/10 p-3 sm:p-4">
+                {/* A selected property must reach its own detail page, so the
+                    CTA switches from the contact anchor to /properties/{id}.
+                    `activePropertyId` is already set while merely listing, so
+                    the label still keys off the open layout. */}
                 <Link
-                  href="#contact"
+                  href={layoutOpen && activePropertyHref ? activePropertyHref : "#contact"}
                   className="flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
                 >
-                  {activeProject
+                  {layoutOpen && activePropertyHref
                     ? "Visit Property"
                     : "View All Properties"}
                   <ArrowIcon className="h-4 w-4" />
@@ -2620,8 +2648,7 @@ export default function MapSection() {
                     type="button"
                     aria-label="Close property details"
                     onClick={() => {
-                      setSelectedProjectId(null);
-                      setActiveProjectId(null);
+                      closeLayout();
                       setPropertySheetExpanded(false);
                     }}
                     className="flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-white/85 text-[#24231f] shadow-sm backdrop-blur transition active:scale-95"
@@ -2743,67 +2770,6 @@ export default function MapSection() {
                   </div>
                 ) : null}
               </div>
-            </div>
-          </div>
-        ) : null}
-
-        {/* Desktop plot read-out. The mobile bottom sheet above is md:hidden,
-            so desktop needs its own card or a selected plot has no detail. */}
-        {selectedPlot ? (
-          <div
-            className="pointer-events-auto absolute bottom-3 z-20 hidden w-76 overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_12px_36px_rgba(15,23,42,0.22)] md:block"
-            style={{ left: panelOpen ? DESKTOP_PANEL_RESERVED + 12 : 12 }}
-          >
-            <div className="relative px-3 pt-3 pb-3">
-              <button
-                type="button"
-                aria-label="Close plot details"
-                onClick={() => setSelectedId(null)}
-                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#171717] text-white transition hover:bg-[#333333]"
-              >
-                <CloseIcon className="h-3 w-3" />
-              </button>
-              <div className="pr-9">
-                <div className="flex items-center gap-2">
-                  <h3 className="truncate text-sm font-semibold text-[#171717]">
-                    {selectedPlot.title}
-                  </h3>
-                  <span className="shrink-0 rounded-full bg-[#1f5c45] px-2 py-0.5 text-[9px] font-semibold tracking-wide text-white uppercase">
-                    {selectedPlot.status}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs font-medium text-[#3f3a34]">
-                  {selectedPlot.area} · {selectedPlot.price}
-                </p>
-                <p className="mt-0.5 truncate text-xs text-[#5c5348]">
-                  {selectedPlot.location}
-                </p>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/10 pt-3 text-xs text-[#3f3a34]">
-                <div>
-                  <span className="block text-[10px] tracking-wide text-[#756c60] uppercase">
-                    Facing
-                  </span>
-                  <strong className="font-semibold text-[#171717]">
-                    {selectedPlot.facing}
-                  </strong>
-                </div>
-                <div>
-                  <span className="block text-[10px] tracking-wide text-[#756c60] uppercase">
-                    Location
-                  </span>
-                  <strong className="font-semibold text-[#171717]">
-                    {selectedPlot.location}
-                  </strong>
-                </div>
-              </div>
-              <Link
-                href="#contact"
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
-              >
-                Enquire about this plot
-                <ArrowIcon className="h-3.5 w-3.5" />
-              </Link>
             </div>
           </div>
         ) : null}

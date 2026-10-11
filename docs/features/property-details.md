@@ -480,6 +480,8 @@ The map can resolve API properties by UUID and can open the summary sheet/layout
 
 The main API route shows `Loading property…` in a centered `min-h-[70vh]` page while `state === "loading"`. Documents independently show `Loading the latest property documents…` and a “Loading documents” row. Buyer Fit uses pending placeholders and does not block the page. Future Neighbourhood can show `Loading nearby landmarks…`; map loading itself has no separate confirmed user-facing spinner beyond the list state.
 
+All of these render the shared `ila-loader ila-loader--sm` animation beside their text, defined once in `src\app\loading.css` — see `docs\features\loading.md`.
+
 ## 44. Error states
 
 Invalid/non-UUID API ids and failed detail requests show “Not found”, “Property unavailable”, explanatory copy, and a `/properties` “← Back to properties” link. Document failure shows “Documents could not be loaded right now. Please try again later.” Buyer-fit failure becomes unavailable rather than an endless spinner. Map failures show the relevant fallback copy while list/story content remains usable.

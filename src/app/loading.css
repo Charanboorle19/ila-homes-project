@@ -1,0 +1,134 @@
+/**
+ * Project-wide loading animation — single source of truth.
+ *
+ * Every spinner in the app uses `.ila-loader`. To change the animation itself,
+ * edit the keyframes below and nothing else; no component needs to be touched.
+ *
+ * Usage:
+ *   <span className="ila-loader" aria-hidden />                 55px, standalone
+ *   <span className="ila-loader ila-loader--sm" aria-hidden />  30px, beside text
+ *
+ * Custom size (Tailwind arbitrary property or inline style):
+ *   className="ila-loader [--ila-loader-size:40px]"
+ *
+ * `--ila-loader-color` must contrast with the surface behind it. The default is
+ * near-black for the light surfaces this app uses; set it to `#fff` on dark.
+ *
+ * SIZING MODEL — read before changing anything.
+ * The animation paints eight 25x25 conic-gradient patches in a 55x55 box, so
+ * the box must be roughly 2.2x the patch or the corners overlap and the shape
+ * degrades into a solid blob. `--ila-loader-size` is the box; the patch is
+ * derived from it and the keyframes are written as multiples of the patch. That
+ * keeps the geometry correct at every size. Do not replace these calcs with
+ * fixed pixel values — that is what broke the small sizes previously.
+ */
+.ila-loader {
+  --ila-loader-size: 55px;
+  --ila-loader-color: #171717;
+  --ila-loader-patch: calc(var(--ila-loader-size) / 2.2);
+
+  display: block;
+  width: var(--ila-loader-size);
+  aspect-ratio: 1;
+  flex: none;
+
+  --g1: conic-gradient(
+    from 90deg at top 3px left 3px,
+    #0000 90deg,
+    var(--ila-loader-color) 0
+  );
+  --g2: conic-gradient(
+    from -90deg at bottom 3px right 3px,
+    #0000 90deg,
+    var(--ila-loader-color) 0
+  );
+  background:
+    var(--g1),
+    var(--g1),
+    var(--g1),
+    var(--g1),
+    var(--g2),
+    var(--g2),
+    var(--g2),
+    var(--g2);
+  background-position:
+    0 0,
+    100% 0,
+    100% 100%,
+    0 100%;
+  background-size: var(--ila-loader-patch) var(--ila-loader-patch);
+  background-repeat: no-repeat;
+  animation: ila-loader-spin 1.5s infinite;
+}
+
+/** Compact size for loaders sitting beside text or inside a pill. */
+.ila-loader--sm {
+  --ila-loader-size: 30px;
+}
+
+/**
+ * Light stroke for dark surfaces — use whenever the loader sits on a dark
+ * background (e.g. `.emi-appreciation`, `.find-your-plot`). `#f4f1ea` is the
+ * cream already used for text on those surfaces, so the loader matches rather
+ * than reading as a separate colour. Combines with any size modifier:
+ *   className="ila-loader ila-loader--sm ila-loader--light"
+ */
+.ila-loader--light {
+  --ila-loader-color: #f4f1ea;
+}
+
+/**
+ * Four sizes are declared while eight layers are painted; CSS cycles the list
+ * for the remaining four. This is the original animation and must not be
+ * "tidied up" into eight values — that changes the motion.
+ *
+ * Multipliers are the original 35px/15px values against the original 25px
+ * patch: 1.4 and 0.6.
+ */
+@keyframes ila-loader-spin {
+  0% {
+    background-size:
+      calc(var(--ila-loader-patch) * 1.4) calc(var(--ila-loader-patch) * 0.6),
+      calc(var(--ila-loader-patch) * 0.6) calc(var(--ila-loader-patch) * 0.6),
+      calc(var(--ila-loader-patch) * 0.6) calc(var(--ila-loader-patch) * 1.4),
+      calc(var(--ila-loader-patch) * 1.4) calc(var(--ila-loader-patch) * 1.4);
+  }
+  25% {
+    background-size:
+      calc(var(--ila-loader-patch) * 1.4) calc(var(--ila-loader-patch) * 1.4),
+      calc(var(--ila-loader-patch) * 0.6) calc(var(--ila-loader-patch) * 1.4),
+      calc(var(--ila-loader-patch) * 0.6) calc(var(--ila-loader-patch) * 0.6),
+      calc(var(--ila-loader-patch) * 1.4) calc(var(--ila-loader-patch) * 0.6);
+  }
+  50% {
+    background-size:
+      calc(var(--ila-loader-patch) * 0.6) calc(var(--ila-loader-patch) * 1.4),
+      calc(var(--ila-loader-patch) * 1.4) calc(var(--ila-loader-patch) * 1.4),
+      calc(var(--ila-loader-patch) * 1.4) calc(var(--ila-loader-patch) * 0.6),
+      calc(var(--ila-loader-patch) * 0.6) calc(var(--ila-loader-patch) * 0.6);
+  }
+  75% {
+    background-size:
+      calc(var(--ila-loader-patch) * 0.6) calc(var(--ila-loader-patch) * 0.6),
+      calc(var(--ila-loader-patch) * 1.4) calc(var(--ila-loader-patch) * 0.6),
+      calc(var(--ila-loader-patch) * 1.4) calc(var(--ila-loader-patch) * 1.4),
+      calc(var(--ila-loader-patch) * 0.6) calc(var(--ila-loader-patch) * 1.4);
+  }
+  100% {
+    background-size:
+      calc(var(--ila-loader-patch) * 1.4) calc(var(--ila-loader-patch) * 0.6),
+      calc(var(--ila-loader-patch) * 0.6) calc(var(--ila-loader-patch) * 0.6),
+      calc(var(--ila-loader-patch) * 0.6) calc(var(--ila-loader-patch) * 1.4),
+      calc(var(--ila-loader-patch) * 1.4) calc(var(--ila-loader-patch) * 1.4);
+  }
+}
+
+/**
+ * Frozen mid-pose rather than hidden, so the state still reads as "working".
+ * This preserves the previous `motion-safe:animate-spin` behaviour.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ila-loader {
+    animation: none;
+  }
+}

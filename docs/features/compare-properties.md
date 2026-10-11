@@ -249,7 +249,7 @@ If a purpose-built comparison endpoint is later confirmed, the comparison view s
 
 ### Loading, empty, and error states (proposed)
 
-- **Loading** — the comparison view's initial state, mirroring the `Loading property…` / `Loading properties…` wording already in use ([`property-details.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-details.md) §43, [`property-list.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-list.md) §23). `role="status"` as the catalogue uses.
+- **Loading** — the comparison view's initial state, mirroring the `Loading property…` / `Loading properties…` wording already in use ([`property-details.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-details.md) §43, [`property-list.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-list.md) §23). `role="status"` as the catalogue uses, with the shared `ila-loader ila-loader--sm` animation beside the text ([`loading.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\loading.md)).
 - **Empty — nothing selected** — the primary state on a cold visit to `/compare`. Must state how to add properties and link to `/properties`. This is the most likely first impression of the route.
 - **Empty — one selected** — below the minimum; explain how many more are needed.
 - **Empty — a selection that cannot be resolved** — all stored ids unavailable; clear the stale selection and fall back to the empty state (§10).
@@ -265,6 +265,231 @@ Follow the existing Tailwind breakpoints: base, `sm` (`640px`), `md` (`768px`), 
 - **Mobile (below `sm`)** — the side-by-side table does not fit, and stacking vertically loses the comparison. **Proposed pattern:** horizontal scrolling, with the attribute label column sticky at the left edge and property columns scrolling beneath it. This is the established horizontal-scroll convention in the project — `GrowthCorridors` uses horizontal overflow for locality cards on mobile ([`map.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\map.md) §20) and `MapSection`'s amenities list uses `overflow-x-auto` ([`property-popup.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-popup.md) §16).
 
 Sticky-column behavior and whether it degrades gracefully without JavaScript is `UNKNOWN — needs verification`. An alternative pattern — one property per scroll-snap screen with per-property attribute lists — is mobile-friendly but is a different information model and is not recommended unless the sticky column proves unworkable.
+
+### One left gutter on mobile: 20px
+
+Below `sm` every piece of content starts at **x = 20px** (`px-5`). This was not true and the elements disagreed with each other:
+
+| Element | Was | Now |
+|---|---|---|
+| Heading block | `px-6` → 24px | `px-5` → 20px |
+| Selection card | `px-4` → 16px | `px-5` → 20px |
+| Property tiles | `-mx-4 px-4` → 16px | `-mx-5 px-5` → 20px |
+| "N of 5 selected" row | 16px (card padding) | 20px |
+| "Compare now" button | 16px (card padding) | 20px |
+| `compareError` line | 0px (wrapper edge) | 20px |
+| Results table, sticky label column | `px-3` → 12px | `px-5` → 20px |
+| Results table, group header | `px-3` / `sticky left-3` | `px-5` / `sticky left-5` |
+
+The card and the results table are **full-bleed and square-edged on mobile** by design — inset and rounded from `sm` up. That means they cannot sit inside a section gutter; they carry it themselves, which is why their inner padding *is* the gutter.
+
+### Background: a dot grid
+
+```html
+<section class="relative overflow-hidden bg-[#eceef2]">
+  <div aria-hidden class="compare-plots-bg pointer-events-none absolute inset-0 z-0" />
+  <div class="content-slot …">…</div>
+</section>
+```
+
+`.compare-plots-bg` lives in `globals.css`. One layer: a 0.8px dot on a `25px 10px` tile, masked by a radial ellipse from `0.7` at the centre to `0` at 75%. Both content wrappers carry `.content-slot` (`position: relative; z-index: 1`) so they sit above it — the same stacking helper `GrowthCorridors` and `FindYourPlot` use.
+
+| | Source | Here |
+|---|---|---|
+| Fill | `#E5E5F7` | `#eceef2` — the section surface |
+| Dot | `#444CF7` | `#c9a84c` — the section's gold, same value as the selected card border |
+| `opacity` | `0.8` | **`0.8`, kept** |
+| Tile | `25px 10px` | unchanged |
+| Mask | `0.7 → 0` at 75% | unchanged |
+
+**The opacity is deliberately *not* reduced.** 0.8 is what the source was designed for — a dark dot on a light surface, which is what this is. `.find-your-plot-bg` had to come down to `0.16` on the dark section for the same pattern family, because there the equivalent weight put bright lines under `#f2f0ea` body copy. The value has to match the surface, not the pattern.
+
+Unlike the blueprint tile there is **no fill/erase coupling** to preserve: this pattern's fill and dot are independent colours, where the blueprint tile repeats its fill inside every gradient as the stop that erases the line work.
+
+### Status line, Clear all, and the Compare action
+
+| State | Status copy |
+|---|---|
+| 0 selected | `Select at least 2 to compare` |
+| 1 selected | `Select 1 more to compare` |
+| 2 or more | `2 of 5 selected` |
+
+The old copy was always `N of 5 selected`, optionally suffixed with `· add 1 more to compare`. At zero that put a count in front of a dead button and named no next step. The counts come from `COMPARE_MIN_IDS` / `COMPARE_MAX_IDS`; the middle state is literal because the minimum is 2.
+
+**The disabled button** is `disabled:bg-[#e4e7ec] disabled:text-[#5b6270]`, which measures **4.9:1**. The previous `disabled:bg-black/8 disabled:text-[#8a909e]` sat near **1.9:1** over the card's own `#f7f8fa` — grey on grey, effectively unreadable — while still reading as *enabled*, since the gold fill, hover and shadow were already gone.
+
+**Clear all** carries `min-h-11` for a 44px tap target with the label still at 11px, plus `-mr-2 px-2` to widen the hit area without moving the text off the row's right edge.
+
+### The action row is sticky on mobile
+
+When at least one card is selected, the status row **and** the Compare button — one wrapper, not the status line alone — pin to the bottom of the viewport:
+
+```
+sticky bottom-0 z-20 bg-[#f7f8fa] pb-[env(safe-area-inset-bottom)]
+sm:static sm:z-auto sm:bg-white/80 sm:pb-0
+```
+
+- The background is opaque because cards scroll underneath it. It matches the card it sits in: `#f7f8fa` on mobile, `white/80` from `sm`.
+- `pb-[env(safe-area-inset-bottom)]` keeps the button clear of the home indicator on phones with a gesture bar.
+- Reset entirely at `sm`, where the row is no longer pinned.
+
+**This required changing the section's `overflow-hidden` to `overflow-x-clip`.** `overflow: hidden` creates a scroll container, and a sticky descendant resolves against its nearest scrollport — so under `overflow: hidden` the row would have had a scrollport that never scrolls, and sticky would have done nothing at all. `overflow: clip` clips just as well and is not a scroll container. This is the same fix `FindYourPlot`'s section already uses.
+
+### Comparison table
+
+#### There is no label column
+
+Each metric is a **caption line above its values**, not a row with a label in a left column:
+
+```
+┌──────────────────────────────┬──────────────────┐
+│ caption, sticky left         │ (spans scroll)  │
+├──────────────────────────────┼──────────────────┤
+│ value 1 (46%)                │ value 2 (46%)    │ ...
+```
+
+The caption and group bar are `sticky left-0` and cover the visible scrollport; the value rows overflow it. The label no longer competes with the data for width, and by property four there is still something naming the numbers.
+
+**The reference image shows a left label column, and this does not.** It is the one deliberate departure. The caption-above structure was the previous request; the reference is being applied as a *design* — surface, gold, best-value treatment, bars, footer CTAs — not as a replacement layout. If the reference layout is wanted wholesale, the caption `<p>` and the `sticky left-0` on the group bar come out and the rows go back to a grid with a label track.
+
+#### One scroller, 46% cells, snapped
+
+```
+<div class="snap-x snap-mandatory overflow-x-auto">
+  <div class="sticky top-[var(--nav-h)] z-30 flex bg-[#141519]">  ← headers
+  <section>
+    <h3 class="sticky left-0 z-20 bg-[#1b1d22] …">               ← group bar
+    <p  class="sticky left-0 z-10 bg-[#141519] …">               ← metric caption
+    <div class="flex">
+      <div class="w-[46%] shrink-0 snap-start …">               ← value
+  <div class="flex">                                             ← footer CTAs
+    <div class="w-[46%] shrink-0 snap-start …">
+```
+
+- **One scroller** holds the header and every value row, so a swipe moves all the columns as a unit instead of each row drifting on its own.
+- **`w-[46%]`** is applied to the cells, not to a shared `grid-template-columns`. Every row is its own flex container, so the percentage resolves against the scrollport on each one. A shared track was what made the old label column eat a quarter of the width.
+- **`snap-x snap-mandatory`** on the container with **`snap-start`** on each cell: a swipe lands cleanly on a column rather than between two.
+- Borders live on the **cells**, not the row. The row element is 100% of the scrollport while its cells overflow it, so a `border-b` on the row would stop short of the last column.
+
+`columnTemplate`, `GRID_COLUMNS`, the `--cmp-cols` / `--cmp-cols-wide` variables and the `min-w-[32rem]` scroll content are all deleted — the grid template is gone with the label column.
+
+#### `overflow-x-clip`, not `overflow-hidden`
+
+On the table wrapper and on the section. `overflow: hidden` creates a scroll container, and every sticky layer above resolves against its nearest scrollport — so under `hidden` the pinned captions and the sticky header would have had nothing to resolve against and would not have moved. `clip` still rounds the corners horizontally and is not a scroll container.
+
+#### Group bars
+
+`bg-[#1b1d22]` with `text-[#c9a84c]`.
+
+`#1b1d22` is a half-step off the `#141519` table surface, so the groups read as bands within the card rather than as headings floating over it. The gold is the same `#c9a84c` used for best values and the CTA — one accent, three jobs, which is why the section only reads as having one highlight colour.
+
+Two earlier attempts are worth recording: `bg-[#0f1114]` was the darkest element in the entire light section, and `#fbf1da`/`#7a5c28` was correct for the light table but wrong here — a cream bar on a near-black card is a light source, not a label.
+
+#### Dark surface
+
+| Role | Value |
+|---|---|
+| Table card | `#141519` |
+| Group band | `#1b1d22` |
+| Hairline rule / cell divider | `rgba(242,240,234,0.08)` |
+| Card border | `rgba(242,240,234,0.12)` |
+| Property name | `#f2f0ea` |
+| Value | `#e8e6e1` |
+| Metric caption, locality | `#8a909e` |
+| Value, missing | `#6b7280` |
+| Best value, group bar, CTA | `#c9a84c` |
+| CTA ink | `#0f1114` |
+
+**Gold is reserved.** It appears only on the winning value in a row, the group bars, the best-match header label, the score bars for a winning score, the RERA tick, and the footer CTA. Any one of those uses is a claim about the data; using it for anything decorative would spend the accent.
+
+The best value also gets `bg-[rgba(201,168,76,0.05)]` on its cell and the best-match column `bg-[rgba(201,168,76,0.08)]`. Both are far below the 4.5:1 contrast floor as a *text* background — they are behind 15px bold text, so they are decoration on top of the `#141519` card, not the surface the text is read against.
+
+#### Header micro-labels
+
+Each property column carries a 10px uppercase label: **`Best match`** in gold, **`Pinned`** in grey.
+
+`bestMatchId` is computed by **tallying `best_property_id` across every row**, not by comparing a price or a score. This means the label describes what the table itself highlights rather than a metric picked separately — a property that wins nothing simply falls through to "Pinned", which is the honest outcome rather than a wrong claim.
+
+Below it: the property name at 15px bold, then `metrics.locality ?? metrics.location` at 12px in `#8a909e`, omitted entirely when the backend returned neither.
+
+#### Score bars
+
+Only `connectivity_score` and `estimated_appreciation` get a 3px bar under the number, in `SCORE_METRICS`.
+
+Both are genuinely bounded and already expressed out of 100, so the bar is a true proportion. Every other metric would need a maximum invented for it, and a bar drawn against an invented maximum misrepresents the data it is supposed to be clarifying. Clamped with `Math.max(0, Math.min(100, score))` so an out-of-range backend value cannot overflow the track. Winning scores are gold, the rest `#8a8f98`. The track is `aria-hidden` — the number above it is the accessible value.
+
+#### RERA tick
+
+A `&#10003;` under the value **only** on `approval_status`, and only when the string actually matches `/rera/i`.
+
+A tick is a claim about registration, so it is drawn where the value says RERA and nowhere else. Written as a numeric character reference rather than a literal `✓` to keep the file ASCII-clean.
+
+#### Footer CTAs
+
+One gold "Enquire on {name}" button per column, on the **same snap track as the columns** so each button travels with its own property instead of detaching from it.
+
+`min-h-11`, so the button is a 44px touch target despite its 13px label. `max-w-[220px]` stops the text running the full 46% column width on a wide screen.
+
+#### Row height and type scale
+
+Every value cell is `min-h-[56px]` and `flex-col justify-center` — the bar and the tick need a second line under the number, which `items-center` on a single-line cell could not give. Side padding is `px-4` (16px), up from 12px to match the wider dark surface.
+
+| Element | Size | Weight / treatment |
+|---|---|---|
+| Header micro-label | 10px | `font-bold`, `tracking-[0.14em]`, `uppercase`; gold when best match, `#6b7280` otherwise |
+| Property name (header) | 15px | `font-bold tracking-tight`, `#f2f0ea` |
+| Locality (header) | 12px | `#8a909e`, `truncate` |
+| Metric caption | 12px | `font-medium`, `#8a909e` |
+| Value | 15px | `font-semibold` `#e8e6e1`; `font-bold` `#c9a84c` when it is the best in the row |
+| Value, missing | 12px | `#6b7280`, no italic |
+| Group bar | 11px | `uppercase`, `tracking-[0.16em]`, `#c9a84c` on `#1b1d22` |
+| Footer CTA | 13px | `font-semibold`, `#0f1114` on `#c9a84c` |
+
+**The 12px "Best" badge is gone.** The reference shows the winning value as gold text and nothing else. On a dark card a filled gold pill next to every winning number was a second, louder mark for the same fact — and at 12px it was competing with the value itself. Gold text plus a 5%-opacity cell tint is one signal, not two.
+
+**`tabular-nums` on every value.** Prices, areas and plot counts are read column against column, so the digits have to sit on the same width. In the default proportional figures a `1` is far narrower than a `9` and the columns read as ragged rather than as numbers.
+
+**The missing-value case drops the italic.** Italic was doing the "this is absent" job that the grey already does, and it was also competing with the metric caption directly above it.
+
+### Property card internals
+
+| Element | Treatment |
+|---|---|
+| Tap target | The **entire card**. It is a single `<button>`; the `+` and the selection circle are `aria-hidden` decoration inside it, not separate controls |
+| Card min height | `min-h-[11rem` (176px) |
+| Name | `text-[16px] font-semibold`, `line-clamp-2` |
+| Location | `text-[12px] text-white/70`, `truncate`, under the name |
+| Price | `text-[14px] font-semibold text-white/85`, `mt-auto` so it sits on the card floor |
+| Selection circle | Top-right, `h-6 w-6`. `+` while unselected, the selection number once chosen, filled gold |
+| Scrim | `from-black/90 via-black/62 to-black/45`, **always rendered**, `pointer-events-none` |
+
+**The selection order moved inside the card.** It was a badge at `-top-2 -left-2`, overhanging the corner — clipped by the carousel's own edges on the first and last cards, and cut in half on any card near the viewport edge. It is now the top-right circle: `+` when unselected, `1` / `2` / … in a filled gold circle when selected. The `CheckIcon` that used to occupy that circle when selected is deleted; the number carries both the state and the order in one glyph.
+
+**The scrim is unconditional.** It used to live inside the `cover_url` branch, so the 4.5:1 contrast guarantee for white text held only while every property happened to have a cover image. Over the card's own `#1b1d22` it is invisible, so rendering it always costs nothing and means a photo can be added later without revisiting this.
+
+**The location line needs a join.** `GET /api/properties` returns a trimmed row with `location_id` but **no `location_name`** — `location_name` only exists on `ApiProperty`, the ~71-field single-property type. So the section now also fetches `GET /api/locations` once and keys it by `id`. A failure there is logged, not surfaced: cards stay selectable and comparable, they just lose the location line.
+
+Only the locality is available this way. A second segment such as the `DTCP` in "Shadnagar · DTCP" is a layout or approval name and would need the per-property endpoint — one request per card, which is why it is not done.
+
+### Carousel bleed: right edge only
+
+The tiles `<ul>` is `-mr-5 pr-5`. Its box starts on the card's content edge — the 20px gutter — and runs out to the screen's right edge, so tiles scroll off the right and never off the left.
+
+It was `-mx-5 px-5`, which pulled the box to x = 0 as well: two bleed edges, and the strip read as detached from the card rather than starting on its gutter.
+
+**There is deliberately no `scroll-pl-5` here.** The container's left edge *is* the 20px gutter now, so `snap-start` already parks each tile on it. Adding scroll padding on top would push the snap to 40px — a gutter of double the intended width, visible every time the strip settles. `scroll-pl-*` is only needed when the container's own left edge is at 0 and the padding is inside it.
+
+`pr-5` keeps the last tile off the screen edge at the end of the scroll.
+
+### Vertical rhythm, mobile
+
+| Gap | Value | Made of |
+|---|---|---|
+| Viewport edge → eyebrow | **48px** | wrapper `pt-12` |
+| Intro paragraph → card block | **24px** | wrapper `pb-6` |
+| Compare button → next section | **32px** | card `py-4` (16px) + block wrapper `pb-4` (16px) |
+
+The bottom gap previously did not exist at all: the unified block's wrapper carried `sm:pb-12` but **no** mobile bottom padding, so the next section followed the button after only the card's own 16px.
 
 Styling must reuse the existing palette and card conventions: `rounded-2xl`, `border`, the documented gold `#c6a46c` hover treatment, `focus-visible:outline-2` ([`property-list.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-list.md) §35). Do not introduce a new visual system. Whether the comparison view needs its own stylesheet alongside `PropertyDetail.css` is a minor open question; a component using Tailwind utilities alone is consistent with `PropertiesList`.
 

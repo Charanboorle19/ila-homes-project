@@ -6,12 +6,35 @@
   --accent: #c6a46c;
   --accent-bright: #d4b57e;
   --nav-h: 3.5rem;
+
+  /*
+   * The site gutter: one value read by the header, the footer and every
+   * property section, so they all start on the same x. Left-anchored rather
+   * than a centred max-width box, which is what let the header logo and a
+   * section heading drift apart.
+   *
+   * Phones keep the fixed 20px the layout was built against; from tablet
+   * width it becomes fluid.
+   */
+  --ila-gutter: 20px;
 }
 
 @media (min-width: 640px) {
   :root {
     --nav-h: 4rem;
   }
+}
+
+@media (min-width: 768px) {
+  :root {
+    --ila-gutter: clamp(24px, 3vw, 56px);
+  }
+}
+
+/* For the header, which is utility classes rather than a stylesheet. */
+.ila-gutter-x {
+  padding-left: var(--ila-gutter);
+  padding-right: var(--ila-gutter);
 }
 
 @theme inline {
@@ -182,6 +205,47 @@ body {
   background-color: rgba(36, 35, 31, 0.62);
 }
 
+/* Dark-surface counterpart to `.ila-scroll`, for the Find Your Plot results
+   panel and its mobile sheet. Same shape — transparent track, floating pill
+   thumb — with light-thumb colours so it reads against `#1c1f24`.
+
+   It also hides the WebKit scrollbar buttons, which `.ila-scroll` does not.
+   Those render as small arrows pinned to each end of the track and read as a
+   stray control against a rounded panel; `::-webkit-scrollbar-button` has to
+   be reset explicitly, since setting a width on `::-webkit-scrollbar` alone
+   leaves them. */
+.ila-scroll-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(242, 240, 234, 0.3) transparent;
+}
+
+.ila-scroll-dark::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.ila-scroll-dark::-webkit-scrollbar-track,
+.ila-scroll-dark::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.ila-scroll-dark::-webkit-scrollbar-thumb {
+  background-color: rgba(242, 240, 234, 0.3);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
+}
+
+.ila-scroll-dark::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(242, 240, 234, 0.5);
+}
+
+.ila-scroll-dark::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 @keyframes fyp-progress {
   0% {
     transform: translateX(-120%);
@@ -326,15 +390,6 @@ body {
     opacity: 1;
     transform: translateX(0) scale(1);
   }
-}
-
-/* Indeterminate spinner shown while a property detail + /units layout loads. */
-.ila-map-loader {
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  border: 3px solid rgba(23, 23, 23, 0.14);
-  border-top-color: #171717;
 }
 
 /* Sliding bar across the top of the map frame during the same load. */
@@ -519,16 +574,26 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 0.35rem;
-  pointer-events: none;
+  cursor: pointer;
 }
 
+/* Unselected locality: a small dot with a quieter label. */
 .ila-corridor-marker__dot {
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   border-radius: 999px;
+  background: rgba(201, 168, 76, 0.8);
+  border: 1px solid #0f1114;
+  box-shadow: 0 2px 8px rgba(15, 17, 20, 0.25);
+}
+
+/* Selected locality: larger dot, solid gold, brighter label. */
+.ila-corridor-marker--active .ila-corridor-marker__dot {
+  width: 16px;
+  height: 16px;
   background: #c9a84c;
-  border: 2px solid #0f1114;
-  box-shadow: 0 4px 12px rgba(15, 17, 20, 0.25);
+  border-width: 2px;
+  box-shadow: 0 4px 12px rgba(15, 17, 20, 0.3);
 }
 
 .ila-corridor-marker__label {
@@ -544,12 +609,293 @@ body {
   white-space: nowrap;
 }
 
+.ila-corridor-marker:not(.ila-corridor-marker--active) .ila-corridor-marker__label {
+  background: rgba(15, 17, 20, 0.68);
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.ila-corridor-marker:hover .ila-corridor-marker__dot {
+  background: #c9a84c;
+}
+
 @media (min-width: 768px) {
   /* Slide MapLibre's attribution out from under the left sidebar. */
   .ila-map-frame:not(.ila-map-frame--fullscreen):has(> aside)
     .maplibregl-ctrl-attrib {
     left: 376px;
   }
+}
+
+/*
+ * Growth corridors background pattern: a fine mesh laid over a sparse grid.
+ *
+ * Four layers, top to bottom:
+ *   1 & 2. a ~6.67px mesh of surface-coloured blocks, horizontally then
+ *          vertically
+ *   3 & 4. 0.6px accent rules repeating every 20px, horizontally then
+ *          vertically, offset by 0.2px in `background-position` so they land
+ *          on whole pixels and stay crisp
+ *
+ * The mesh sits *above* the grid and shares its colour with
+ * `background-color`, so it knocks the rules out in blocks rather than hiding
+ * them uniformly — that interference is what produces the dotted look. Swap
+ * the two colours and the pattern collapses into plain lines.
+ *
+ * The radial mask keeps it from competing with the content: opaque through the
+ * middle where the heading and card grid sit, fading to zero by 75% so the
+ * grid never reaches a hard edge.
+ *
+ * That floor was later lifted. It read as a spotlight in the middle of the
+ * section with bare `#1c1f24` filling the corners, which made the background
+ * look like an accident rather than a surface treatment. It now falls to a
+ * 40% floor and holds it to the edges, so the pattern reads across the whole
+ * section. Raising the pattern's own `opacity` is the other lever if it still
+ * reads as too faint; the two are independent.
+ *
+ * Colours are the section's own: surface `#eceef2`, rules `#8a6a1f` — the
+ * dark gold used by the eyebrow, the selected-row rail and the active card
+ * border. `-webkit-mask-*` duplicates the unprefixed properties for Safari.
+ */
+.growth-corridors-bg {
+  background-color: #eceef2;
+  opacity: 0.4;
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent 1.6666666666666667px,
+      #eceef2 1.6666666666666667px,
+      #eceef2 5px,
+      transparent 5px,
+      transparent 6.666666666666667px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 1.6666666666666667px,
+      #eceef2 1.6666666666666667px,
+      #eceef2 5px,
+      transparent 5px,
+      transparent 6.666666666666667px
+    ),
+    linear-gradient(to bottom, #8a6a1f 0.6px, transparent 0.6px),
+    linear-gradient(to right, #8a6a1f 0.6px, transparent 0.6px);
+  background-size:
+    100% 100%,
+    100% 100%,
+    20px 20px,
+    20px 20px;
+  background-position:
+    0 0,
+    0 0,
+    0 -0.2px,
+    -0.2px 0;
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0) 75%
+  );
+  mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0) 75%
+  );
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/*
+ * Caps the Find Your Plot desktop results panel so it can never outgrow the
+ * viewport.
+ *
+ * Without a cap, five or more result rows made the panel taller than the screen
+ * and the last row was simply unreachable. The subtraction is the fixed nav plus
+ * this section's own vertical padding (6rem at desktop), leaving 3rem of slack
+ * for rounding.
+ *
+ * This is a class rather than `max-h-[calc(100svh-var(--nav-h)-9rem)]` because
+ * Tailwind's scanner silently drops that arbitrary value: the two-term form
+ * `calc(100svh - var(--nav-h))` is emitted correctly -- see
+ * `.lg:min-h-[calc(100svh-var(--nav-h))]` in GrowthCorridors -- but adding a
+ * third term makes the class produce no rule at all, so the cap would never
+ * apply and nothing would look wrong. `svh` rather than `vh` so a mobile
+ * browser's collapsed address bar cannot push the panel past the usable area.
+ */
+@media (min-width: 981px) {
+  .find-your-plot-panel {
+    max-height: calc(100svh - var(--nav-h) - 9rem);
+  }
+}
+
+/*
+ * The panel grows past the left column's height, up to the available viewport.
+ *
+ * `align-self: start` detaches the `<aside>` from the grid row's stretch, so it
+ * can be taller than the left column instead of matching it. Without it the
+ * stretch wins over any height set here and the panel stays locked to
+ * whatever the heading plus the 2x2 tile grid happens to measure — which is
+ * what left it short, and very obviously short once the panel widened to fill
+ * the space right of that column.
+ *
+ * The height is derived from the viewport rather than from the content, so the
+ * panel is the same height on two screens of different sizes. `7rem` is this
+ * section's own `py-24` (96px) below its top edge plus a little breathing room;
+ * `100svh` rather than `100vh` so a mobile browser's collapsed address bar
+ * cannot push it past the usable area.
+ *
+ * **This trades away the equal column heights.** The panel's bottom now sits
+ * below the Previous / Next row on any screen taller than the left column's
+ * content. That was a deliberate choice two changes ago; if equal bottoms
+ * matter more than the extra height, drop `align-self` and the `height` here
+ * and the panel returns to tracking the row.
+ */
+@media (min-width: 981px) {
+  .find-your-plot-panel {
+    align-self: start;
+    height: calc(100svh - var(--nav-h) - 7rem);
+  }
+}
+
+/*
+ * Keeps the growth corridors section content above its blueprint background.
+ * The background itself is positioned by utilities on the element in
+ * GrowthCorridors.tsx, so only the stacking order lives here.
+ */
+.content-slot {
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * Compare Properties background: a fine dot grid over the section's own
+ * surface.
+ *
+ * Single layer, so there is no fill/erase coupling to preserve here. The source
+ * pattern's `#E5E5F7` fill and `#444CF7` dot are independent — unlike the
+ * blueprint tile below, where the fill colour also appears as the stop that
+ * erases the line work and the two must not drift apart.
+ *
+ * The source `opacity: 0.8` is kept exactly. It is not reduced, and that is
+ * deliberate: 0.8 was designed for a dark dot on a light surface, which is what
+ * this is. The same value had to come down to 0.16 on the dark Find Your Plot
+ * surface, where the equivalent weight put bright lines under body copy. Match
+ * the value to the surface, not across sections.
+ *
+ * The dot colour is the section's own gold `#c9a84c`, the same value as the
+ * selected card border and the compare action.
+ */
+.compare-plots-bg {
+  background-color: #eceef2;
+  opacity: 0.8;
+  background-image: radial-gradient(circle, #c9a84c 0.8px, transparent 0.8px);
+  background-size: 25px 10px;
+  mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0) 75%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0) 75%
+  );
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+}
+
+/*
+ * Find Your Plot background: the same blueprint tile as `.growth-corridors-bg`'s
+ * family, on a dark surface.
+ *
+ * The source pattern is two colours doing two jobs:
+ *   - `#E5E5F7` is the fill. It appears as `background-color` AND inside every
+ *     gradient as the stop that *erases* the line colour, because the gradients
+ *     paint over the fill rather than being composited with it.
+ *   - `#444CF7` is the line work only: the arcs, the diagonal hatching, the
+ *     border ticks.
+ *
+ * Both are retinted to this section's own palette. **The fill must stay equal
+ * to `background-color`** -- the erase stops only line up with the arcs and
+ * hatching if they are the same colour as the fill, and changing one without
+ * the other leaves a second, misaligned copy of the pattern painted on top.
+ *
+ * Two adjustments to the source values, both because the surface is dark:
+ *
+ *   - `opacity: 0.16`, not the source `0.8`. The source line colour is a mid
+ *     blue on near-white, a combination that stays quiet at full strength. The
+ *     same gold at the same weight on near-black is a set of bright lines
+ *     running under `#f2f0ea` body copy. 0.16 keeps the tile legible as a
+ *     texture without competing with the text.
+ *   - The mask falls from `0.8` at the centre to a `0.4` floor at the edges
+ *     rather than to zero, so the pattern is present across the whole section
+ *     instead of pooling in the middle with bare surface in the corners.
+ */
+.find-your-plot-bg {
+  background-color: #1c1f24;
+  opacity: 0.16;
+  background-image:
+    radial-gradient(
+      circle farthest-side at 0% 50%,
+      #1c1f24 23.5%,
+      transparent 0
+    ),
+    radial-gradient(
+      circle farthest-side at 0% 50%,
+      #c6a46c 24%,
+      transparent 0
+    ),
+    linear-gradient(#1c1f24 14%, transparent 0, transparent 85%, #1c1f24 0),
+    linear-gradient(
+      150deg,
+      #1c1f24 24%,
+      #c6a46c 0 26%,
+      transparent 0 74%,
+      #c6a46c 0 76%,
+      #1c1f24 0
+    ),
+    linear-gradient(
+      30deg,
+      #1c1f24 24%,
+      #c6a46c 0 26%,
+      transparent 0 74%,
+      #c6a46c 0 76%,
+      #1c1f24 0
+    ),
+    linear-gradient(
+      90deg,
+      #c6a46c 1.6%,
+      #1c1f24 0 98.4%,
+      #c6a46c 0
+    );
+  background-position:
+    16px 23px,
+    14px 23px,
+    0 0,
+    0 0,
+    0 0,
+    0 0;
+  background-size: 30px 45px;
+  mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(0, 0, 0, 0.5) 70%,
+    rgba(0, 0, 0, 0.4) 100%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(0, 0, 0, 0.5) 70%,
+    rgba(0, 0, 0, 0.4) 100%
+  );
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -570,6 +916,30 @@ body {
   .ila-map-frame--fullscreen .maplibregl-canvas-container,
   .ila-map-frame--fullscreen .maplibregl-canvas,
   .ila-map-frame--fullscreen .maplibregl-map {
+    touch-action: none !important;
+  }
+
+  /*
+   * Same behaviour for the growth corridors map, under its own class name
+   * rather than reusing `.ila-map-frame`.
+   *
+   * The developments frame carries extra rules further up this file -- notably
+   * `:has(> aside)` sliding the attribution clear of a 376px sidebar -- and
+   * this map has no such sidebar, so sharing the class would shift its
+   * attribution off to the left for no reason.
+   */
+  .ila-corridor-map-frame:not(.ila-corridor-map-frame--fullscreen)
+    .maplibregl-canvas-container,
+  .ila-corridor-map-frame:not(.ila-corridor-map-frame--fullscreen)
+    .maplibregl-canvas,
+  .ila-corridor-map-frame:not(.ila-corridor-map-frame--fullscreen)
+    .maplibregl-map {
+    touch-action: pan-y !important;
+  }
+
+  .ila-corridor-map-frame--fullscreen .maplibregl-canvas-container,
+  .ila-corridor-map-frame--fullscreen .maplibregl-canvas,
+  .ila-corridor-map-frame--fullscreen .maplibregl-map {
     touch-action: none !important;
   }
 }

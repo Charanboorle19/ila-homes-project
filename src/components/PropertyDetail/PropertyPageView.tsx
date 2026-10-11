@@ -14,7 +14,7 @@ import PropertyHero from "@/components/PropertyDetail/PropertyHero";
 import LifeStageMatch from "@/components/PropertyDetail/LifeStageMatch";
 import FutureNeighbourhoodMap from "@/components/PropertyDetail/FutureNeighbourhoodMap";
 import Lifestyle from "@/components/PropertyDetail/Lifestyle";
-import PriceEmiFuture from "@/components/PropertyDetail/PriceEmiFuture";
+import AffordabilityFinancing from "@/components/PropertyDetail/AffordabilityFinancing";
 import LegalDocuments from "@/components/PropertyDetail/LegalDocuments";
 import SatelliteBeforeAfter from "@/components/PropertyDetail/SatelliteBeforeAfter";
 import BuyingJourneySteps from "@/components/PropertyDetail/BuyingJourneySteps";
@@ -34,6 +34,8 @@ export default function PropertyPageView({
   documentsState = "ready",
 }: PropertyPageViewProps) {
   const heroRef = useRef<HTMLElement | null>(null);
+  /** The enquiry form, so the sticky bar can step aside while it is on screen. */
+  const formRef = useRef<HTMLElement | null>(null);
 
   // PROPERTY_VIEW on entry, TIME_ON_PROPERTY + PROPERTY_REVISIT on exit.
   useTrackPropertyView(property.id);
@@ -71,15 +73,20 @@ export default function PropertyPageView({
       <LifeStageMatch property={property} />
       <FutureNeighbourhoodMap property={property} />
       <Lifestyle key={property.id} property={property} />
-      <PriceEmiFuture property={property} />
-      <LegalDocuments property={property} documentsState={documentsState} />
+      <AffordabilityFinancing property={property} />
+      <LegalDocuments
+        key={property.id}
+        property={property}
+        documentsState={documentsState}
+      />
       <SatelliteBeforeAfter property={property} />
       <BuyingJourneySteps />
       <SimilarProperties items={similar} />
-      <PropertyFinalCta property={property} />
+      <PropertyFinalCta property={property} formRef={formRef} />
       <StickyBottomCta
         property={property}
         heroRef={heroRef}
+        formRef={formRef}
         siteVisitHref={siteVisitMailto(property)}
       />
     </div>

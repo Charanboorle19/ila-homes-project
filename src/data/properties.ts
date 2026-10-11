@@ -5,6 +5,8 @@ export type LifeStageKey = "family" | "investment" | "building" | "retirement";
 export type LifeStageMatchEntry = {
   score: number;
   reason: string;
+  /** Optional property-specific reasons supplied by the live fit API. */
+  reasons?: string[];
   /**
    * True while a live fit is still being fetched. The section renders a
    * placeholder instead of a misleading 0%.

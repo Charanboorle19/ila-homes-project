@@ -11,6 +11,8 @@
  *   the user is on, so local dev automatically sends "localhost".
  * - On the server (SSR / route handlers) window is undefined, so we fall back to
  *   SITE_DOMAIN from the environment.
+ * - NEXT_PUBLIC_TENANT_DOMAIN overrides both, for when the backend has no tenant
+ *   for the browsing hostname and rejects it with UNKNOWN_DOMAIN.
  * - Never set Origin or Host; browsers manage those and forbid overriding them.
  */
 
@@ -43,6 +45,10 @@ export class ApiError extends Error {
  * diagnose than a 403 with no explanation.
  */
 export function resolveTenantDomain(): string {
+  // Literal access: Next.js only inlines the exact string form at build time.
+  const override = process.env.NEXT_PUBLIC_TENANT_DOMAIN;
+  if (override) return override;
+
   if (typeof window !== "undefined" && window.location.hostname) {
     return window.location.hostname;
   }

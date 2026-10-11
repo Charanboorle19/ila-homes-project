@@ -170,7 +170,7 @@ The map marker determines mobile behavior with `window.matchMedia("(max-width: 7
   - mobile (portalled) and desktop render sites
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\globals.css`
   - `body { background: var(--background); color: var(--foreground) }` with `--foreground: #ffffff`. Every light surface in the sheet must therefore set its own text colour.
-  - `.ila-scroll`, `.ila-tabs-scroll`, `.ila-map-loader`, `.ila-project-pin`, `animate-sheet-up`, `animate-map-hint-fade`
+  - `.ila-scroll`, `.ila-tabs-scroll`, `.ila-project-pin`, `animate-sheet-up`, `animate-map-hint-fade`. `.ila-map-loader` was removed from this file; the loading animation now lives in `src\app\loading.css` as `.ila-loader` — see `docs\features\loading.md`.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\data\properties.ts`
   - `PropertyRecord`
   - `popupSample`

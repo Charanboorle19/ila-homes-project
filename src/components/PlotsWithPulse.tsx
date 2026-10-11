@@ -89,7 +89,12 @@ export default function PlotsWithPulse() {
           <p className="plots-pulse__lede">Live activity on each plot — who&apos;s interested, when it was last visited, how it&apos;s appreciated.</p>
           <p className="plots-pulse__updating" role="status"><strong>Updating this section.</strong> These activity numbers are provisional demo estimates — not accurate live data.</p>
         </header>
-        {loading ? <p role="status">Loading properties…</p> : null}
+        {loading ? (
+          <p className="inline-flex items-center gap-2" role="status">
+            <span className="ila-loader ila-loader--sm" aria-hidden />
+            Loading properties…
+          </p>
+        ) : null}
         {!loading && error ? <p role="alert">{error}</p> : null}
         {!loading && !error && !plots.length ? <p role="status">No properties are currently available.</p> : null}
         <div className="plots-pulse__grid">

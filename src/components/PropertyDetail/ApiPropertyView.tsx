@@ -115,7 +115,11 @@ export default function ApiPropertyView({ id }: { id: string }) {
         className="property-page flex min-h-[70vh] items-center justify-center"
         style={{ paddingTop: "calc(var(--nav-h) + 2rem)" }}
       >
-        <p className="text-sm text-[#5c5852]" role="status">
+        <p
+          className="inline-flex items-center gap-2 text-sm text-[#5c5852]"
+          role="status"
+        >
+          <span className="ila-loader ila-loader--sm" aria-hidden />
           Loading property…
         </p>
       </div>

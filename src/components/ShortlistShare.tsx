@@ -312,7 +312,16 @@ export default function ShortlistShare() {
             ))}
           </ol>
           <div className="shortlist-share__choose-mobile">{renderChoose("mobile")}</div>
-          <p className="shortlist-share__count">{countText}</p>
+          <p className="shortlist-share__count">
+            {loading ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="ila-loader ila-loader--sm" aria-hidden />
+                {countText}
+              </span>
+            ) : (
+              countText
+            )}
+          </p>
           <button
             type="button"
             className="shortlist-share__share"

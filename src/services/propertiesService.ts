@@ -411,6 +411,7 @@ export type ApiLifeStagePersona = {
   persona: string;
   fit_percentage: number | null;
   reason: string | null;
+  reasons?: string[] | null;
 };
 
 export type ApiLifeStageFit = {
@@ -543,18 +544,29 @@ export async function fetchProperties(options: {
  * it omits is resolved with one property-detail call per missing property.
  * Those are issued a few at a time and individual failures are skipped — a
  * property without coordinates simply gets no pin.
+ *
+ * `onAnchor` fires the moment each coordinate pair is known, including for rows
+ * the list already carried. Callers that render pins can therefore publish
+ * them as they arrive instead of waiting for the slowest detail call in the
+ * batch; the returned record is still the complete set.
  */
 export async function fetchPropertyAnchors(
   items: PropertyListItem[],
-  options: { signal?: AbortSignal; concurrency?: number } = {},
+  options: {
+    signal?: AbortSignal;
+    concurrency?: number;
+    onAnchor?: (propertyId: string, anchor: PropertyAnchor) => void;
+  } = {},
 ): Promise<Record<string, PropertyAnchor>> {
   const anchors: Record<string, PropertyAnchor> = {};
+  const onAnchor = options.onAnchor;
   const missing: string[] = [];
 
   for (const item of items) {
     const anchor = propertyAnchor(item);
     if (anchor) {
       anchors[item.id] = anchor;
+      onAnchor?.(item.id, anchor);
     } else {
       missing.push(item.id);
     }
@@ -571,7 +583,10 @@ export async function fetchPropertyAnchors(
       try {
         const detail = await fetchPropertyById(id, options.signal);
         const anchor = propertyAnchor(detail);
-        if (anchor) anchors[id] = anchor;
+        if (anchor) {
+          anchors[id] = anchor;
+          onAnchor?.(id, anchor);
+        }
       } catch {
         // Leave this property without a pin; the list still renders it.
       }

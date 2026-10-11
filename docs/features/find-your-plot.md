@@ -46,11 +46,41 @@ The relevant order in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx
 
 The root element is a `<section>` with `data-section="land_roadmap"`, `id="contact"`, class `find-your-plot`, and `aria-label="Find your plot"`. The `contact` id is also a fragment target used elsewhere in the application; this component does not itself submit contact information.
 
+### Background
+
+The section paints a decorative blueprint tile behind its content, on a layer of its own:
+
+```html
+<section class="find-your-plot relative ... bg-[#1c1f24]">
+  <div aria-hidden="true" class="find-your-plot-bg pointer-events-none absolute inset-0 z-0"></div>
+  <div class="content-slot relative ...">...</div>
+</section>
+```
+
+`.find-your-plot-bg` lives in `globals.css`. The opacity is on the **background layer**, not on the section, so it fades the pattern and never the heading, tiles, buttons or result cards. `.content-slot` (`position: relative; z-index: 1`) holds the content above it — the same stacking helper `GrowthCorridors` uses.
+
+The pattern is six gradient layers on a 30x45px tile, masked by a radial gradient so it fades out before the section edges.
+
+**The fill colour must stay equal to `background-color`.** In the source pattern `#E5E5F7` does two jobs: it is the `background-color`, *and* it appears inside every gradient as the stop that erases the line colour. The gradients paint over the fill rather than compositing with it, so the erase stops only line up with the arcs and diagonal hatching if they match the fill. Changing one without the other leaves a second, misaligned copy of the pattern painted on top.
+
+Two values differ from the source, both because this section is dark:
+
+| | Source | Here | Why |
+|---|---|---|---|
+| Fill | `#E5E5F7` | `#1c1f24` | The section surface |
+| Line | `#444CF7` | `#c6a46c` | The section's gold accent |
+| `opacity` | `0.8` | `0.16` | A mid blue on near-white stays quiet at full strength; the same gold at the same weight on near-black is bright lines running under `#f2f0ea` body copy |
+| Mask | `0.7 → 0` at 75% | `0.8 → 0.5 → 0.4` | The original floor of zero made it a spotlight in the middle with bare `#1c1f24` in the corners. It now holds a 40% floor to the edges, so the pattern reads across the **whole** section |
+
+The mask and the opacity are independent levers: the mask shapes where the pattern is strongest, the opacity sets how strong it is everywhere.
+
+The source palette `#E5E5F7` / `#444CF7` is not used anywhere in `src/`.
+
 ## 7. Visible introductory copy
 
 - Kicker: `Find your plot`
 - Heading: `What matters to you?`
-- Description: `Pick what you care about. We'll show you properties that score on every one of it.`
+- Description: `Pick what you care about. We'll show you properties that score on every one of them.`
 
 The heading was `What are you planning?`, which referred to the removed life-stage cards and is now wrong — there is no plan step and no stage to plan for.
 
@@ -63,7 +93,7 @@ Two further strings were added with the API-backed options: the hint under the c
 3. Selecting further chips re-issues the request with the wider set; because matching is AND this narrows results.
 4. Removing a chip re-issues with the smaller set, widening results.
 5. Removing the final chip returns the section to idle without calling the API.
-6. On mobile the result sheet opens automatically and can be closed and reopened with `View matches`.
+6. On mobile a tap only selects or deselects a tile. The results sheet does **not** open on selection; a fixed bottom bar carries the match count and opens it. Closing the sheet leaves the bar in place, so it can be reopened at any time.
 
 There is no second input path and no mode switch.
 
@@ -93,7 +123,7 @@ The stage data was a curated marketing funnel: four personas, each with hand-pic
 
 ## 10. Feature controls
 
-The options are the endpoint's rows, rendered as a **bento grid** of large tiles in the left block. They appear in the order the endpoint returns them (`sort_order`, then `name`).
+The options are the endpoint's rows, rendered as an **equal-width tile grid** in the left block. They appear in the order the endpoint returns them (`sort_order`, then `name`).
 
 | Aspect | Behaviour |
 |---|---|
@@ -103,89 +133,145 @@ The options are the endpoint's rows, rendered as a **bento grid** of large tiles
 | Detail | `PropertyFeature.description`, rendered visibly and clamped to two lines |
 | Ordering | Not re-sorted client-side — the endpoint already sorts |
 | Missing keys | Not filtered. The endpoint is trusted to return well-formed rows |
-| Loading | A `role="status"` line reading `Loading options…` |
+| Loading | A `role="status"` line reading `Loading options…`, with the shared `ila-loader ila-loader--sm ila-loader--light` animation — see `docs\features\loading.md` |
 | Load failure | A `role="alert"` line with the error message |
 | Empty result | `No options are available right now. Please check back soon.` |
 | Group semantics | `role="group"` labelled `What matters to you` |
-| Selected count | An `N selected` counter in the row above the grid, shown only when at least one is selected |
+| Row label above the grid | `Choose one or more` — an instruction, not a repeat of the heading. The heading asks the question, this answers it, and it is the only place that says the tiles are multi-select. It is paired with the `N selected` counter below |
+| Selected count | An `N selected` counter in the row above the grid, **always rendered including at zero** |
 
 Because the options are now the section's only input, there is no local fallback list. A failed load is reported rather than silently degrading, and there is no longer a second path to point the visitor at — the earlier "The life-stage plans above still work" line went with the life stages.
 
-### 10a. Bento grid
+### 10a. Equal-width tile grid
 
-The previous layout was a fixed two-row strip scrolled horizontally (`grid-rows-2 grid-flow-col w-max` inside `overflow-x-auto`). That only worked because the ten hard-coded labels were short and roughly uniform. With tenant-supplied labels of unknown length it hid options behind a scroll, which is undiscoverable and awkward on touch.
+The layout before this was a fixed two-row strip scrolled horizontally (`grid-rows-2 grid-flow-col w-max` inside `overflow-x-auto`), which only worked because the ten hard-coded labels were short and roughly uniform. With tenant-supplied labels of unknown length it hid options behind a scroll, which is undiscoverable and awkward on touch.
 
-The tiles are now sized from the content. `tileSpanClass(feature, index)` returns `col-span-2` when either:
-
-- `index === 0` — the highest-priority feature by `sort_order` leads wide, so the grid reads as bento even when every label is short and nothing would otherwise differ; or
-- `feature.name.length > 16` — a long label gets a double-width tile so it never wraps awkwardly or clips.
+That was replaced by a **bento grid** with variable tile spans, and that has now been replaced again by **equal tiles**. The bento rule (`tileSpanClass`, `col-span-2` for the first tile or any label over 16 characters) made the column rhythm depend on label length, so the grid read as one full-width card, two half-width cards, then another full-width one — arbitrary, and unstable because adding or renaming a single feature reshuffled everything after it. `tileSpan` and `useBentoColumns`'s span arithmetic are gone; every tile is now exactly one column.
 
 Tile sizing:
 
 | Property | Value |
 |---|---|
+| Span | Always 1 column |
 | Radius | `rounded-2xl` |
-| Minimum height | `min-h-28`, rising to `sm:min-h-32` |
+| Height | Content-sized. There is no `min-h-*` |
 | Padding | `p-3.5`, rising to `sm:p-4` |
-| Label | `text-sm`, rising to `sm:text-[15px]` |
-| Description | `text-xs`, `line-clamp-2` |
-| Selected | Gold fill, dark ink, gold ring, check badge top-right |
-| Unselected | `#23262b` fill, `#f2f0ea` ink, subtle translucent border |
+| Glyph | 16px, `h-4 w-4`, gold `#c6a46c`, first row of the tile |
+| Label | `text-sm`, rising to `sm:text-[15px]`, with `pr-6` to clear the selection circle |
+| Description | `text-xs`, **not clamped**, `#f2f0ea]/70` in both states |
+| Selected | Gold `#c6a46c` border, `bg-[#c6a46c]/10` wash, selection circle filled gold with a dark tick |
+| Unselected | `bg-[rgba(242,240,234,0.06)]`, `border-[rgba(242,240,234,0.14)]`, empty selection circle |
+| Both | `backdrop-blur-md` — the tiles are glass, not opaque |
 
-The check badge is a 20px circle in the top-right, rendered only while selected. The label carries `max-w-[85%]` only in that state, so it stays clear of the badge without wasting width when there is nothing to avoid.
+#### Tiles are glass so the blueprint tile shows through
 
-### Column counts are tuned to the block, not the viewport
+The section paints a decorative blueprint pattern behind its content (see §6). An opaque tile fill hides it completely — the pattern was only ever visible in the gaps between tiles and the margins around them, which read as an accident rather than a background.
 
-`grid-cols-2` → `sm:grid-cols-3` → `min-[1400px]:grid-cols-4`.
+Both states are now translucent with `backdrop-blur-md`, and both borders are white at low alpha:
 
-Above 981px the section splits into `1.15fr / 0.85fr`, so the left block is only about **500px** wide even on a large display. A fourth column there would leave roughly 118px tiles and wrap every label to two or three lines, which defeats the point of making them larger. The fourth column therefore waits until 1400px, where the block is wide enough to earn it.
+```
+unselected  bg-[rgba(242,240,234,0.06)]  border-[rgba(242,240,234,0.14)]
+hover       bg-[rgba(242,240,234,0.12)]  border-[rgba(242,240,234,0.32)]
+selected    bg-[#c6a46c]/10               border-[#c6a46c]
+```
 
-### `grid-flow-row-dense`
+This replaces the solid `#23262b` / `#272a30` pair. `backdrop-filter` has something real to blur because `.find-your-plot-bg` is a sibling layer rather than a background on the section itself.
 
-Dense flow backfills the row a double-width tile opens rather than leaving a visible hole — without it a 3-column grid hit by a `col-span-2` tile leaves a gap.
+#### Descriptions are never truncated
 
-The trade is that visual order can then differ from DOM order, so tab sequence may not read strictly left-to-right. That is accepted here because each tile carries its own visible label and announces its own `aria-pressed` state, so it stays unambiguous when focused out of visual sequence. Removing the `grid-flow-row-dense` class restores strict visual/tab order at the cost of an uneven grid.
+`line-clamp-2` was cutting descriptions mid-sentence with an ellipsis — "landscaped areas,…". The two ways out were to shorten each description to about six words or to let it run to as many lines as it needs.
+
+**Shortening is a data change, not a code change.** Descriptions come from `PropertyFeature.description` via `GET /api/features`, so the copy is the tenant's. The clamp is therefore simply removed, and because tiles are content-sized a longer description makes a taller tile rather than a cut-off one. The trade is real: a long description in a 2-column mobile layout can run to five or six lines, and the third row of tiles will grow with it. `line-clamp-3` is the middle ground if that proves too tall.
+
+#### Tiles size to their content
+
+`min-h-28` / `sm:min-h-32` was leaving roughly 35px of empty space under each tile's content, because nothing in a tile grew to fill it. With the clamp gone and the glyph added, the minimum heights are removed and the grid's default `align-items: stretch` still keeps tiles in a row level. Space now appears only where a short-description tile genuinely sits beside a longer one.
+
+#### The description contrast was the weakest on the page
+
+`#9a9388` on `#23262b` is about 6:1, which passes AA comfortably, but the colour carries no weight — it read as disabled next to the label. It is now `#f2f0ea` at 70%, the tile's own ink token at reduced alpha, which is the same value used elsewhere in the section for secondary text.
+
+#### The tiles have to look selectable
+
+This is a multi-select and nothing in the tile said so. Three changes carry it:
+
+- **The selection circle is always rendered** — a 20px outlined circle in the top-right when unselected, filled gold with a dark tick when selected. Previously the badge appeared *only* once selected, so an untouched grid was eight identical unmarked rectangles. It is `aria-hidden`, because the button's own `aria-pressed` already carries the state and announcing both would double it.
+- **Selection is a border plus a 10% gold wash, not a solid gold fill.** The old solid fill inverted the whole card's typography and left the gold selection dot invisible against the gold it sat on. A wash keeps the label and description legible in both states, so the description is now `#9a9388` throughout rather than switching colour.
+- **Each tile carries a glyph** — family, tree, shield or rising arrow — so the grid is scannable by silhouette instead of by reading four label lengths.
+
+#### Glyphs are resolved from the feature key by substring
+
+`featureIcon(key)` matches substrings, not an exact list, because the keys are tenant-supplied and unverified. It returns **`null` for anything unrecognised**, and the tile renders no glyph in that case: a confidently wrong glyph on a card is worse than none, and the visible label carries the meaning on its own.
+
+| Group | Matches |
+|---|---|
+| Family | `famil`, `child`, `kid`, `play` |
+| Tree | `tree`, `green`, `park`, `nature`, `lake`, `garden`, `palm` |
+| Shield | `shiel`, `secur`, `safe`, `gated`, `cctv`, `guard`, `boundary` |
+| Growth | `growth`, `grow`, `appreciat`, `return`, `invest`, `yield`, `profit`, `future` |
+
+**The real key list has not been seen** — `GET /api/features` answers `403 UNKNOWN_DOMAIN`, so tiles never render in a browser. The groups are deliberately broad and should be widened once the actual keys are known; a key matching nothing is expected until then.
+
+### Column count is fixed at 2
+
+`grid-cols-2` at every viewport. There is no `sm:` or `min-[1400px]:` step.
+
+This was tuned to the block width before — 2 columns on mobile, 3 from `sm`, 4 from `min-[1400px]` — because above 981px the section splits into `1.15fr / 0.85fr` and the left block is only about **500px** wide, so a fourth column there would leave roughly 118px tiles and wrap every label. A fixed 2x2 removes that whole calculation: a page is always four tiles, the page size is something the visitor can predict, and every tile is the same **size** rather than only the same width.
+
+### Equal-size rows, and a reserved height
+
+```
+grid-cols-2 grid-rows-[repeat(2,minmax(auto,1fr))] gap-2 min-h-[14rem]
+```
+
+- `grid-rows-[repeat(2,minmax(auto,1fr))]` forces exactly two equal rows, so all four tiles match in height as well as width. The `auto` minimum is what makes this safe: Tailwind's own `grid-rows-2` is `minmax(0, 1fr)`, and a zero row minimum lets a long description overflow its row and overlap the row below it.
+- `min-h-[14rem]` reserves two full tiles' worth of height. **Without it the Previous / Next row jumps upward on the last page**, because a page holding one or two tiles produced a shorter grid. `grid-rows-2` alone does not fix this — `fr` resolves against the container's used height, which is `auto`.
+- `gap-2` (8px) at every width.
+
+### The description box is reserved, not clamped
+
+Descriptions are tenant-supplied, so they cannot be shortened here, and `line-clamp-2` was cutting them mid-sentence ("landscaped areas,…"). But a tile beside a one-line description has to stay the same size, so the space is **reserved** rather than left to the text:
+
+```
+min-h-[2.75em] text-xs leading-snug text-[#f2f0ea]/70
+```
+
+`2.75em` is two lines at this element's own `leading-snug` (12px x 1.375 x 2), written in `em` so it tracks the font size instead of hard-coding 33px. Anything longer than two lines grows the tile instead of being cut.
+
+### `grid-flow-row-dense` is gone
+
+Dense flow existed to backfill the hole a double-width tile opens in a 3-column grid. With every tile now exactly one column there are no holes to backfill, so the class is gone. That also **restores strict visual and tab order**, which dense had broken — tab sequence across the grid once again reads left-to-right, and the known deviation recorded in §21 no longer applies.
 
 ### Horizontal scrolling is gone
 
 `overflow-x-auto`, `scrollbar-none`, `grid-rows-2 grid-flow-col` and `w-max` were all removed. Nothing in the section scrolls sideways any more, and options are reached with buttons rather than a swipe.
 
-### 10b. Three rows, with Previous / Next
+### 10b. Two rows of four, with Previous / Next
 
-Only `BENTO_ROWS = 3` rows of tiles are rendered at once. A long feature list cannot push the results panel out of reach, and the left block keeps a bounded height.
+A page is `TILES_PER_PAGE = 4` tiles in a 2x2. A long feature list cannot push the results panel out of reach, and the left block keeps a bounded height.
 
-#### Pages are cut by column-units, not item count
+#### Pages are a straight slice
 
-Counting items per page would be **wrong**. A double-width tile consumes two columns, so a page of `columns × 3` items can occupy four rows rather than three — which is exactly the thing the three-row limit exists to prevent.
+`buildPages(features)` cuts every four tiles, carrying each tile's global index through as `Tile = { feature, index }`.
 
-`buildPages(features, columns)` therefore walks the list accumulating each tile's span from `tileSpan` and cuts a page once it has consumed `columns × 3` column-units. A tile is never split across a page boundary, and the leftover unit stays within budget, so every page is exactly three rows tall.
-
-#### Column count is read live from the layout
-
-`useBentoColumns()` listens to two media queries and returns the number of columns the grid is actually using:
-
-| Viewport | Query | Columns | Page budget |
-|---|---|---|---|
-| `< 640px` | `(max-width: 639px)` | 2 | 6 units |
-| `640px–1399px` | — | 3 | 9 units |
-| `≥ 1400px` | `(min-width: 1400px)` | 4 | 12 units |
-
-The breakpoints mirror the grid's Tailwind classes exactly. Without reading them, the page size would have to be guessed, and a wrong guess is visible: too large and a page spills into a fourth row, too small and the grid looks half empty.
+This has been through three implementations: walking the list accumulating each tile's column span and cutting on `columns × 3` column-units, then slicing `columns × 3`, and now a flat four. All three are gone; `useBentoColumns()` is deleted, along with its two media queries and the `columns` state. `pages` now depends only on `features`.
 
 #### Navigation
 
 | Aspect | Behaviour |
 |---|---|
 | Rendered | Only when `pageCount > 1`; omitted entirely when everything fits |
+| Position | Fixed. The grid's `min-h-[14rem]` means the row does not move between a full page and a short last page |
 | Container | `<nav aria-label="Feature pages">`, below the AND-matching hint |
 | Controls | `Previous` and `Next` buttons with a chevron icon |
 | Disabled | `Previous` on the first page, `Next` on the last, with `disabled` set as well as dimmed styling |
-| Position indicator | `9–16 of 24`, from the global tile indices, `tabular-nums` so the digits do not jitter |
-| Announced | The range uses a visually hidden "to" between the numbers, so it reads "9 to 16 of 24" rather than "9 dash 16 of 24" |
+| Disabled colour | `text-[#9a9388]`, **5.4:1** on `#1c1f24`. The previous `#6b655c` measured **2.9:1**, below the 4.5:1 AA threshold for 12px text, so the disabled state was effectively invisible |
+| Position indicator | `1–4 of 24`, from the global tile indices, `tabular-nums` so the digits do not jitter |
+| Announced | The range uses a visually hidden "to" between the numbers, so it reads "1 to 4 of 24" rather than "1 dash 4 of 24" |
 
 The range is built from each tile's index in the **full** list, carried through `buildPages` as `Tile = { feature, index }`. It would be wrong to derive it from the visible slice's own indices.
 
-`safePage = Math.min(page, pageCount - 1)` **clamps rather than resets**. Resizing the window changes the column count, hence the page size; a visitor already on page 3 lands on the nearest page that exists instead of being thrown back to the first.
+`safePage = Math.min(page, pageCount - 1)` **clamps rather than resets**. The feature list can shrink underneath the visitor — a feature is deactivated, or a reload returns fewer rows — so they land on the nearest page that exists instead of being thrown back to the first.
 
 #### Selection survives paging
 
@@ -216,7 +302,7 @@ Removing the final chip does not call the API. `findPropertiesByFeatures([])` wo
 | `isMobileSheet` | boolean | Viewport is below `980px` |
 | `page` | number | Current page of feature tiles |
 
-`useBentoColumns()` holds its own `columns` state, read from media queries.
+`pages` is a `useMemo` over `features` alone. There is no separate `columns` state any more — `useBentoColumns()` is deleted.
 
 `ResultStatus` is `idle | loading | ready | empty | error`. `empty` and `error` are both reachable because the section now has one live path.
 
@@ -284,9 +370,11 @@ The guide's status table is implemented rather than collapsed into one generic m
 
 There is no client-side matching. The former `scoreFeelMatch` averaged invented per-layout scores from `FEEL_SCORES`, sorted locally and sliced to four; all of that is gone.
 
-Matching is performed entirely by `POST /api/match-properties`, which returns featured properties first, then newest first, with `match_score` already computed. No local sorting, slicing or scoring is applied.
+Matching is performed entirely by `POST /api/match-properties`, which returns featured properties first, then newest first, with `match_score` already computed. **The results are then re-sorted client-side by `match_score`, highest first**, because that endpoint order is not a ranking — it put a 90% match below an 85% one. A null `match_score` sorts last rather than being read as zero, so an unscored property cannot outrank a scored one, and `Array.prototype.sort` being stable means equal scores keep the endpoint's order among themselves.
 
-The former four-item cap no longer applies. The endpoint decides how many rows come back, and the result panel scrolls (`max-h-[min(70vh,40rem)] overflow-y-auto` in the aside, `max-h-[85vh] overflow-y-auto` in the mobile sheet).
+This sort is what makes the `01`-`04` numbers on the result cards mean anything. No local slicing or scoring is applied.
+
+The former four-item cap no longer applies. The endpoint decides how many rows come back, and the result panel scrolls (`min-h-0 flex-1 overflow-y-auto` inside a `max-height`-capped aside, `max-h-[85vh] overflow-y-auto` in the mobile sheet).
 
 The `FEATURED_MATCH_ID` featured-first rule applied only to stage results and is gone. The endpoint has its own ordering and its own notion of a featured property.
 
@@ -298,77 +386,287 @@ The `FEATURED_MATCH_ID` featured-first rule applied only to stage results and is
 type CardMatch = {
   id: string;
   label: string;
-  badge: string | null;  // percentage pill, from a 0-10 match_score
-  reason: string;       // per-feature score breakdown
+  badge: string | null;  // headline percentage, from a 0-10 match_score
+  breakdown: { label: string; score: number }[];  // per-criterion, highest first
   href: string;
 };
 ```
-
-Each displayed property card also keeps the API-backed `Save as favourite` control alongside its `View` link. The control uses the property's `property_id`, so saving a match is the same anonymous-visitor favourites flow used by the property catalogue. Existing saved properties load when the section mounts; successful save/remove requests update the button state, and a pending request disables that card's control.
-
-With one data source this is no longer a reconciliation layer between two sources — it is just what `featureCard` derives from a `PropertyMatch`.
 
 | Field | Value |
 |---|---|
 | `id` | `property_id` |
 | `label` | `property_name` |
 | `badge` | `match_score × 10` as a percentage, or `null` when `match_score` is null |
-| `reason` | `"{Feature Name} {score}/10"` joined with `·` |
+| `breakdown` | One entry per selected criterion, `"{name}" + score 0-10` |
 | `href` | `/properties/{property_id}` |
 
-The `reason` line is the per-feature score breakdown, e.g. `Family Friendly 9/10 · School Access 8/10`, ordered by score descending. It is the only explanation the response supports and it is factual.
+Entries are filtered to the **features the visitor actually selected**. The endpoint is documented to return only the requested keys, but filtering keeps a card honest if it ever returns more. If filtering empties the list, the full returned list is used as a fallback. Scores of `0` are rendered like any other value — the guide is explicit that zero is a valid score, not a missing one.
 
-Entries are filtered to the **features the visitor actually selected**. The endpoint is documented to return only the requested keys, but filtering keeps a card honest if it ever returns more, and the breakdown is there to explain why *this* property matched *those* selections. If filtering empties the list, the full returned list is used as a fallback so the card never loses its explanation. Scores of `0` are rendered like any other value — the guide is explicit that zero is a valid score, not a missing one.
+### One criterion means no breakdown
 
-### What the cards deliberately do not show
+`breakdown` is **empty when fewer than two criteria are selected**. With a single criterion the overall `match_score` is a mean over one number, so it *is* that criterion's score — listing `Family Friendly 9/10` under a `90% match` pill printed the same figure twice.
 
-`POST /api/match-properties` returns summary data only: `property_id`, `property_name`, `slug`, `match_score`, `feature_scores`. There is no image, price, plot size or location, so those lines are absent from the card entirely rather than being filled with a placeholder or invented. An earlier version substituted a shared hero image for every result, which made an unpopulated card look populated; that was removed.
+### Thumbnail, price and locality come from two other endpoints
 
-The guide notes the full property can be fetched separately "if required by the page". Adding it would mean one extra request per result card, so it was not added.
+`POST /api/match-properties` returns summary data only: `property_id`, `property_name`, `slug`, `match_score`, `feature_scores`. A card cannot show a thumbnail, a price or a locality from it.
 
-The card does not replace the favourite action with the detail-page wishlist action. `Save as favourite` / `Saved as favourite` uses `favoritesService` and the `/api/favorites` endpoints; it is independent of the Property Details page's local-storage `Save to wishlist` flag.
+Rather than one request per result card, two supporting lists are fetched **once**, the first time any match arrives, and joined in memory:
+
+| Source | Fetched as | Joined on | Supplies |
+|---|---|---|---|
+| `GET /api/properties?status=ALL&page=1&per_page=100` | `fetchProperties` | `property_id` | `cover_url`, `price`, `property_type`, `location_id` |
+| `GET /api/locations?page=1&per_page=100` | `fetchLocations` | `location_id` | locality name |
+
+That is two requests for any number of matches. `detailsRequested` is a ref, so the effect never refetches as the selection changes, and the search is **not** awaited — results render immediately and the extra fields fill in when they land.
+
+`locality_name` exists on `ApiProperty`, the ~71-field single-property type, but **not** on `PropertyListItem` returned by the list endpoint. That is why the locality needs the second request rather than coming free with the property.
+
+Per_page is capped at 100, so a tenant with more active properties than that would have some cards without a thumbnail, price or locality. Those cards fall back to name and score rather than showing a broken tile.
+
+### What the card shows now
+
+| Element | Treatment |
+|---|---|
+| Thumbnail slot | **Always rendered**, a fixed `h-20 w-20`. Tinted `rgba(242,240,234,0.06)` with a `BuildingIcon` at 28px / `rgba(242,240,234,0.28)` underneath, photo painted over it via `onError` → `display: none` |
+| Name | `text-sm font-semibold` |
+| Match pill | `text-xs` bold, gold `#c6a46c` fill with `#1c1f24` ink, reading `{n}% match`. It was a 9px pill on `bg-black/40`, i.e. a black chip with white text |
+| Rank | `01`-`04`, `tabular-nums`, muted. Only meaningful because `cards` is sorted by score |
+| Locality · price | `text-xs`, **both always rendered**, separated by a `·`. Price through the shared `formatPrice` |
+| Breakdown | One `name 9/10` per criterion, only when 2+ are selected |
+| Favourite | 44x44 heart button, `aria-pressed`, `aria-label` naming the property |
+| Surface | `bg-[rgba(242,240,234,0.1)]`, `border-[rgba(242,240,234,0.12)]`, `backdrop-blur-md` |
+
+#### Why the thumbnail slot is unconditional
+
+Two bugs came from rendering it only when `cover_url` existed. A property with no image **lost the slot entirely**, so its text began 88px to the left of every other row and the row came out shorter. And a `cover_url` that failed to load — a presigned URL past its expiry answers 403 — painted the browser's broken-image glyph onto the dark card.
+
+The fallback mark now sits *underneath* the image rather than replacing it, so `onError` hiding the `<img>` reveals the fallback instead of a hole. Every row therefore has the same height and the same left text edge.
+
+`BuildingIcon` is a 1px line drawing rather than a solid glyph: it has to sit at low contrast 88px to the left of a label, and anything heavier competes with the property name.
+
+#### Why both fields are unconditional
+
+`localityName` is null when the property has no `location_id`, **or when its locality falls outside the 100 rows `fetchLocations` returns**. Previously that null dropped the field and the separator, so the row's text shifted left. Both slots now always render; an unknown locality reads `Location unavailable` in the muted `#6b655c`, and an unpriced property falls through `formatPrice`'s existing `Price on request`.
+
+The wording of the placeholder is a guess and easy to reword. The underlying limit is the `per_page: 100` cap on both supporting lists — a tenant larger than that will see the placeholder on rows whose locality simply fell off the end.
+
+"Price on request" is a real answer from `formatPrice`, not a missing value, so it is shown rather than hidden.
+
+### There is no `tone` prop any more
+
+`MatchCard` and `ResultsPanel` used to take `tone: "light" | "dark"`, because the desktop aside was an opaque cream slab while the mobile sheet was dark — the same results looked like two different things on two viewports. The aside is now the same glass as the sheet, so both components have a single set of colours and **no branching at all**.
+
+The removed light palette was `#1c1f24`, `#4a463f`, `#5c5852`, `#6b655c` and `#a3352b`. Those survive only where they are also the dark-mode value: `#6b655c` is the rank number on both.
+
+One value was **not** carried over. `favoriteError` rendered in `#a3352b` unconditionally, because the old light branch used it and nobody branched the alert. On the dark glass that red measures about 2.4:1, which makes an alert effectively invisible; it is now `#e8a49e`, matching the error state above it.
+
+### The whole card is the "view" target
+
+There is no `View` button. The card carries an absolutely positioned `<Link>` filling it, with a `sr-only` "View {name}", and the heart sits above it on `z-10`.
+
+A `<Link>` wrapping the card would put the favourite `<button>` inside an anchor — invalid HTML, and screen readers then announce one control instead of two. The stretched-link pattern gives one tab stop for the card plus one for the heart, in reading order.
+
+**`pointer-events-none` on the content wrapper is load-bearing.** The wrapper is a *positioned* element (`relative`) that comes after the link in tree order, and hit testing follows paint order — so it painted on top of the stretched link and swallowed every click on the card. The link was reachable in the DOM and in the accessibility tree, and completely dead to a mouse or finger. The heart carries `pointer-events-auto` to take its own clicks back.
+
+The cost is that text inside a result card can no longer be selected, which is the usual trade for this pattern.
+
+### The link is `/properties/{id}`, not `/property/{id}`
+
+`src/app` has two property-shaped routes:
+
+| Route | Purpose |
+|---|---|
+| `/properties/[propertyId]` | The property detail page. **This is the target.** |
+| `/property/[trackingToken]/view` | Share landing. Takes a *tracking token*, not a property id. |
+
+`/property/{property_id}` matches neither and answers **404** — verified against the dev server, where `/properties/aa7de8b7-…` returns 200 and `/property/aa7de8b7-…` returns 404.
+
+`GrowthCorridors`, `MapSection`, `PropertiesList`, `CompareProperties` and `SimilarProperties` all link to `/properties/{id}`.
+
+The card is not replaced by the detail-page wishlist action. Favouriting uses `favoritesService` and `/api/favorites`, independent of the Property Details page's local-storage `Save to wishlist` flag.
 
 ### Coming-soon cards — removed
 
-The `comingSoon` / `Soon` treatment existed for static layouts with `available: false`. The matching endpoint returns `status = "ACTIVE"` properties exclusively, so no result can be unavailable and the concept was removed. Every card renders a `View` link.
+The `comingSoon` / `Soon` treatment existed for static layouts with `available: false`. The matching endpoint returns `status = "ACTIVE"` properties exclusively, so no result can be unavailable and the concept was removed.
 
 ## 16. Result navigation
 
-Every card links to `/properties/{property_id}`. The endpoint returns `property_id` as a UUID, which is what `/properties/[propertyId]` requires — `fetchPropertyById` throws for anything that fails `isPropertyUuid`. The `slug` the response also carries is not used.
+Every card links to `/properties/{property_id}` through an absolutely positioned stretched `<Link>` filling the card. The endpoint returns `property_id` as a UUID, which is what `/properties/[propertyId]` requires — `fetchPropertyById` throws for anything that fails `isPropertyUuid`. The `slug` the response also carries is not used.
 
-Feature result cards carry no `data-track` attributes, so a `View` click is not attributed to this feature.
+Feature result cards carry no `data-track` attributes, so a card click is not attributed to this feature.
 
 ## 17. Result states
 
 | State | Condition | Presentation |
 |---|---|---|
-| `idle` | Nothing selected | Idle glow SVG, "Your matches will appear here", and guidance to pick what matters |
+| `idle` | Nothing selected | Left-aligned: a small idle glow, "Select an option to see matching properties", and one supporting line |
 | `loading` | Request in flight | `aria-busy`, gold progress bar, "Finding your match", "Searching properties for {label}…" |
-| `ready` | `items.length > 0` | Count line plus the cards, in an `aria-live="polite"` region |
+| `ready` | `items.length > 0` | An 18px `{n} properties match` heading with the criteria chips below it, then the cards, in an `aria-live="polite"` region |
 | `empty` | `items.length === 0` | "No exact match yet" and "A property has to score on every feature you pick. Remove one to widen the search." |
 | `error` | Non-2xx | `role="alert"`, "We couldn't load matches" plus the backend message |
 
 Favourite loading and toggle failures are shown as a separate alert above the match count; they do not hide or invalidate the property matches. A save or remove failure leaves that property's previous saved state unchanged.
 
-The empty-state guidance is deliberate: AND matching is the most surprising property of the endpoint, and an unexplained blank panel would read as a bug. `total: 0` is mapped to `empty`, never to `error`.
+The idle guidance is deliberate: AND matching is the most surprising property of the endpoint, and an unexplained blank panel would read as a bug. `total: 0` is mapped to `empty`, never to `error`.
+
+### Every state is left-aligned and the same shape
+
+`idle`, `loading`, `error` and `empty` all render `items-start justify-start text-left` with **no extra horizontal padding**, so they start on the same left edge as the results header. They previously used `items-center justify-center px-6 text-center` — a centred blob floating in the middle of a panel whose real content is flush left — which also made the panel jump when the first card arrived. All four keep `min-h-64` so none of them collapses the panel.
+
+At desktop the section's height is driven by the left column anyway, so the panel does not change the page's shape on selection.
 
 `loadingLabel` is the names of at most the first two selected features, resolved through the loaded feature list, falling back to "your preferences".
 
 ## 18. Responsive layout
 
-At widths of at least 981 px the results panel is shown in a sticky right-hand aside (`sticky top-24`). Below that breakpoint the aside is hidden and a `View matches` button reopens the sheet after it is closed.
+At widths of at least 981 px the results panel is shown in a right-hand aside. Below that breakpoint the aside is hidden and a fixed bottom bar carries the match count and opens the sheet.
 
-The option tiles reflow rather than scroll — 2 columns on mobile, 3 from `sm`, 4 from `min-[1400px]`. See §10a for why the fourth column waits until 1400px. Tiles have a minimum height rather than a fixed one, so a tile with a two-line description grows without pushing its whole row into a fixed size.
+### The two columns start at the same line
 
-Exactly three rows render at a time at every breakpoint, with `Previous` / `Next` to reach the rest — see §10b. The page size is read from the live column count, so it is 6, 9 or 12 column-units depending on width, and always exactly three rows.
+The section is a two-column grid **from the very top of its content**, not from below the header:
+
+```
+content-slot (max-w-7xl, mx-auto)
+└── grid min-[981px]:grid-cols-[1.15fr_0.85fr] min-[981px]:items-stretch
+    ├── div.min-w-0            ← header + options block
+    └── aside (flex)           ← results panel
+```
+
+The `<header>` was previously a sibling *above* both columns, so the panel began under it — level with the "Choose one or more" row, which lined its top edge up with neither the heading above nor the first row of tiles below. Folding the header into the left column puts the panel's top level with the `Find your plot` eyebrow and its bottom level with the pager, and fills the empty top-right corner. `items-stretch` gives both columns the same height.
+
+### The panel is not sticky any more
+
+`sticky top-24 min-h-112` is replaced by `flex-1` inside a flex `<aside>`. A panel that spans the full height of the left column is by definition as tall as the content, so there is nothing left for it to stick through — and `sticky` would fight the stretch.
+
+`flex-1` rather than `h-full` because the `<aside>` is itself the flex container, so the panel's height does not depend on a percentage resolving against an auto-height parent.
+
+### The panel is capped, grows past the left column, and scrolls internally
+
+```
+aside.find-your-plot-panel      align-self: start
+                                height:    calc(100svh - var(--nav-h) - 7rem)
+                                max-height:calc(100svh - var(--nav-h) - 9rem)
+└── div (panel)                 flex column, overflow-hidden
+    ├── div.ila-scroll-dark     min-h-0 flex-1 overflow-y-auto   ← the list
+    └── div                     shrink-0 border-t pt-4            ← pinned CTA
+```
+
+The `max-height` is the hard limit: without it, five or more result rows made the panel taller than the viewport and the last row was unreachable. `7rem` is this section's `py-24` (96px) below its own top edge plus breathing room. `svh` rather than `vh` so a mobile browser's collapsed address bar cannot push the panel past the usable area.
+
+`height` is set from the viewport, not from the content, so the panel is the same height on two screens of different sizes. `align-self: start` is what makes that possible — without it the grid row's `stretch` wins over any height and the panel is locked to whatever the heading plus the 2x2 tile grid happens to measure, which is what left it short.
+
+**This trades away equal column heights.** The panel's bottom sits below the Previous / Next row on any screen taller than the left column's content. Equal bottoms were a deliberate choice two changes ago. Dropping `align-self` and `height` from `.find-your-plot-panel` returns the panel to tracking the row, at the cost of the extra height.
+
+`min-h-0` on the scroll region is load-bearing — a flex item defaults to `min-height: auto` and would refuse to shrink below its content, pushing the panel past its cap.
+
+Both scroll regions — this list and the mobile sheet — carry `.ila-scroll-dark`, defined in `globals.css`. It is `.ila-scroll` (the existing light-panel version, used by `MapSection`) with light-thumb colours for a dark surface, **plus `::-webkit-scrollbar-button { display: none }`**, which `.ila-scroll` does not have. Those buttons render as small arrows pinned to each end of the track and read as a stray control against a rounded panel; setting a width on `::-webkit-scrollbar` alone leaves them in place.
+
+The "View all N properties" button is a **sibling** of the scroll region, not inside it, so it stays put while the list scrolls. `N` is the catalogue total from the `/api/properties` response, not the match count — the matches are already all on screen above, so a button promising "all of them" would point at the page it is on. It links to `/properties` and renders only when `apiStatus === "ready"` and `total > 0`.
+
+### The cap is a class, not an arbitrary value
+
+```css
+@media (min-width: 981px) {
+  .find-your-plot-panel {
+    max-height: calc(100svh - var(--nav-h) - 9rem);
+  }
+}
+```
+
+This was `max-h-[calc(100svh-var(--nav-h)-9rem)]`, and **Tailwind's scanner silently drops it**. The two-term form `calc(100svh - var(--nav-h))` is emitted correctly — `.lg:min-h-[calc(100svh-var(--nav-h))]` in `GrowthCorridors` proves it — but adding a third term makes the class produce **no rule at all**. There is no build error and no missing-utility warning; the panel would simply have stayed uncapped. The class is scoped to the same 981px breakpoint the aside appears at.
+
+### The content starts from the left edge, and the panel fills what's left
+
+The container is `w-full` with **no `mx-auto`**. `GrowthCorridors` caps its content at 1280px and lets the leftover space fall on the right, so both sections start at the left edge of the viewport. The block briefly carried `mx-auto`, which centred it and left it aligned with nothing else on the page.
+
+What "equal side margins" means here is the *gutter* — `px-6 sm:px-10` on both sides — not a centred block.
+
+The 1280px cap now applies to the **left column alone**, so the results panel can grow into the space that would otherwise be dead to the right of the section:
+
+```
+grid-cols-[1.15fr_0.85fr]                                    /* 981–1279px */
+grid-cols-[42rem_minmax(0,1fr)]                              /* from 1280px */
+```
+
+`42rem` is 672px, which is exactly the width the left column already had inside the old 1280px cap, so from 1280px the heading and the tile grid do not move by a pixel and the entire extra width goes to the panel.
+
+The proportional split is kept for 981–1279px rather than replaced outright: pinning the left track at every two-column width would leave the panel about 200px wide at 981px.
+
+Measured panel width, on a viewport of that size:
+
+| Viewport | Panel |
+|---|---|
+| 1280px | 496px (unchanged from before) |
+| 1440px | 656px |
+| 1920px | 1136px |
+
+**A 1136px results panel is very wide for a list of cards.** Each row is an 80px thumbnail, a name, a pill, a locality and price, and a 44px heart — at that width the rows are sparse and the "View all N properties" button is a very long pill. If it reads badly in practice, capping the aside at a maximum (and accepting dead space again) is a one-class change.
+
+The aside was an opaque cream slab — `radial-gradient(ellipse at 50% 28%, #ffffff 0%, #f4f0e8 55%, #ebe4d8 100%)` — which read as pasted onto a dark section, matched neither the page's cool-grey light sections nor the dark sheet showing the same results. It is now the same glass as everything else:
+
+| | Value |
+|---|---|
+| Panel | `bg-[rgba(242,240,234,0.05)]`, `border-[rgba(242,240,234,0.1)]`, `backdrop-blur-md`, `rounded-[22px]` |
+| Result rows | `bg-[rgba(242,240,234,0.1)]` |
+
+The rows sit at 10% white over a panel that is itself at 5%, which composites to roughly 15% against the section — one step lighter than the panel behind them, with no second hard-coded colour needed.
+
+The option tiles reflow rather than scroll — 2 columns at every viewport, 2 rows per page. See §10a for why the column count is fixed rather than stepped. All four tiles are the same size: equal-width columns, `grid-rows-[repeat(2,minmax(auto,1fr))]` for equal-height rows, and a reserved two-line description box so a short one does not shrink its tile.
+
+Exactly four tiles render at a time, with `Previous` / `Next` to reach the rest — see §10b. The page size is a constant, not a value read from the layout.
 
 Because the life-stage card grid is gone, the left column is now a single block rather than a `grid-cols-2` of tall cards. The outer `min-[981px]:grid-cols-[1.15fr_0.85fr]` split is unchanged.
 
-## 19. Mobile results sheet
+### Section padding matches `GrowthCorridors`
 
-For `(max-width: 980px)`, a search opens a fixed bottom sheet. It has a dimmed backdrop, `role="dialog"`, `aria-modal="true"`, `aria-label="Your plot matches"`, a close button, a maximum height of `85vh`, and scrollable content. It can be closed through the backdrop or close button and reopened through `View matches`.
+The container is `px-6 py-16 sm:px-10 sm:py-24`, identical to the localities section directly above it on the homepage. It was `px-6 py-10 sm:py-12` with no `sm` side step, so the section read as tighter than its neighbour at every breakpoint. Two adjacent sections with a 24px padding difference read as a seam, not as variation.
 
-`View matches` renders when `apiStatus !== "idle"`, so it appears after any completed or failed search as well as a successful one.
+`GrowthCorridors` overrides its own vertical padding at `lg` with `lg:pt-10 lg:pb-6 xl:pt-12`. That is **not** copied here: it exists because that section is sized to one screen with `lg:min-h-[calc(100svh-var(--nav-h))]`, so its padding is a leftover after the content fills the viewport. This section has no such constraint and its height follows its content.
+
+### Section spacing sits on one scale
+
+| Break | Value | Between |
+|---|---|---|
+| Header paragraph → options block | `mt-6` (24px) | Section blocks |
+| Label row → tile grid | `mt-6` (24px) | Section blocks |
+| Options block → results aside | `gap-8` (32px) | Columns, from `min-[981px]` |
+| Tile grid gutters | `gap-2` (8px) | Tiles, at every width |
+| Tile grid → AND hint | `mt-3` (12px) | Within one block |
+| AND hint → pager | `mt-4` (16px) | Within one block |
+
+Previously the two block gaps were `mt-8` (32px) and `mt-3` (12px) — a large break into a tight one — and `min-[981px]:gap-10` (40px) was off the 8/12/16/24/32 scale entirely. The tile gutter also stepped 10px to 12px at `sm`; `gap-2` is a single value at every width.
+
+## 19. Mobile results bar and sheet
+
+### The sheet no longer opens on selection
+
+For `(max-width: 980px)` the sheet is opened **only** by the bottom bar. `runFeatureSearch` used to call `setSheetOpen(true)` on every search, so the first tap on a tile covered the tiles with the results — a visitor who selected one criterion was immediately looking somewhere else instead of adding a second. That is the one thing a multi-select must not do.
+
+Tapping a tile now only selects or deselects it. The sheet still has a dimmed backdrop, `role="dialog"`, `aria-modal="true"`, `aria-label="Your plot matches"`, a close button, a maximum height of `85vh`, and scrollable content, and can be closed through the backdrop or the close button.
+
+### The bottom bar
+
+| Aspect | Behaviour |
+|---|---|
+| Rendered | `isMobileSheet && !sheetOpen && apiStatus !== "idle"` — so after any completed or failed search as well as a successful one |
+| Position | `fixed inset-x-0 bottom-0 z-40`, `px-4 pb-4`, below the sheet's `z-50` |
+| Control | One full-width gold pill, `min-h-14` |
+| Label | `resultsBarLabel` — see below |
+| Action | `View` plus a chevron; opens the sheet |
+| Spacing | An `h-20` spacer is rendered with it, so the bar never covers the section's own content |
+
+`resultsBarLabel` only shows a count where one is meaningful:
+
+| `apiStatus` | Label |
+|---|---|
+| `ready` | `4 matches`, or `1 match` |
+| `loading` | `Searching` |
+| `empty` | `No matches` |
+| `error` | `Could not load` |
+
+Rapid chip taps pass through `loading` on every selection, which is why it is a single word rather than a sentence.
+
+The `h-20` spacer appears and disappears with the bar, so the sections below move by 80px the first time a search runs. Reserving it permanently would instead leave an 80px hole above an untouched section, which is the worse of the two.
 
 ## 20. Scroll locking and cleanup
 
@@ -388,9 +686,11 @@ Page navigation is a `<nav aria-label="Feature pages">` containing two buttons a
 
 Paging replaces tiles in the DOM rather than hiding them with CSS, so only the current page's tiles are focusable and exposed to assistive technology.
 
-`grid-flow-row-dense` can make visual order diverge from DOM order, so tab sequence may not read strictly left-to-right across the grid. Each tile is self-describing and announces its own pressed state, so it remains unambiguous, but this is a known deviation from strict visual order — see §10a.
+Visual order and DOM order now match across the grid. This was previously not true while the tiles had variable spans and the grid carried `grid-flow-row-dense`; both are gone, so tab sequence reads strictly left-to-right — see §10a.
 
-Cards no longer contain images, so the previous empty-`alt` decision is moot.
+The selection circle on each tile is `aria-hidden`. The button's own `aria-pressed` already carries the selected state, so exposing the circle as well would announce it twice.
+
+Cards carry a thumbnail with `alt=""` — it is `aria-hidden` and carries no information the property name does not. The previous decision that cards contain no images at all no longer applies; see §15 for how the image is sourced.
 
 ## 22. Analytics attributes
 
@@ -414,7 +714,7 @@ The `PERSONA_SELECT` event went with the life-stage cards. The component does no
 - It does **not** import `next/image`, MapLibre, geolocation, or `@/data/propertyLayouts`.
 - Every rendered value is API-derived. There is no static fallback, so an API outage means an empty section with a visible error rather than degraded-but-working content. That is the intended trade now that no real data is available locally.
 - The visible match count is the real returned `items.length`. The old "12 properties match" style counts were data-file copy that did not correspond to the rendered cards.
-- `match_score` is `number | null` and is handled, but null has not been observed in practice.
+- `match_score` is `number | null` and is handled, but null has not been observed in practice. A null sorts last, but it would still be given a rank number by the card's `01`-`04` label, since that label is the card's position rather than a score.
 - Exact CSS definitions for `animate-sheet-up`, `ila-fyp-progress`, and any reduced-motion handling are UNKNOWN — needs verification.
 - The older `src/components/find-your-plot-who-are-you-buying-this-for.md` handoff references obsolete `.jsx`, `.css`, routing behavior, and the deleted `FEEL_TAGS` / `FEEL_SCORES` / `LIFE_STAGES` data; it is not canonical for the current implementation.
 
@@ -429,19 +729,22 @@ The `PERSONA_SELECT` event went with the life-stage cards. The component does no
 7. `items: []` shows the empty state, not an error and not a blank panel.
 8. Request failure shows the error state with the backend message.
 9. Removing the final chip returns to idle and issues **no** request.
-10. Mobile: the sheet opens on search, `View matches` reopens it, body scroll is restored.
+10. Mobile: tapping a tile only selects it and the sheet stays closed; the bottom bar shows the count and opens the sheet; closing it leaves the bar; body scroll is restored.
 11. Feature `View` resolves `/properties/{uuid}` and loads the detail page.
-12. Existing favourites load into the result cards, and each card keeps a `Save as favourite` / `Saved as favourite` control beside `View`.
+12. Existing favourites load into the result cards, and each card keeps a 44px heart with `aria-pressed` and an `aria-label` naming the property. Tapping the heart must **not** navigate — the stretched link is underneath it.
 13. Saving and removing a result sends the property's UUID to `/api/favorites`; the card state changes only after success, and the control is disabled while pending.
 14. A favourites load or toggle failure shows its alert without removing the match results.
 15. Confirm the text-only cards read acceptably without an image.
 16. Confirm no tile clips a long feature name or description at 320px, 768px, 1000px and 1440px.
 17. Confirm the double-width tiles produce an even grid with no hole at each column count.
 18. Tab through the tiles and result-card controls and confirm focus is always visible and both pressed states are announced.
-19. With more than one page, confirm every page renders **exactly three rows** — especially a page where double-width tiles appear, since that is where an item-count implementation would spill into four.
+19. With more than one page, confirm every page renders **exactly a 2x2** and that the Previous / Next row does not move between a full page and a short last page.
 20. Confirm `Previous` is disabled on page 1 and `Next` on the last page, and that the range indicator is correct.
 21. Select a feature on page 2, go back to page 1, return to page 2, and confirm it is still selected and the `N selected` count is right.
-22. Resize the window across 640px and 1400px and confirm the page size changes without leaving the pager on a page that no longer exists.
+22. With more than one page, confirm the disabled Previous / Next styling is visibly disabled but still readable, and that `N selected` is visible (including at zero) on every page.
+23. Confirm `cards` is sorted by `match_score` descending, so the `01`-`04` numbers and the card order agree.
+24. With one criterion selected, confirm no per-criterion breakdown is shown; with two or more, confirm one line per criterion.
+25. Confirm the thumbnail, locality and price appear once `/api/properties` and `/api/locations` resolve, and that a property missing from the list response still renders with name and score.
 
 Automated test coverage for this component is UNKNOWN — needs verification.
 

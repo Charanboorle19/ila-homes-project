@@ -6,6 +6,7 @@ import AnalyticsInitializer from "@/components/AnalyticsInitializer";
 import SessionInitializer from "@/components/SessionInitializer";
 import VisitorInitializer from "@/components/VisitorInitializer";
 import "./globals.css";
+import "./loading.css";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",

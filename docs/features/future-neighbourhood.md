@@ -156,7 +156,7 @@ It uses `useState` for UI/fetch state, `useRef` for the DOM container/map/readin
 
 ## 20. Loading behavior
 
-The nearby-place request sets `isLoadingApi` to `true`. A `Loading nearby landmarks…` list card is rendered only when loading is active and the selected `items` array is empty. Static fallback items can therefore remain visible while an API request is loading. The map itself has no separate loading indicator.
+The nearby-place request sets `isLoadingApi` to `true`. A `Loading nearby landmarks…` list card is rendered only when loading is active and the selected `items` array is empty; it carries the shared `ila-loader ila-loader--sm` animation — see `docs\features\loading.md`. Static fallback items can therefore remain visible while an API request is loading. The map itself has no separate loading indicator.
 
 ## 21. Error behavior
 

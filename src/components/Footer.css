@@ -2,8 +2,9 @@
 
 .footer {
   --font-body: var(--font-montserrat), system-ui, sans-serif;
-  --space: clamp(1rem, 3.5vw, 3rem);
-  --max: calc(100% - (var(--space) * 2));
+  /* The same gutter the property page and header use, so the footer starts on
+     the same x as every section and the logo. */
+  --space: var(--ila-gutter);
   --footer-bg: #f7f8fa;
   --footer-ink: #0f1114;
   --footer-muted: #4a5060;
@@ -18,13 +19,13 @@
   font-family: var(--font-body);
 }
 
+/* Left-anchored like the sections: the gutter is padding, not a centred box. */
 .footer__inner {
   display: flex;
   flex-direction: column;
   gap: 1.75rem;
-  width: min(100%, var(--max));
-  margin: 0 auto;
-  padding: 2.5rem 0 3rem;
+  width: 100%;
+  padding: 2.5rem var(--space) 3rem;
   box-sizing: border-box;
 }
 

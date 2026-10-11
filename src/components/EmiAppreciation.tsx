@@ -206,7 +206,14 @@ export default function EmiAppreciation() {
           </p>
 
           {status === "loading" ? (
-            <p className="emi-appreciation__note" role="status">
+            <p
+              className="emi-appreciation__note inline-flex items-center gap-2"
+              role="status"
+            >
+              <span
+                className="ila-loader ila-loader--sm ila-loader--light"
+                aria-hidden
+              />
               Loading properties…
             </p>
           ) : null}

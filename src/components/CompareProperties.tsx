@@ -20,6 +20,7 @@ import {
   isPropertyUuid,
   type PropertyListItem,
 } from "@/services/propertiesService";
+import { fetchLocations } from "@/services/locationsService";
 
 const GOLD = "#c9a84c";
 
@@ -106,6 +107,16 @@ type Status = "idle" | "loading" | "ready" | "error";
 /** Null means "not available" and must never be shown as a zero. */
 const NOT_AVAILABLE = "Not available";
 
+/**
+ * Metrics rendered as a 0-100 score with a bar under the number.
+ *
+ * Only these two are bounded and already expressed out of 100, so the bar is a
+ * true proportion rather than a guess at a maximum. Every other metric would
+ * need a scale invented for it, which is the kind of decoration that
+ * misrepresents data.
+ */
+const SCORE_METRICS = new Set(["connectivity_score", "estimated_appreciation"]);
+
 function formatValue(
   value: number | string | boolean | null,
   spec?: MetricSpec,
@@ -180,20 +191,6 @@ function CloseIcon({ className = "" }: { className?: string }) {
   );
 }
 
-function CheckIcon({ className = "" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="m5 13 4.5 4.5L19 7"
-        stroke="currentColor"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function PlusIcon({ className = "" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -210,6 +207,8 @@ function PlusIcon({ className = "" }: { className?: string }) {
 export default function CompareProperties() {
   const [properties, setProperties] = useState<PropertyListItem[]>([]);
   const [listStatus, setListStatus] = useState<Status>("loading");
+  /** `location_id` -> locality name, for the card's location line. */
+  const [locationNames, setLocationNames] = useState<Record<string, string>>({});
 
   /** Selection order is the comparison order, and the backend preserves it. */
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -221,6 +220,27 @@ export default function CompareProperties() {
 
   useEffect(() => {
     const controller = new AbortController();
+
+    // Localities, alongside the property list rather than after it.
+    //
+    // `GET /api/properties` returns a trimmed row — id, location_id, name,
+    // price, cover_url and little else. There is no `location_name` on
+    // `PropertyListItem`, so a card cannot say where a development is without
+    // this join. One extra request, loaded once, keyed by `location_id`.
+    //
+    // A failure here is logged rather than surfaced: the cards are still
+    // selectable and comparable without a locality line.
+    fetchLocations({ page: 1, perPage: 100, signal: controller.signal })
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setLocationNames(
+          Object.fromEntries(response.items.map((item) => [item.id, item.name])),
+        );
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.warn("[compare] localities list failed", error);
+      });
 
     fetchProperties({
       status: "ALL",
@@ -249,6 +269,25 @@ export default function CompareProperties() {
       compareAbort.current?.abort();
     };
   }, []);
+
+  /**
+   * The status row plus the Compare button, pinned to the bottom of the
+   * viewport on mobile once something is selected.
+   *
+   * It appears and disappears with the selection, which is why the background is
+   * opaque: cards scroll underneath it and would otherwise show through. The
+   * colour matches the card it sits in — `#f7f8fa` on mobile, `white/80` from
+   * `sm`, where the card gains its own background.
+   *
+   * `pb-[env(safe-area-inset-bottom)]` keeps the button clear of a gesture bar.
+   * Without it the bottom 20-30px of the viewport is the home indicator and the
+   * button sits underneath it. Reset at `sm`, where the row is no longer pinned
+   * to anything.
+   */
+  const actionRowClass =
+    selectedIds.length > 0
+      ? "sticky bottom-0 z-20 bg-[#f7f8fa] pb-[env(safe-area-inset-bottom)] sm:static sm:z-auto sm:bg-white/80 sm:pb-0"
+      : "";
 
   const toggleProperty = useCallback(
     (propertyId: string, name: string) => {
@@ -347,42 +386,116 @@ export default function CompareProperties() {
   }, [result]);
 
   const compared = result?.properties ?? [];
+  /**
+   * The property that wins the most rows, labelled "Best match" in the header.
+   *
+   * Derived by tallying `best_property_id` across every row rather than by
+   * comparing a price or a score, so the label describes what the table itself
+   * highlights rather than a metric chosen separately. A property that wins
+   * nothing simply reads "Pinned".
+   */
+  const bestMatchId = useMemo(() => {
+    const tally = new Map<string, number>();
+    for (const { rows } of groupedMetrics) {
+      for (const { row } of rows) {
+        if (!row.best_property_id) continue;
+        tally.set(row.best_property_id, (tally.get(row.best_property_id) ?? 0) + 1);
+      }
+    }
+    let top: string | null = null;
+    let topCount = 0;
+    for (const [id, count] of tally) {
+      if (count > topCount) {
+        top = id;
+        topCount = count;
+      }
+    }
+    return top;
+  }, [groupedMetrics]);
+
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const atMax = selectedIds.length >= COMPARE_MAX_IDS;
   const canRun = canCompare(selectedIds) && compareStatus !== "loading";
 
   /**
-   * Column templates, split by breakpoint.
+   * Width of one property cell, as a share of the scrollport.
    *
-   * The metric-label column is deliberately much narrower on mobile so the
-   * property columns keep a usable width; long labels such as "Est.
-   * appreciation" wrap onto a second line instead of forcing a wider column.
-   * Both templates are published as CSS variables so the header row and every
-   * metric row stay on exactly the same track sizing.
+   * **One property per screen.** The previous `w-[46%]` fitted two columns
+   * inside the scrollport, and that makes horizontal snapping geometrically
+   * impossible: `snap-start` reaches the last column only when cell width is at
+   * least the scrollport width, because the last snap sits at `(n-1) * w` while
+   * the maximum scroll position is `n * w - scrollport`.
+   *
+   * Measured at 46% on a 390px screen: cells 178px, column starts 0 / 178 /
+   * 357, total scroll range 147px. Every snap point past the first sat beyond
+   * the end of the scroll, so no swipe could ever land on a column, and with
+   * two properties the columns came to 356px inside a 388px scrollport - no
+   * overflow at all, so no scroll whatsoever.
+   *
+   * 88% keeps a 12% sliver of the next property on screen as the scroll hint
+   * while giving a full column per swipe. It is still short of the exact-snap
+   * threshold, so the final column settles ~46px proud of flush; that is the
+   * price of the sliver, and it is the better trade on a table.
+   *
+   * Applied to the cells rather than to a shared grid template. Every row is
+   * its own flex container, so a percentage resolves against the scrollport on
+   * each one and a single swipe moves all of them together.
    */
-  const columnTemplate = (labelMin: string, columnMin: string) =>
-    `minmax(${labelMin}, 1fr) repeat(${compared.length}, minmax(${columnMin}, 1.5fr))`;
+  const CELL_WIDTH = "w-[88%]";
 
-  /** Reads one of the two templates above; set on the shared scroll wrapper. */
-  const GRID_COLUMNS =
-    "[grid-template-columns:var(--cmp-cols)] sm:[grid-template-columns:var(--cmp-cols-wide)]";
-
+  // The section uses `overflow-x-clip`, not `overflow-hidden`.
+  //
+  // It still clips horizontally -- the carousel's `-mr-5` and the results table
+  // both run to the section edge -- but `clip` does not create a scroll
+  // container and `overflow: hidden` does. A sticky descendant resolves against
+  // its nearest scrollport, so under `overflow: hidden` the Compare button's
+  // sticky row would have had a scrollport that never scrolls and would have
+  // stayed exactly where it was. Same fix `FindYourPlot`'s section uses.
   return (
     <section
-      data-section="compare_plots"
-      aria-label="Compare properties"
-      className="relative w-full overflow-hidden bg-[#eceef2]"
-      style={{ ["--cmp-gold" as string]: GOLD }}
-    >
-      <div className="w-full px-6 pt-10 pb-6 sm:px-8 sm:pt-12 sm:pb-12 lg:px-12">
+        data-section="compare_plots"
+        aria-label="Compare properties"
+        className="relative w-full overflow-x-clip bg-[#eceef2]"
+        style={{ ["--cmp-gold" as string]: GOLD }}
+      >
+      {/* `px-5` is the section's one left gutter on mobile: 20px. The heading, the
+          property cards, the "N of 5 selected" row, the Compare button and the
+          results table's sticky label column all start here.
+
+          They did not before. The heading sat at `px-6` (24px) while the card
+          block sat at `px-4` (16px), and the full-bleed card meant nothing was
+          anchoring the two together. `sm` and `lg` keep their own values; this
+          is the mobile pass only.
+
+          Vertical rhythm, measured on mobile:
+            - `pt-12` is 48px above the eyebrow
+            - `pb-6` is 24px from the intro paragraph down to the card block
+            - the block below adds `pb-4`, and the card's own `py-4` contributes
+              16px below the Compare button, for 32px before the next section
+                */}
+      {/* Decorative dot grid. See `.compare-plots-bg` in globals.css, where
+          the opacity lives so it fades this layer only and never the heading,
+          cards or the compare action. */}
+      <div
+        aria-hidden="true"
+        className="compare-plots-bg pointer-events-none absolute inset-0 z-0"
+      />
+
+      {/* `content-slot` stacks the content above that layer. */}
+      <div className="content-slot w-full px-5 pt-12 pb-6 sm:px-8 sm:pt-12 sm:pb-12 lg:px-12">
+        {/* Type scale for the heading block: 12 / 28 / 16, with a 12px gap between
+            each and a 1.2 / 1.5 line height. `leading-relaxed` was 1.625 and
+            `text-2xl` was 24px, so the block read loose and slightly undersized
+            against the card beneath it. `sm` and `lg` keep their own steps —
+            this is the mobile pass. */}
         <header className="max-w-2xl">
-          <p className="text-[11px] font-bold tracking-[0.2em] text-[#7a5c28] uppercase">
+          <p className="text-[12px] font-bold tracking-[0.2em] text-[#7a5c28] uppercase">
             Side by side
           </p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-[#0f1114] sm:text-3xl lg:text-[2rem] lg:leading-tight">
+          <h2 className="mt-3 text-[28px] leading-[1.2] font-bold tracking-tight text-[#0f1114] sm:text-3xl lg:text-[2rem] lg:leading-tight">
             Compare up to five properties at once
           </h2>
-          <p className="mt-3 text-[15px] leading-relaxed font-medium text-[#3d4450]">
+          <p className="mt-3 text-[16px] leading-[1.5] font-medium text-[#3d4450]">
             Pick {COMPARE_MIN_IDS} to {COMPARE_MAX_IDS} developments. We line
             them up on price, connectivity, inventory and growth, and mark the
             better value in each row.
@@ -392,12 +505,25 @@ export default function CompareProperties() {
 
       {/* One unified block: the properties sit on top and the compare action
             lives in the same block, so selection and action are never split.
-            Full-bleed and square-edged on mobile; inset and rounded from sm up. */}
-      <div className="w-full sm:px-8 sm:pb-12 lg:px-12">
-        <div className="w-full bg-[#f7f8fa] px-4 py-4 sm:rounded-2xl sm:border sm:border-black/10 sm:bg-white/80 sm:px-5 sm:py-5">
+            Full-bleed and square-edged on mobile; inset and rounded from sm up.
+
+            `pb-4` on mobile is the gap below the Compare button. The card's own
+            `py-4` supplies 16px of it and this supplies the other 16, for 32px
+            before the next section starts. There was no mobile bottom padding
+            on this wrapper at all before, which is why the next section
+            followed the button almost immediately. */}
+      <div className="content-slot w-full px-5 pb-4 sm:px-8 sm:pb-12 lg:px-12">
+        {/* The card is full-bleed and square-edged on mobile - that is the
+            design, not an oversight - so it carries the gutter itself rather
+            than sitting inside one. Its content therefore lands on the same
+            20px as the heading above it. */}
+        <div className="w-full bg-[#f7f8fa] py-4 sm:rounded-2xl sm:border sm:border-black/10 sm:bg-white/80 sm:px-5 sm:py-5">
           {/* Properties first, at the top of the block. */}
           {listStatus === "loading" ? (
-            <p className="text-sm text-[#5b6270]">Loading properties…</p>
+            <p className="inline-flex items-center gap-2 text-sm text-[#5b6270]">
+              <span className="ila-loader ila-loader--sm" aria-hidden />
+              Loading properties…
+            </p>
           ) : null}
 
           {listStatus === "error" ? (
@@ -410,8 +536,24 @@ export default function CompareProperties() {
             <p className="text-sm text-[#5b6270]">No properties published yet.</p>
           ) : null}
 
+          {/* Carousel gutters, mobile only.
+
+                The strip's box starts on the card's content edge — the 20px
+                gutter — and runs out to the screen's right edge via `-mr-5`,
+                so tiles scroll off the right and never off the left. It used
+                to be `-mx-5 px-5`, which pulled the box to x = 0 as well: two
+                bleed edges, and the strip looked detached from the card.
+
+                `pr-5` keeps the last tile off the screen edge at the end of
+                the scroll.
+
+                No `scroll-pl-5` here, and deliberately: the container's left
+                edge *is* the 20px gutter now, so `snap-start` already parks
+                each tile on it. Adding scroll padding on top would push the
+                snap to 40px — a gutter of double the intended width, visible
+                every time the strip settles. */}
           {listStatus === "ready" && properties.length > 0 ? (
-            <ul className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pt-3 pb-2 scrollbar-none sm:mx-0 sm:gap-3.5 sm:overflow-x-visible sm:px-0 sm:pt-0 lg:grid lg:grid-cols-4">
+            <ul className="-mr-5 flex snap-x snap-mandatory gap-3 overflow-x-auto pr-5 pt-3 pb-2 scrollbar-none sm:mr-0 sm:gap-3.5 sm:overflow-x-visible sm:pr-0 sm:pt-0 lg:grid lg:grid-cols-4">
               {properties.map((property) => {
                 const selected = selectedSet.has(property.id);
                 const blocked = !selected && atMax;
@@ -438,16 +580,11 @@ export default function CompareProperties() {
                           : "border-black/20 bg-[#1b1d22]"
                       } disabled:cursor-not-allowed disabled:opacity-45`}
                     >
-                      {/* Cover image from the GET /api/properties response, used as
-                          the card background. Rendered only when the API
-                          supplies one; a property without a cover_url falls
-                          back to its own dark surface rather than a stock
-                          image.
-
-                          It lives in its own clipped wrapper rather than
-                          using overflow-hidden on the button, because that
-                          would also clip the selection badge, which
-                          deliberately overhangs the card corner. */}
+                      {/* Cover image, clipped in its own wrapper rather than by
+                          `overflow-hidden` on the button, which would clip the
+                          selection circle. A property without a `cover_url`
+                          simply has no image and falls back to its own dark
+                          surface. */}
                       {property.cover_url ? (
                         <div
                           aria-hidden
@@ -473,49 +610,74 @@ export default function CompareProperties() {
                               photo read as an actual image while keeping the
                               lightest copy above 4.5:1 contrast on any
                               image, at every breakpoint. */}
-                          <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/62 to-black/45" />
-                        </div>
+                          </div>
                       ) : null}
+
+                      {/* Scrim, rendered whether or not there is an image.
+
+                          It used to live inside the `cover_url` branch, so a
+                          card with no photo had no gradient — the guarantee
+                          that white text stays above 4.5:1 held only while
+                          every property happened to have a cover. Over the
+                          card's own `#1b1d22` it is invisible, so making it
+                          unconditional costs nothing and means a photo can be
+                          added later without touching this. */}
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 z-0 rounded-2xl bg-linear-to-t from-black/90 via-black/62 to-black/45"
+                      />
 
                       <div className="relative z-10 flex flex-1 flex-col">
                         <div className="flex items-start justify-between gap-2">
                           <span className="rounded-full bg-black/50 px-2 py-1 text-[10px] font-semibold tracking-[0.1em] text-white uppercase">
                             {property.property_type ?? "Development"}
                           </span>
+
+                          {/* Selection state and order in one control.
+
+                              The order badge used to overhang the card at
+                              `-top-2 -left-2`, where it was clipped by the
+                              carousel's own edges on the first and last
+                              cards. It now lives here: a `+` while
+                              unselected, the selection number once chosen,
+                              filled gold.
+
+                              Decorative — `aria-hidden`. The button's
+                              `aria-pressed` and its `aria-label` carry the
+                              state, and this is the whole card's tap target
+                              anyway, not a separate 24px hit area. */}
                           <span
-                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold tabular-nums transition-colors ${
                               selected
                                 ? "border-[#c9a84c] bg-[#c9a84c] text-[#0f1114]"
                                 : "border-white/45 text-white/85 group-hover:border-[#c9a84c] group-hover:text-[#c9a84c]"
                             }`}
                             aria-hidden
                           >
-                            {selected ? (
-                              <CheckIcon className="h-3.5 w-3.5" />
-                            ) : (
-                              <PlusIcon className="h-3.5 w-3.5" />
-                            )}
+                            {selected ? order + 1 : <PlusIcon className="h-3.5 w-3.5" />}
                           </span>
                         </div>
 
-                        <h3 className="mt-3 line-clamp-2 text-sm font-semibold tracking-tight text-white">
+                        <h3 className="mt-3 line-clamp-2 text-[16px] font-semibold tracking-tight text-white">
                           {property.name}
                         </h3>
 
+                        {/* Location, so two cards are distinguishable by more
+                            than their name and price. `location_id` is all
+                            the list endpoint returns, so this is the locality
+                            name joined in from `GET /api/locations`. */}
+                        {locationNames[property.location_id ?? ""] ? (
+                          <p className="mt-1 truncate text-[12px] text-white/70">
+                            {locationNames[property.location_id ?? ""]}
+                          </p>
+                        ) : null}
+
                         {/* Anchored to the bottom so the taller mobile card reads
                             as intentional rather than padded out. */}
-                        <p className="mt-auto pt-3 text-[13px] font-semibold text-white/85">
+                        <p className="mt-auto pt-3 text-[14px] font-semibold text-white/85">
                           {property.price_label ?? formatPrice(property.price)}
                         </p>
                       </div>
-
-                      {/* Selection order, so the comparison column order is
-                          visible without a separate summary block. */}
-                      {selected ? (
-                        <span className="absolute -top-2 -left-2 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-[#c9a84c] text-[10px] font-bold text-[#0f1114]">
-                          {order + 1}
-                        </span>
-                      ) : null}
                     </button>
                   </li>
                 );
@@ -524,104 +686,149 @@ export default function CompareProperties() {
           ) : null}
 
           {/* Selection count, clear, and the compare action — all in this same
-              block, directly under the properties. */}
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-black/10 pt-4">
-            <p className="text-[11px] font-semibold tracking-[0.16em] text-[#5b6270] uppercase">
-              {selectedIds.length} of {COMPARE_MAX_IDS} selected
-              {selectedIds.length === 1
-                ? ` · add ${COMPARE_MIN_IDS - selectedIds.length} more to compare`
-                : ""}
-            </p>
+              block, directly under the properties.
 
-            {selectedIds.length > 0 ? (
-              <button
-                type="button"
-                onClick={clearSelection}
-                className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.1em] text-[#4a5060] uppercase transition hover:text-[#0f1114]"
-              >
-                <CloseIcon className="h-3 w-3" />
-                Clear all
-              </button>
-            ) : null}
+              The wrapper is what sticks, not the status row. They read as one
+              unit and the button is the thing a visitor scrolls back for;
+              sticky-ing only the status line would leave the action stranded
+              at the end of the card. */}
+          <div className={actionRowClass}>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-black/10 pt-4">
+              {/* Says what to do next, not just what is true. "0 of 5
+                  selected" with a dead button under it left the visitor with
+                  nothing to act on; at 1 the remaining step is named; from 2
+                  the comparison can run, so the count is the useful fact. */}
+              <p className="text-[11px] font-semibold tracking-[0.16em] text-[#5b6270] uppercase">
+                {selectedIds.length === 0
+                  ? `Select at least ${COMPARE_MIN_IDS} to compare`
+                  : selectedIds.length === 1
+                    ? "Select 1 more to compare"
+                    : `${selectedIds.length} of ${COMPARE_MAX_IDS} selected`}
+              </p>
+
+              {selectedIds.length > 0 ? (
+                /* `min-h-11` is the 44px tap target; the label stays at 11px.
+                    `-mr-2 px-2` extends the hit area without moving the text
+                    away from the right edge of the row. */
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="-mr-2 inline-flex min-h-11 items-center gap-1.5 px-2 text-[11px] font-semibold tracking-[0.1em] text-[#4a5060] uppercase transition hover:text-[#0f1114]"
+                >
+                  <CloseIcon className="h-3 w-3" />
+                  Clear all
+                </button>
+              ) : null}
+            </div>
+
+          {/* `disabled:bg-[#e4e7ec] disabled:text-[#5b6270]` is 4.9:1.
+                The old `black/8` on `#8a909e` sat near 1.9:1 over the card's
+                own `#f7f8fa` — grey on grey, effectively unreadable — while
+                still looking enabled, since the gold hover and shadow were
+                already gone. The flat grey now reads as disabled and the label
+                is still legible. */}
+            <button
+              type="button"
+              onClick={() => void runComparison()}
+              disabled={!canRun}
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#c9a84c] px-5 py-3 text-[10px] font-bold tracking-[0.14em] text-[#0f1114] uppercase shadow-[0_6px_18px_rgba(201,168,76,0.35)] transition hover:bg-[#d4b57e] disabled:cursor-not-allowed disabled:bg-[#e4e7ec] disabled:text-[#5b6270] disabled:shadow-none"
+            >
+              {compareStatus === "loading" ? "Comparing…" : "Compare now"}
+              <ArrowIcon className="h-4 w-4" />
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() => void runComparison()}
-            disabled={!canRun}
-            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#c9a84c] px-5 py-3 text-[10px] font-bold tracking-[0.14em] text-[#0f1114] uppercase shadow-[0_6px_18px_rgba(201,168,76,0.35)] transition hover:bg-[#d4b57e] disabled:cursor-not-allowed disabled:bg-black/8 disabled:text-[#8a909e] disabled:shadow-none"
-          >
-            {compareStatus === "loading" ? "Comparing…" : "Compare now"}
-            <ArrowIcon className="h-4 w-4" />
-          </button>
         </div>
 
+        {/* The error line sits at the same 20px as everything else. It was at the
+            wrapper's edge, x = 0, because the block below it is full-bleed and
+            had been carrying the gutter on its behalf. */}
         {compareError ? (
           <p className="mt-6 text-sm text-[#5b6270]">{compareError}</p>
         ) : null}
 
-        {/* Results. The header and the body share one horizontal scroller, so
-            the columns cannot drift apart when the table scrolls on mobile. */}
+        {/* Results.
+
+            On the section's own palette: a white card on `#eceef2`, hairline
+            `border-black/10` rules, and gold reserved for the value that wins
+            a row, the best-match label and the CTA.
+
+            One property per screen at `CELL_WIDTH`. Two columns fitted inside
+            the scrollport before, which made the table read as immovable --
+            see the note on `CELL_WIDTH` for the measurements.
+
+            Values are left-aligned, not centred. At 88% a centred number sits
+            alone in a 340px row and the eye has to travel back to the left
+            edge to read the next one down; ragged centred text down a column
+            of numbers is the one arrangement that cannot be scanned.
+
+            `overflow-x-clip` on the wrapper, for the pinned captions:
+            `overflow: hidden` creates a scroll container and they would resolve
+            against a scrollport that never scrolls. */}
         {compareStatus === "ready" && compared.length > 0 ? (
-          <div className="mt-8 overflow-hidden rounded-2xl border border-black/10 bg-white">
-            <div className="overflow-x-auto">
-              <div
-                className="min-w-[32rem] sm:min-w-[52rem]"
-                style={{
-                  ["--cmp-cols" as string]: columnTemplate("6rem", "8.5rem"),
-                  ["--cmp-cols-wide" as string]: columnTemplate("11rem", "12rem"),
-                }}
-              >
-                {/* Property column headers */}
-                <div
-                  className={`grid gap-px border-b border-black/12 bg-black/12 ${GRID_COLUMNS}`}
-                >
-                  <div className="sticky left-0 z-20 bg-[#faf9f6] px-3 py-4 sm:px-5">
-                    <span className="text-[11px] font-bold tracking-[0.14em] text-[#4a5060] uppercase">
-                      Metric
-                    </span>
-                  </div>
-                  {compared.map((property: ComparisonProperty) => (
-                    <div key={property.property_id} className="bg-white px-4 py-4 sm:px-5">
-                      <p className="line-clamp-2 text-[15px] leading-snug font-bold tracking-tight text-[#0f1114]">
+          <div className="mt-6 overflow-x-clip rounded-2xl border border-black/10 bg-white">
+            <div className="snap-x snap-mandatory overflow-x-auto">
+              {/* Property headers.
+
+                  Deliberately NOT `sticky top-[var(--nav-h)]`. `overflow-x:
+                  auto` computes `overflow-y` to `auto` as well, so this element
+                  is already a vertical scroll container, and a sticky child
+                  resolves against *it* rather than the page. A container whose
+                  height is `auto` never scrolls vertically, so the declaration
+                  was inert -- and in a capture it painted the header over the
+                  first caption, which read as a missing field name. */}
+              <div className="relative z-10 flex bg-white">
+                {compared.map((property) => {
+                  const isTop = bestMatchId === property.property_id;
+                  const locality =
+                    property.metrics.locality ?? property.metrics.location;
+
+                  return (
+                    <div
+                      key={property.property_id}
+                      className={`${CELL_WIDTH} shrink-0 snap-start border-r border-black/10 px-5 py-4 ${
+                        isTop ? "bg-[#fdf6e3]" : ""
+                      }`}
+                    >
+                      <p
+                        className={`text-[10px] font-bold tracking-[0.14em] uppercase ${
+                          isTop ? "text-[#8a6a12]" : "text-[#6b7280]"
+                        }`}
+                      >
+                        {isTop ? "Best match" : "Pinned"}
+                      </p>
+                      <p className="mt-1.5 line-clamp-2 text-[16px] leading-tight font-bold tracking-tight text-[#0f1114]">
                         {property.name}
                       </p>
-                      <Link
-                        href={`/properties/${property.property_id}`}
-                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold tracking-[0.08em] text-[#8a6a12] uppercase transition hover:text-[#0f1114]"
-                      >
-                        View
-                        <ArrowIcon className="h-3.5 w-3.5" />
-                      </Link>
+                      {locality ? (
+                        <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-[#5b6270]">
+                          {locality}
+                        </p>
+                      ) : null}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
+              </div>
 
-                {/* Metric rows, values keyed by property id */}
-                {groupedMetrics.map(({ group, rows }) => (
-                  <section key={group}>
-                    <h3 className="bg-[#0f1114] px-3 py-2.5 text-[11px] font-bold tracking-[0.16em] text-[#c9a84c] uppercase sm:px-5">
-                      {/* Pinned to the left edge so the group title stays put
-                          while the property columns scroll underneath it. */}
-                      <span className="sticky left-3 inline-block sm:left-5">
-                        {GROUP_LABELS[group]}
-                      </span>
-                    </h3>
+              {groupedMetrics.map(({ group, rows }) => (
+                <section key={group}>
+                  {/* Group band. `#fbf1da` on white is barely a contrast step,
+                      which is what makes it read as a band across the card
+                      rather than as a rule between rows. */}
+                  <h3 className="sticky left-0 z-20 bg-[#fbf1da] px-5 py-2.5 text-[11px] font-bold tracking-[0.16em] text-[#7a5c28] uppercase">
+                    {GROUP_LABELS[group]}
+                  </h3>
 
-                    {rows.map(({ row, spec }) => (
-                      <div
-                        key={row.key}
-                        className={`grid gap-px border-b border-black/10 bg-black/10 last:border-b-0 ${GRID_COLUMNS}`}
-                      >
-                        {/* Sticky on mobile so the label stays readable while
-                            the property columns scroll under it. Long labels
-                            wrap rather than widening the column. */}
-                        <div className="sticky left-0 z-10 bg-[#faf9f6] px-3 py-3 sm:px-5">
-                          <span className="text-[13px] leading-snug font-semibold wrap-break-word text-[#3d4450]">
-                            {spec.label}
-                          </span>
-                        </div>
+                  {rows.map(({ row, spec }) => (
+                    <div key={row.key}>
+                      {/* The metric name, pinned to the left edge of the scroll
+                          area so it names the numbers at every column. 13px
+                          semibold on `#faf9f6` -- this is a label for the row,
+                          not a footnote, and at 12px grey it read as absent. */}
+                      <p className="sticky left-0 z-10 bg-[#faf9f6] px-5 py-2 text-[13px] font-semibold text-[#3d4450]">
+                        {spec.label}
+                      </p>
 
+                      <div className="flex">
                         {compared.map((property) => {
                           // Values are keyed by id, never read by column index.
                           const raw = row.values?.[property.property_id] ?? null;
@@ -630,17 +837,34 @@ export default function CompareProperties() {
                           const missing =
                             raw === null || raw === undefined || raw === "";
 
+                          // Only a genuine 0-100 metric gets a bar; anything
+                          // else would need a scale invented for it.
+                          const score =
+                            !missing &&
+                            SCORE_METRICS.has(row.key) &&
+                            typeof raw === "number"
+                              ? raw
+                              : null;
+
+                          // A tick is a claim about registration, so it is drawn
+                          // only where the value actually says RERA.
+                          const verified =
+                            !missing &&
+                            row.key === "approval_status" &&
+                            typeof raw === "string" &&
+                            /rera/i.test(raw);
+
                           return (
                             <div
                               key={property.property_id}
-                              className={`px-4 py-3 sm:px-5 ${
-                                isBest ? "bg-[#fbf3dc]" : "bg-white"
+                              className={`flex min-h-[56px] ${CELL_WIDTH} shrink-0 snap-start flex-col items-start justify-center gap-1.5 border-r border-b border-black/10 px-5 py-3 ${
+                                isBest && !missing ? "bg-[#fbf3dc]" : "bg-white"
                               }`}
                             >
                               <span
-                                className={`text-[15px] leading-snug ${
+                                className={`text-[15px] leading-snug tabular-nums ${
                                   missing
-                                    ? "text-[13px] font-medium text-[#6b7280] italic"
+                                    ? "text-[12px] text-[#6b7280]"
                                     : isBest
                                       ? "font-bold text-[#0f1114]"
                                       : "font-semibold text-[#3d4450]"
@@ -648,17 +872,55 @@ export default function CompareProperties() {
                               >
                                 {formatValue(raw, spec)}
                               </span>
-                              {isBest && !missing ? (
-                                <span className="ml-2 inline-flex translate-y-[-1px] items-center rounded-full bg-[#c9a84c] px-1.5 py-0.5 text-[10px] font-bold tracking-[0.08em] text-[#0f1114] uppercase">
-                                  Best
+
+                              {score !== null ? (
+                                <span
+                                  aria-hidden
+                                  className="block h-[3px] w-full max-w-[200px] overflow-hidden rounded-full bg-black/10"
+                                >
+                                  <span
+                                    className={`block h-full rounded-full ${
+                                      isBest ? "bg-[#c9a84c]" : "bg-[#8a8f98]"
+                                    }`}
+                                    style={{
+                                      width: `${Math.max(0, Math.min(100, score))}%`,
+                                    }}
+                                  />
+                                </span>
+                              ) : null}
+
+                              {verified ? (
+                                <span
+                                  aria-hidden
+                                  className="text-[12px] leading-none text-[#8a6a12]"
+                                >
+                                  &#10003;
                                 </span>
                               ) : null}
                             </div>
                           );
                         })}
                       </div>
-                    ))}
-                  </section>
+                    </div>
+                  ))}
+                </section>
+              ))}
+
+              {/* Footer CTA per property, on the same snap track, so each button
+                  travels with its own column instead of detaching from it. */}
+              <div className="flex">
+                {compared.map((property) => (
+                  <div
+                    key={property.property_id}
+                    className={`flex ${CELL_WIDTH} shrink-0 snap-start justify-start border-r border-black/10 p-5`}
+                  >
+                    <Link
+                      href={`/properties/${property.property_id}`}
+                      className="inline-flex min-h-11 w-full max-w-[280px] items-center justify-center rounded-full bg-[#c9a84c] px-5 text-[13px] font-semibold text-[#0f1114] transition hover:bg-[#d4b57e]"
+                    >
+                      Enquire on {property.name}
+                    </Link>
+                  </div>
                 ))}
               </div>
             </div>

@@ -957,6 +957,8 @@ export default function MapSection() {
   const zoomHintShownRef = useRef(false);
   const mapFrameRef = useRef<HTMLDivElement | null>(null);
   const fittedPinsRef = useRef("");
+  /** Coalesces the auto-fit while pins stream in, so the camera moves once. */
+  const fitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectAbortRef = useRef<AbortController | null>(null);
   /** A camera request for a property with no plot geometry to frame. The nonce
    *  makes repeated clicks on the same property distinct. */
@@ -1125,11 +1127,15 @@ export default function MapSection() {
    * already knows which property was chosen, so the master plan (desktop) or
    * the compact property sheet (mobile) opens — zoomed to the plots — as soon
    * as the geometry arrives, instead of waiting for a second click.
+   *
+   * `silent` marks the mount-time warm-up. It neither raises the loading state
+   * nor lowers it on failure, because the visitor did not request it and the
+   * portfolio pins are already rendered behind it.
    */
   const selectProperty = useCallback(
     async (
       propertyId: string,
-      options: { openLayout?: boolean; openSheet?: boolean } = {},
+      options: { openLayout?: boolean; openSheet?: boolean; silent?: boolean } = {},
     ) => {
       // Any in-flight selection is now stale; abort it rather than racing it.
       selectAbortRef.current?.abort();
@@ -1137,7 +1143,12 @@ export default function MapSection() {
       selectAbortRef.current = controller;
 
       setActivePropertyId(propertyId);
-      setRemoteStatus("loading");
+
+      // A silent selection is the background warm-up that opens the first
+      // property on mount. The visitor did not ask for it, so it must not dim
+      // the map behind a spinner while their own data is already on screen.
+      if (!options.silent) setRemoteStatus("loading");
+
       setRemoteProject(null);
       setActiveProjectId(null);
       setSelectedProjectId(null);
@@ -1244,7 +1255,9 @@ export default function MapSection() {
         );
       } catch (error) {
         if (controller.signal.aborted) return;
-        setRemoteStatus("error");
+        // A failed warm-up is not a failed map: the list and its pins are
+        // already on screen, so it must not replace them with an error state.
+        if (!options.silent) setRemoteStatus("error");
         console.warn("[ILA API] property load failed", error);
       }
     },
@@ -1260,20 +1273,41 @@ export default function MapSection() {
         if (controller.signal.aborted) return;
         setPropertyList(result.items);
 
-        // Pin everything that has coordinates, whether or not the listing
-        // endpoint returned them — the missing ones cost one detail call each.
+        // Seed pins from the rows that already carry coordinates. This is
+        // synchronous, so those pins render on the very next frame with no
+        // detail call involved at all.
+        const seeded: Record<string, PropertyAnchor> = {};
+        for (const item of result.items) {
+          const anchor = propertyAnchor(item);
+          if (anchor) seeded[item.id] = anchor;
+        }
+        if (Object.keys(seeded).length > 0) setPropertyAnchors(seeded);
+
+        // Resolve the rest, publishing each anchor as it arrives instead of
+        // waiting for the slowest detail call in the batch. Pins appear
+        // progressively rather than all at once at the end.
         fetchPropertyAnchors(result.items, {
           signal: controller.signal,
           concurrency: 4,
+          onAnchor: (propertyId, anchor) => {
+            if (controller.signal.aborted) return;
+            setPropertyAnchors((previous) =>
+              previous[propertyId]
+                ? previous
+                : { ...previous, [propertyId]: anchor },
+            );
+          },
         }).then((anchors) => {
           if (controller.signal.aborted) return;
-          setPropertyAnchors(anchors);
+          setPropertyAnchors((previous) => ({ ...previous, ...anchors }));
         });
 
         // Open the first property that actually has plots, so the map is
         // not empty on first paint. Most listings have no geometry yet.
+        // Silent: this is a convenience warm-up, not a visitor request, so it
+        // runs behind the pins rather than dimming the map with a spinner.
         const first = result.items[0];
-        if (first) selectProperty(first.id);
+        if (first) selectProperty(first.id, { silent: true });
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -1525,6 +1559,7 @@ export default function MapSection() {
     return () => {
       window.removeEventListener("orientationchange", onOrient);
       if (zoomHintTimerRef.current) clearTimeout(zoomHintTimerRef.current);
+      if (fitTimerRef.current) clearTimeout(fitTimerRef.current);
     };
   }, []);
 
@@ -2071,7 +2106,14 @@ export default function MapSection() {
 
       if (signature !== fittedPinsRef.current) {
         fittedPinsRef.current = signature;
-        fitBounds(map, pinsBounds, 50, 13.2, panelOpen);
+        // Pins now stream in one at a time as their coordinates resolve, so an
+        // immediate fit would restart a 900ms camera move on every arrival.
+        // Coalescing lets the burst settle into a single framing pass.
+        if (fitTimerRef.current) clearTimeout(fitTimerRef.current);
+        fitTimerRef.current = setTimeout(() => {
+          fitTimerRef.current = null;
+          fitBounds(map, pinsBounds, 50, 13.2, panelOpen);
+        }, 120);
       }
     }
   }, [activeProjectId, mapReady, panelOpen, pins, pinsBounds, selectProperty]);
@@ -2402,7 +2444,7 @@ export default function MapSection() {
             >
               <div className="flex flex-col items-center gap-3 rounded-2xl border border-black/12 bg-[#f7f5f1]/95 px-6 py-5 shadow-[0_12px_36px_rgba(15,23,42,0.18)]">
                 <span
-                  className="ila-map-loader motion-safe:animate-spin"
+                  className="ila-loader ila-loader--sm"
                   aria-hidden
                 />
                 <p className="text-xs font-semibold tracking-[0.14em] text-[#171717] uppercase">
@@ -2498,13 +2540,18 @@ export default function MapSection() {
                 <div className="ila-scroll min-h-0 flex-1 space-y-0 overflow-y-auto">
                   {filteredProperties.length === 0 ? (
                     <p className="px-3 py-8 text-center text-sm font-medium text-[#3f3a34]">
-                      {remoteStatus === "loading"
-                        ? "Loading developments…"
-                        : remoteStatus === "error"
-                          ? "Developments could not be loaded. Try again shortly."
-                          : query.trim()
-                            ? "No developments match your search."
-                            : "No developments published yet."}
+                      {remoteStatus === "loading" ? (
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <span className="ila-loader ila-loader--sm" aria-hidden />
+                        Loading developments…
+                      </span>
+                    ) : remoteStatus === "error" ? (
+                      "Developments could not be loaded. Try again shortly."
+                    ) : query.trim() ? (
+                      "No developments match your search."
+                    ) : (
+                      "No developments published yet."
+                    )}
                     </p>
                   ) : (
                     filteredProperties.map((item) => (

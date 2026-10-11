@@ -166,7 +166,11 @@ export default function PropertiesList() {
 
   if (state === "loading") {
     return (
-      <p className="text-sm text-[#5c5852]" role="status">
+      <p
+        className="inline-flex items-center gap-2 text-sm text-[#5c5852]"
+        role="status"
+      >
+        <span className="ila-loader ila-loader--sm" aria-hidden />
         Loading properties…
       </p>
     );

@@ -46,25 +46,27 @@ const PENDING_MATCH: Record<LifeStageKey, LifeStageMatchEntry> = {
  * No score exists — the request failed, or the API omitted this persona.
  * Rendering 0% would be a lie, so the section shows a placeholder instead.
  */
+const NO_SCORE_REASON = "No fit score published for this property yet.";
+
 const UNAVAILABLE_MATCH: Record<LifeStageKey, LifeStageMatchEntry> = {
   family: {
     score: 0,
-    reason: "No fit score published for this property yet.",
+    reason: NO_SCORE_REASON,
     unavailable: true,
   },
   investment: {
     score: 0,
-    reason: "No fit score published for this property yet.",
+    reason: NO_SCORE_REASON,
     unavailable: true,
   },
   building: {
     score: 0,
-    reason: "No fit score published for this property yet.",
+    reason: NO_SCORE_REASON,
     unavailable: true,
   },
   retirement: {
     score: 0,
-    reason: "No fit score published for this property yet.",
+    reason: NO_SCORE_REASON,
     unavailable: true,
   },
 };
@@ -160,12 +162,26 @@ export function lifeStageFitToMatch(
 
     const reason =
       typeof persona.reason === "string" ? persona.reason.trim() : "";
+    const reasons = Array.isArray(persona.reasons)
+      ? persona.reasons
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .slice(0, 3)
+      : [];
+    if (reason && !reasons.includes(reason)) reasons.unshift(reason);
 
     // First persona for a goal wins, so a duplicate cannot overwrite it.
     if (byGoal.has(goal)) continue;
     byGoal.set(goal, {
       score: score ?? 0,
-      reason: reason || "No fit score published for this property yet.",
+      // A persona with a percentage but no reason text is a real score with
+      // nothing written about it. Falling back to NO_SCORE_REASON there put
+      // "No fit score published for this property yet." directly under a real
+      // number, under a tick, in the result card. Empty is the honest answer:
+      // the card renders the score and bar and simply omits the note list.
+      reason: reason || (score === null ? NO_SCORE_REASON : ""),
+      ...(reasons.length > 0 ? { reasons } : {}),
       // A persona with no usable percentage is not a 0% fit.
       unavailable: score === null,
     });

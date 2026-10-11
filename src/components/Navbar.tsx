@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const NAV_LINKS = [
@@ -16,6 +17,20 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const lastScrollY = useRef(0);
+  const pathname = usePathname();
+
+  /**
+   * Current page, not current section.
+   *
+   * Four of the five links are homepage fragments — `#about`, `#projects`,
+   * `#services`, `#contact` all resolve inside components that only render on
+   * `/`. On `/properties/{id}` they have no target, so they can never be the
+   * section in view and are deliberately left out of this. `/properties` is the
+   * one link that does match a route, and `startsWith` keeps it active on the
+   * detail pages nested underneath it.
+   */
+  const isCurrent = (href: string) =>
+    href === "/properties" && pathname.startsWith("/properties");
 
   useEffect(() => {
     const onScroll = () => {
@@ -62,7 +77,7 @@ export default function Navbar() {
       }`}
     >
       <nav
-        className="flex h-14 w-full items-center justify-between px-6 sm:h-16 sm:px-8 lg:px-12"
+        className="ila-gutter-x flex h-14 w-full items-center justify-between sm:h-16"
         aria-label="Primary"
       >
         <Link
@@ -76,21 +91,45 @@ export default function Navbar() {
             width={1086}
             height={362}
             priority
-            className="h-12 w-auto sm:h-14 lg:h-16"
+            /*
+             * The supplied file is an opaque near-black rectangle with the mark
+             * in light grey, not a transparent PNG. Against the black header
+             * that box reads as a grey patch, and over a white page it shows a
+             * hard seam.
+             *
+             * `screen` is the conventional way to drop a black field without a
+             * new asset: screen(base, black) === base, so the rectangle
+             * disappears and the mark survives with a slight lift. This is a
+             * workaround, not a fix — a PNG with a real alpha channel would
+             * also let the logo sit on a light surface later.
+             */
+            className="mix-blend-screen h-12 w-auto sm:h-14 lg:h-16"
           />
         </Link>
 
         <ul className="hidden items-center gap-8 md:flex">
-          {NAV_LINKS.map((link) => (
-            <li key={link.href}>
-              <Link
-                href={link.href}
-                className="text-sm tracking-[0.14em] text-white/70 uppercase transition-colors duration-200 hover:text-white"
-              >
-                {link.label}
-              </Link>
-            </li>
-          ))}
+          {NAV_LINKS.map((link) => {
+            const current = isCurrent(link.href);
+            return (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  aria-current={current ? "page" : undefined}
+                  className={`relative text-sm tracking-[0.14em] uppercase transition-colors duration-200 hover:text-white ${
+                    current
+                      ? /* Full white plus a gold rule. Colour alone would be
+                           indistinguishable from hover, and hover is
+                           transient — an active state that only looks different
+                           while the cursor is on it is not an active state. */
+                        "text-white after:absolute after:-bottom-1.5 after:left-0 after:h-px after:w-full after:bg-[#c6a46c]"
+                      : "text-white/70"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
 
         <button
@@ -128,18 +167,24 @@ export default function Navbar() {
           open ? "block" : "hidden"
         }`}
       >
-        <ul className="flex w-full flex-col gap-1 px-6 py-4 sm:px-8 lg:px-12">
-          {NAV_LINKS.map((link) => (
-            <li key={link.href}>
-              <Link
-                href={link.href}
-                className="block py-3 text-sm tracking-[0.14em] text-white/80 uppercase transition-colors duration-200 hover:text-white"
-                onClick={() => setOpen(false)}
-              >
-                {link.label}
-              </Link>
-            </li>
-          ))}
+        <ul className="ila-gutter-x flex w-full flex-col gap-1 py-4">
+          {NAV_LINKS.map((link) => {
+            const current = isCurrent(link.href);
+            return (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  aria-current={current ? "page" : undefined}
+                  className={`block py-3 text-sm tracking-[0.14em] uppercase transition-colors duration-200 hover:text-white ${
+                    current ? "text-[#c6a46c]" : "text-white/80"
+                  }`}
+                  onClick={() => setOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </header>

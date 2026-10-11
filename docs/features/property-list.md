@@ -180,7 +180,7 @@ It uses Next `Link` and `Image`; it does not use `useRouter`, a shared search ho
 
 ## 23. Loading behavior
 
-The initial state is `loading`. While the list request is pending, the component renders `Loading properties…` with `role="status"`.
+The initial state is `loading`. While the list request is pending, the component renders `Loading properties…` with `role="status"`, alongside the shared `ila-loader ila-loader--sm` animation — see `docs\features\loading.md`.
 
 After the list response arrives, the component changes to `ready` and renders the list immediately using the list fields. Detail enrichment then updates the cards with richer fields as a group completes. A slow or failed detail request does not remove the corresponding list item; the list item is retained as fallback data.
 

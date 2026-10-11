@@ -141,7 +141,7 @@ The calculator displays the effective down payment and its percentage, the net l
 
 `PriceEmiFuture` has **no loading or error state**. Values derive synchronously and invalid input is handled by clamping, not by an error message.
 
-`EmiAppreciation` does have three states for the property list: `Loading properties…` as a `role="status"`, an error line as a `role="alert"` carrying the backend message, and an empty state when the list returns nothing. If any of the first two apply, the picker grid is not rendered and the locked placeholder stays.
+`EmiAppreciation` does have three states for the property list: `Loading properties…` as a `role="status"`, an error line as a `role="alert"` carrying the backend message, and an empty state when the list returns nothing. The loading line carries the `ila-loader ila-loader--sm ila-loader--light` animation because the section background is `#111111` — see `docs\features\loading.md`. If any of the first two apply, the picker grid is not rendered and the locked placeholder stays.
 
 ## 19. Empty-state behavior
 

@@ -72,7 +72,12 @@ export default function FromTheField({
 
         <div className="from-field__grid">
           <div className="from-field__reels" role="list" aria-live="polite">
-            {reelLoading ? <p className="from-field__state" role="status">Loading the latest reel…</p> : null}
+            {reelLoading ? (
+              <p className="from-field__state inline-flex items-center gap-2" role="status">
+                <span className="ila-loader ila-loader--sm" aria-hidden />
+                Loading the latest reel…
+              </p>
+            ) : null}
             {!reelLoading && reelError ? <p className="from-field__state" role="alert">The latest reel is unavailable right now.</p> : null}
             {!reelLoading && !reelError && activeReelUrl ? (
                 <a

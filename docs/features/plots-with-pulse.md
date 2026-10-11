@@ -131,7 +131,7 @@ The component uses `useState` for `plots` and `useEffect` to create a browser in
 
 ## 20. Loading behavior
 
-There is no feature-specific loading state. Local layout data and imported images are available synchronously to the component. The text `Updating this section.` is a persistent informational notice, not a loading indicator for an API request.
+Local layout data and imported images are available synchronously to the component. A `role="status"` line reading `Loading properties…` is rendered while the API property request is pending and carries the shared `ila-loader ila-loader--sm` animation — see `docs\features\loading.md`. The text `Updating this section.` is a persistent informational notice, not a loading indicator for an API request.
 
 ## 21. Error behavior
 

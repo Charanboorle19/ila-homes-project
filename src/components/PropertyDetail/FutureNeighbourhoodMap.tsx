@@ -6,8 +6,12 @@ import {
   LngLatBounds,
   Map as MapLibreMap,
   Map as MapLibre,
+  NavigationControl,
+  Marker,
+  Popup,
   setWorkerUrl,
 } from "maplibre-gl";
+import type { MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 import type { NeighbourhoodItem, PropertyRecord } from "@/data/properties";
@@ -19,6 +23,7 @@ import {
 } from "@/services/propertiesService";
 
 type Horizon = "today" | "2029";
+type NearByStatus = "idle" | "locating" | "located" | "denied";
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const ITEMS_SOURCE = "future-items";
@@ -78,6 +83,7 @@ function formatProximityLabel(label?: string | null): string {
     SHORT_DRIVE: "Short Drive",
     MODERATE_DRIVE: "Moderate Drive",
     FURTHER_DRIVE: "Drive Distance",
+    DRIVE_TIME_CLAIM: "Approx. drive time",
   };
   return map[label] || label.replace(/_/g, " ").toLowerCase();
 }
@@ -173,12 +179,15 @@ function buildGeoJson(
       : offsetFrom(origin, item.distanceKm, step * index + 24);
 
     return {
+      id: item.id,
       type: "Feature",
       geometry: {
         type: "Point",
         coordinates: coords,
       },
       properties: {
+        id: item.id,
+        number: index + 1,
         name: item.name,
         meta: `${item.kind} · ${formatDistanceDisplay(item.distanceKm)} · ${item.status}`,
         status: item.status,
@@ -221,6 +230,33 @@ function buildGeoJson(
   };
 }
 
+/**
+ * The line under a card's name.
+ *
+ * The proximity label used to render as its own chip floating between the
+ * subtitle and the status, which is where it read as a third unrelated fact.
+ * It belongs with the subtitle — "Gachibowli · Short Drive" is one thought
+ * about where the place is, not two.
+ *
+ * Returns an empty string rather than a placeholder when there is nothing to
+ * say, and the card then omits the line rather than printing the same filler
+ * on every row.
+ */
+function cardSubtitle(item: NeighbourhoodItem | NearbyPlaceItem): string {
+  const proximity =
+    "proximityLabel" in item && item.proximityLabel ? item.proximityLabel : "";
+  const parts = item.detail
+    .split(" · ")
+    .filter(
+      (part) =>
+        part !== item.kind &&
+        part !== proximity &&
+        !/drive time claim|employment hub/i.test(part),
+    );
+  if (proximity) parts.push(proximity);
+  return parts.join(" · ");
+}
+
 export default function FutureNeighbourhoodMap({
   property,
 }: {
@@ -228,13 +264,31 @@ export default function FutureNeighbourhoodMap({
 }) {
   const [horizon, setHorizon] = useState<Horizon>("today");
   const [nearBy, setNearBy] = useState(false);
+  const [nearByStatus, setNearByStatus] = useState<NearByStatus>("idle");
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [mapFailed, setMapFailed] = useState(false);
   const [apiPlaces, setApiPlaces] = useState<ApiNearbyPlace[] | null>(null);
   const [isLoadingApi, setIsLoadingApi] = useState(false);
+  const [mapHint, setMapHint] = useState<"touch" | "desktop">("touch");
+  const [showMapHint, setShowMapHint] = useState(true);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const selectedMapItemRef = useRef<string | null>(null);
+  const hoveredMapItemRef = useRef<string | null>(null);
+  const popupRef = useRef<Popup | null>(null);
   const readyRef = useRef(false);
+
+  const resetMapView = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.fitBounds(new LngLatBounds(origin, origin), {
+      padding: 90,
+      maxZoom: 14.5,
+      duration: 700,
+    });
+    setSelectedItemId(null);
+  };
 
   // Fetch live nearby places from /api/properties/{id}/nearby-places when property ID is a UUID
   // Or fallback to the sample property UUID (6429f090-c01d-4bcc-9145-b9bfb8595843)
@@ -286,6 +340,28 @@ export default function FutureNeighbourhoodMap({
       : property.neighbourhood.proposed;
   }, [apiPlaces, horizon, property.neighbourhood.existing, property.neighbourhood.proposed]);
 
+  const [showAll, setShowAll] = useState(false);
+  const [isDesktopList, setIsDesktopList] = useState(false);
+  // The desktop map is 34rem tall; four two-card rows use that available
+  // height much better than the previous three rows while the button keeps
+  // the remaining options discoverable.
+  const collapsedItemCount = isDesktopList ? 8 : 3;
+  const visibleItems = showAll ? items : items.slice(0, collapsedItemCount);
+  const hiddenItemCount = Math.max(items.length - collapsedItemCount, 0);
+  const categoryHeading =
+    items.length > 0 &&
+    items.every((item) => /business|employment|it park/i.test(item.kind))
+      ? "Employment hubs"
+      : "Nearby landmarks";
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 760px)");
+    const updateDesktopList = () => setIsDesktopList(mediaQuery.matches);
+    updateDesktopList();
+    mediaQuery.addEventListener("change", updateDesktopList);
+    return () => mediaQuery.removeEventListener("change", updateDesktopList);
+  }, []);
+
   const origin: [number, number] = property.coordinates;
 
   const geo = useMemo(
@@ -298,6 +374,124 @@ export default function FutureNeighbourhoodMap({
     [property],
   );
 
+  const handleNearByClick = () => {
+    if (nearBy) {
+      setNearBy(false);
+      setNearByStatus("idle");
+      return;
+    }
+
+    setNearBy(true);
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setNearByStatus("denied");
+      return;
+    }
+
+    setNearByStatus("locating");
+    navigator.geolocation.getCurrentPosition(
+      () => setNearByStatus("located"),
+      () => setNearByStatus("denied"),
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
+    );
+  };
+
+  /**
+   * Hovering a card grows its pin.
+   *
+   * Driven through feature-state rather than a `Marker`, because the pins are
+   * GeoJSON circle layers sharing one source — the layer paint reads the state
+   * and the browser animates the radius for free. `hoveredMapItemRef` tracks
+   * the last card so a card that unmounts mid-hover (show-all collapsed,
+   * horizon switched) cannot leave a pin stuck at full size.
+   *
+   * Pointer-only. On touch, `mouseenter` fires on tap and `mouseleave` waits
+   * for the next tap somewhere else, so an unguarded pin would stay enlarged
+   * after the finger is gone.
+   */
+  const setMapItemHover = (itemId: string | null) => {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+    if (typeof window !== "undefined" && !window.matchMedia("(hover: hover)").matches) {
+      return;
+    }
+    const previous = hoveredMapItemRef.current;
+    if (previous && previous !== itemId) {
+      map.setFeatureState({ source: ITEMS_SOURCE, id: previous }, { hover: false });
+    }
+    hoveredMapItemRef.current = itemId;
+    /* Only ids that are actually in the current horizon's source. `setData`
+       drops every feature not in the new payload, and writing state for a
+       missing id is an error MapLibre reports rather than ignores. */
+    if (itemId && items.some((item) => item.id === itemId)) {
+      map.setFeatureState({ source: ITEMS_SOURCE, id: itemId }, { hover: true });
+    }
+  };
+
+  /**
+   * One popup at a time.
+   *
+   * A card click and a pin click both land here, and a second `addTo` without
+   * removing the first stacks two popups on the same screen. Holds the live
+   * instance so the next open can clear it.
+   */
+  const openPopup = (coords: [number, number], name: string, meta?: string) => {
+    const map = mapRef.current;
+    if (!map) return;
+    popupRef.current?.remove();
+
+    const content = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = name;
+    content.appendChild(title);
+    if (meta) {
+      const metaLine = document.createElement("span");
+      metaLine.textContent = meta;
+      content.appendChild(document.createElement("br"), metaLine);
+    }
+
+    popupRef.current = new Popup({
+      closeButton: true,
+      closeOnClick: true,
+      maxWidth: "240px",
+    })
+      .setLngLat(coords)
+      .setDOMContent(content)
+      .addTo(map);
+  };
+
+  const focusMapItem = (item: NeighbourhoodItem | NearbyPlaceItem) => {
+    setSelectedItemId(item.id);
+    document.querySelector(".pd-future__map")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+
+    const map = mapRef.current;
+    if (!map) return;
+
+    const targetCoords =
+      Array.isArray(item.coordinates) &&
+      Number.isFinite(item.coordinates[0]) &&
+      Number.isFinite(item.coordinates[1]) &&
+      !(item.coordinates[0] === 0 && item.coordinates[1] === 0)
+        ? (item.coordinates as [number, number])
+        : origin;
+
+    const bounds = new LngLatBounds(origin, origin);
+    bounds.extend(targetCoords);
+    map.fitBounds(bounds, {
+      padding: 90,
+      maxZoom: 14.5,
+      duration: 800,
+    });
+
+    /* Opened straight away rather than on `moveend`. A MapLibre popup re-anchors
+       to its coordinate on every move, so it travels with the camera and lands
+       where the pin does — deferring it to `moveend` just delays a popup the
+       visitor can already see. */
+    openPopup(targetCoords, item.name, cardSubtitle(item));
+  };
+
   // Create the map once.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -309,6 +503,8 @@ export default function FutureNeighbourhoodMap({
     );
 
     let map: MapLibreMap;
+    let plotLabelMarker: Marker | null = null;
+    let hintTimer: number | undefined;
     try {
       map = new MapLibre({
         container: containerRef.current,
@@ -320,6 +516,9 @@ export default function FutureNeighbourhoodMap({
         dragRotate: false,
         pitchWithRotate: false,
         touchPitch: false,
+        cooperativeGestures:
+          typeof window !== "undefined" &&
+          !window.matchMedia("(min-width: 760px)").matches,
       });
     } catch (error) {
       console.error("Unable to initialise the neighbourhood map", error);
@@ -330,6 +529,28 @@ export default function FutureNeighbourhoodMap({
     }
 
     mapRef.current = map;
+    const isDesktop = window.matchMedia("(min-width: 760px)").matches;
+    setMapHint(isDesktop ? "desktop" : "touch");
+    if (isDesktop) map.scrollZoom.disable();
+    if (isDesktop) {
+      hintTimer = window.setTimeout(() => setShowMapHint(false), 3000);
+    }
+    map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+
+    const resetControl = document.createElement("button");
+    resetControl.type = "button";
+    resetControl.className = "pd-future__reset-control";
+    resetControl.setAttribute("aria-label", "Reset map view to plot");
+    resetControl.textContent = "Reset view";
+    resetControl.addEventListener("click", resetMapView);
+    const resetControlGroup = document.createElement("div");
+    resetControlGroup.className = "maplibregl-ctrl maplibregl-ctrl-group pd-future__reset-group";
+    resetControlGroup.appendChild(resetControl);
+    map.addControl({
+      onAdd: () => resetControlGroup,
+      onRemove: () => resetControl.removeEventListener("click", resetMapView),
+      getDefaultPosition: () => "top-right",
+    }, "top-right");
 
     map.on("error", (event) => {
       console.error("Neighbourhood map error", event.error);
@@ -356,6 +577,7 @@ export default function FutureNeighbourhoodMap({
       map.addSource(ITEMS_SOURCE, {
         type: "geojson",
         data: geo.points,
+        promoteId: "id",
       });
 
       map.addSource(LINKS_SOURCE, {
@@ -363,23 +585,6 @@ export default function FutureNeighbourhoodMap({
         data: geo.links,
       });
 
-      // Underlay halo for connection lines so they pop over map background (roads, satellite, etc.)
-      map.addLayer({
-        id: "future-link-glow",
-        type: "line",
-        source: LINKS_SOURCE,
-        layout: {
-          "line-cap": "round",
-          "line-join": "round",
-        },
-        paint: {
-          "line-color": "#ffffff",
-          "line-width": 6,
-          "line-opacity": 0.95,
-        },
-      });
-
-      // Clear, high-contrast dashed connectivity lines from plot to landmarks
       map.addLayer({
         id: "future-link-line",
         type: "line",
@@ -389,10 +594,10 @@ export default function FutureNeighbourhoodMap({
           "line-join": "round",
         },
         paint: {
-          "line-color": "#b45309",
-          "line-width": 3,
-          "line-opacity": 1,
-          "line-dasharray": [2, 1.5],
+          "line-color": "#b9a47c",
+          "line-width": 1.5,
+          "line-opacity": 0.4,
+          "line-dasharray": [2, 2],
         },
       });
 
@@ -401,14 +606,30 @@ export default function FutureNeighbourhoodMap({
         type: "circle",
         source: ITEMS_SOURCE,
         paint: {
-          "circle-radius": 14,
+          /* Selected wins over hovered, so a click does not get undone by the
+             pointer still being over the card. Hover is 13 x 1.25 rounded. */
+          "circle-radius": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            20,
+            ["boolean", ["feature-state", "hover"], false],
+            16,
+            13,
+          ],
           "circle-color": [
             "case",
             ["==", ["get", "horizon"], "2029"],
             "#c6a46c",
             "#1f5c45",
           ],
-          "circle-opacity": 0.25,
+          "circle-opacity": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            0.42,
+            ["boolean", ["feature-state", "hover"], false],
+            0.32,
+            0.25,
+          ],
         },
       });
 
@@ -417,83 +638,118 @@ export default function FutureNeighbourhoodMap({
         type: "circle",
         source: ITEMS_SOURCE,
         paint: {
-          "circle-radius": 7,
-          "circle-color": [
+          "circle-radius": isDesktop ? 14 : [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            10,
+            ["boolean", ["feature-state", "hover"], false],
+            9,
+            7,
+          ],
+          "circle-color": isDesktop ? "#1f5c45" : [
             "case",
             ["==", ["get", "horizon"], "2029"],
             "#c6a46c",
             "#1f5c45",
           ],
-          "circle-stroke-width": 2.5,
-          "circle-stroke-color": "#ffffff",
+          "circle-stroke-color": isDesktop ? "#ffffff" : [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            "#c6a46c",
+            "#ffffff",
+          ],
+          "circle-stroke-width": isDesktop ? 2 : [
+            "case",
+            ["boolean", ["feature-state", "hover"], false],
+            4,
+            2.5,
+          ],
         },
       });
 
       map.addLayer({
-        id: "future-item-label",
+        id: "future-item-number",
         type: "symbol",
         source: ITEMS_SOURCE,
         layout: {
-          "text-field": ["format", ["get", "name"], { "font-scale": 0.95 }, "\n", {}, ["get", "meta"], { "font-scale": 0.85 }],
-          "text-size": 11,
-          "text-anchor": "top",
-          "text-offset": [0, 1.1],
-          "text-allow-overlap": false,
-          "text-ignore-placement": false,
-          "text-optional": true,
+          "text-field": ["to-string", ["get", "number"]],
+          "text-size": isDesktop ? 14 : 11,
+          "text-font": ["Open Sans Bold"],
+          "text-allow-overlap": true,
         },
         paint: {
-          "text-color": "#171717",
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 2.5,
+          "text-color": "#ffffff",
+          "text-halo-color": "#1f5c45",
+          "text-halo-width": 1,
         },
       });
 
-      // The plot itself, pinned in gold with its name beneath.
       map.addLayer({
         id: "future-origin-halo",
         type: "circle",
         source: ORIGIN_SOURCE,
         paint: {
-          "circle-radius": 22,
+          "circle-radius": 21,
           "circle-color": "#c6a46c",
-          "circle-opacity": 0.3,
+          "circle-opacity": 0.18,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#c6a46c",
         },
       });
+
+      if (isDesktop) {
+        const plotLabel = document.createElement("span");
+        plotLabel.className = "pd-future__plot-label";
+        plotLabel.textContent = "Your plot";
+        plotLabelMarker = new Marker({
+          element: plotLabel,
+          anchor: "left",
+          offset: [18, 0],
+        })
+          .setLngLat(origin)
+          .addTo(map);
+      }
 
       map.addLayer({
         id: "future-origin-dot",
         type: "circle",
         source: ORIGIN_SOURCE,
         paint: {
-          "circle-radius": 9,
+          "circle-radius": 11,
           "circle-color": "#c6a46c",
           "circle-stroke-width": 3,
-          "circle-stroke-color": "#ffffff",
+          "circle-stroke-color": "#6f5424",
         },
       });
 
-      map.addLayer({
-        id: "future-origin-label",
-        type: "symbol",
-        source: ORIGIN_SOURCE,
-        layout: {
-          "text-field": ["get", "label"],
-          "text-size": 13,
-          "text-anchor": "bottom",
-          "text-offset": [0, -1.2],
-        },
-        paint: {
-          "text-color": "#171717",
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 2.5,
-        },
+      const showPopup = (event: MapMouseEvent) => {
+        const feature = map.queryRenderedFeatures(event.point, {
+          layers: ["future-item-dot", "future-origin-dot"],
+        })[0];
+        if (!feature) return;
+        const properties = feature.properties as { name?: string; meta?: string; label?: string };
+        openPopup(
+          [event.lngLat.lng, event.lngLat.lat],
+          properties.name ?? properties.label ?? "Plot",
+          properties.meta,
+        );
+      };
+      map.on("click", "future-item-dot", showPopup);
+      map.on("click", "future-origin-dot", showPopup);
+      map.on("click", () => {
+        if (!isDesktop || map.scrollZoom.isEnabled()) return;
+        map.scrollZoom.enable();
+        setShowMapHint(false);
       });
+      map.on("mouseenter", "future-item-dot", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "future-item-dot", () => { map.getCanvas().style.cursor = ""; });
     });
 
     return () => {
       readyRef.current = false;
       mapRef.current = null;
+      if (hintTimer) window.clearTimeout(hintTimer);
+      plotLabelMarker?.remove();
       map.remove();
     };
     // The map is created once; data updates are handled by the effect below.
@@ -511,6 +767,29 @@ export default function FutureNeighbourhoodMap({
         const linksSource = map.getSource(LINKS_SOURCE) as GeoJSONSource | undefined;
         itemsSource?.setData(geo.points);
         linksSource?.setData(geo.links);
+
+        if (selectedMapItemRef.current) {
+          map.removeFeatureState({
+            source: ITEMS_SOURCE,
+            id: selectedMapItemRef.current,
+          });
+        }
+        if (selectedItemId) {
+          map.setFeatureState(
+            { source: ITEMS_SOURCE, id: selectedItemId },
+            { selected: true },
+          );
+        }
+        selectedMapItemRef.current = selectedItemId;
+
+        /* `setData` above replaced every feature, so any hover state went with
+           it. Forget the id too, or the next hover would try to clear a
+           feature that no longer exists. */
+        hoveredMapItemRef.current = null;
+
+        /* A popup anchored to a pin that is no longer on screen is worse than
+           none — close it before the new horizon refits the camera. */
+        popupRef.current?.remove();
 
         if (geo.points.features.length === 0) return;
 
@@ -535,7 +814,7 @@ export default function FutureNeighbourhoodMap({
     }
 
     applyData();
-  }, [geo, origin]);
+  }, [geo, origin, selectedItemId]);
 
   // The map lives in a fluid grid column, so it must re-measure on resize.
   useEffect(() => {
@@ -581,13 +860,29 @@ export default function FutureNeighbourhoodMap({
             type="button"
             className={`pd-chip${nearBy ? " is-active" : ""}`}
             aria-pressed={nearBy}
-            onClick={() => setNearBy((value) => !value)}
+            onClick={handleNearByClick}
           >
+            <svg className="pd-future__location-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Z" />
+              <circle cx="12" cy="9" r="2.25" />
+            </svg>
             Near by me
           </button>
         </div>
 
-        {nearBy ? (
+        {nearBy && nearByStatus === "locating" ? (
+          <p className="pd-future__near" aria-live="polite">
+            <span className="ila-loader ila-loader--sm" aria-hidden />
+            Locating you…
+          </p>
+        ) : null}
+        {nearBy && nearByStatus === "denied" ? (
+          <p className="pd-future__near pd-future__near--error" aria-live="polite">
+            Location permission was denied. Enable it in your browser settings to
+            use this filter.
+          </p>
+        ) : null}
+        {nearBy && nearByStatus === "located" ? (
           <p className="pd-future__near" aria-live="polite">
             ~{fromGachibowli.toFixed(1)} km from Gachibowli (demo) — not device
             GPS.
@@ -595,54 +890,6 @@ export default function FutureNeighbourhoodMap({
         ) : null}
 
         <div className="pd-future__layout">
-          <ul className="pd-future__list">
-            {isLoadingApi && items.length === 0 ? (
-              <li className="pd-future__card">
-                <p className="text-sm text-neutral-500">Loading nearby landmarks…</p>
-              </li>
-            ) : null}
-            {items.map((item) => (
-              <li
-                key={item.id}
-                className="pd-future__card cursor-pointer"
-                onClick={() => {
-                  const map = mapRef.current;
-                  if (!map) return;
-                  const targetCoords =
-                    Array.isArray(item.coordinates) &&
-                    Number.isFinite(item.coordinates[0]) &&
-                    Number.isFinite(item.coordinates[1]) &&
-                    !(item.coordinates[0] === 0 && item.coordinates[1] === 0)
-                      ? (item.coordinates as [number, number])
-                      : origin;
-
-                  const bounds = new LngLatBounds(origin, origin);
-                  bounds.extend(targetCoords);
-                  map.fitBounds(bounds, {
-                    padding: 90,
-                    maxZoom: 14.5,
-                    duration: 800,
-                  });
-                }}
-              >
-                <div className="pd-future__card-top">
-                  <span className="pd-future__kind">{item.kind}</span>
-                  <span className="pd-future__status">{item.status}</span>
-                </div>
-                <h3>{item.name}</h3>
-                <p>{item.detail}</p>
-                <div className="flex items-center justify-between mt-2 pt-1 border-t border-black/5">
-                  <p className="pd-future__dist">{formatDistanceDisplay(item.distanceKm)} away</p>
-                  {"proximityLabel" in item && item.proximityLabel ? (
-                    <span className="text-[10px] uppercase font-bold text-[#c6a46c] bg-[#c6a46c]/10 px-2 py-0.5 rounded">
-                      {item.proximityLabel}
-                    </span>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-
           <div className="pd-future__map">
             <div
               ref={containerRef}
@@ -650,11 +897,110 @@ export default function FutureNeighbourhoodMap({
               role="application"
               aria-label={`Map of ${property.neighbourhood.mapLabel} and nearby landmarks`}
             />
+            {showMapHint ? (
+              <p className={`pd-future__map-hint is-${mapHint}`}>
+                {mapHint === "desktop" ? "Click to interact" : "Use two fingers to move the map"}
+              </p>
+            ) : null}
             {mapFailed ? (
               <p className="pd-future__map-error">
                 Map unavailable offline — the list beside it still has the full
                 detail.
               </p>
+            ) : null}
+          </div>
+
+          <div className={`pd-future__list-group${showAll ? " is-expanded" : ""}`}>
+            <div className="pd-future__list-heading">
+              <h3 className="pd-future__category">{categoryHeading}</h3>
+              <span className="pd-future__list-count">{items.length} places</span>
+            </div>
+            <ul key={horizon} className="pd-future__list pd-future__list--changing">
+            {isLoadingApi && items.length === 0 ? (
+              <li className="pd-future__card">
+                <p className="inline-flex items-center gap-2 text-sm text-neutral-500">
+                  <span className="ila-loader ila-loader--sm" aria-hidden />
+                  Loading nearby landmarks…
+                </p>
+              </li>
+            ) : null}
+            {visibleItems.map((item, index) => {
+              const subtitle = cardSubtitle(item);
+              return (
+                <li
+                  key={item.id}
+                  className="pd-future__card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => focusMapItem(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      focusMapItem(item);
+                    }
+                  }}
+                  onMouseEnter={() => setMapItemHover(item.id)}
+                  onMouseLeave={() => setMapItemHover(null)}
+                  onFocus={() => setMapItemHover(item.id)}
+                  onBlur={() => setMapItemHover(null)}
+                >
+                  <span className="pd-future__card-number" aria-hidden="true">
+                    {index + 1}
+                  </span>
+
+                  <div className="pd-future__card-main">
+                    {/* An h4, not a span: the category above is the h3, and the
+                        card name is the thing inside it. It was an h3 before,
+                        which put every card at the same level as the heading
+                        that contains it. */}
+                    <h4 className="pd-future__card-name">{item.name}</h4>
+                    {/* Rendered only when there is something to say. The old
+                        fallback was the literal "Nearby landmark", identical on
+                        every card and a restatement of the NEARBY LANDMARKS
+                        heading directly above it. */}
+                    {subtitle ? (
+                      <p className="pd-future__card-sub">{subtitle}</p>
+                    ) : null}
+                  </div>
+
+                  <div className="pd-future__card-side">
+                    {item.distanceKm > 0 ? (
+                      <p className="pd-future__dist">
+                        {formatDistanceDisplay(item.distanceKm)} away
+                      </p>
+                    ) : null}
+                    <p
+                      className={`pd-future__status${
+                        item.status.toLowerCase() === "operational"
+                          ? " is-operational"
+                          : " is-upcoming"
+                      }`}
+                    >
+                      <span className="pd-future__status-dot" aria-hidden="true" />
+                      {item.status}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+            </ul>
+            {items.length > 3 ? (
+              <button
+                type="button"
+                className="pd-future__show-all"
+                aria-expanded={showAll}
+                onClick={() => setShowAll((value) => !value)}
+              >
+                {showAll ? "Show less" : `Show ${hiddenItemCount} more`}
+                <svg
+                  className={`pd-future__chevron${showAll ? " is-up" : ""}`}
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
             ) : null}
           </div>
         </div>

@@ -188,7 +188,7 @@ The option controls are buttons and do not navigate. The share action opens the 
 
 ## 20. Loading behavior
 
-The component starts in a loading state while `fetchProperties` requests up to 100 API properties. During sharing, the button displays `Preparing links…` and is disabled until all selected share requests complete.
+The component starts in a loading state while `fetchProperties` requests up to 100 API properties. The `.shortlist-share__count` line reads `Loading properties…` and renders the shared `ila-loader ila-loader--sm` animation beside that text — see `docs\features\loading.md`. During sharing, the button displays `Preparing links…` and is disabled until all selected share requests complete.
 
 ## 21. Error behavior
 

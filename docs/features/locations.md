@@ -35,6 +35,7 @@ The homepage order in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\tracker.ts` — event transport used by the component.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\useClickTracking.ts` — delegated tracking for `data-track` attributes.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\apiClient.ts` — tenant-aware API wrapper used by the service helpers.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\loading.css` — the shared loader used by this component's loading states; see `docs\features\loading.md`.
 
 ## 5. Component names
 
@@ -82,7 +83,14 @@ Before map mode is opened, the component displays locality cards when the locati
 
 ## 13. Locality card behavior
 
-Each card has an `Explore` button. Selecting a mappable locality calls `selectLocation`, sets it active, emits `MAP_MARKER_CLICK`, sets the property state to loading, and starts the locality property request. A locality without finite numeric coordinates is disabled and displays `No map location`; it cannot be selected from the list.
+Each card has a two-button action row pinned to the bottom.
+
+- `Explore` — the gold primary. Selecting a mappable locality calls `selectLocation`, sets it active, emits `MAP_MARKER_CLICK`, sets the property state to loading, and starts the locality property request.
+- `Map` — a secondary outline control rendered only for mappable localities. It calls `openMap(location)`, opening map mode already centered on that locality. It emits `MAP_MARKER_CLICK` with `surface: "card_map"`, distinguishing it from `Explore`, which uses no surface key.
+
+A locality without finite numeric coordinates renders no `Map` button, and its `Explore` button is disabled and reads `No map location`; the primary then spans the full row width.
+
+Button sizing is `py-2` with a `text-[13px] font-bold` label and looser `tracking-[0.04em]`. This was reduced from the previous `py-3` / `text-[10px]` / `tracking-[0.14em]` full-width button, where the label read as too small for the box. The row is `flex items-center gap-2` with `flex-1` on the primary and `shrink-0` on the map control; `mt-auto pt-5` is retained so the row stays bottom-aligned and never collides with the address.
 
 ## 14. Coordinate validation and formatting
 
@@ -90,7 +98,9 @@ Each card has an `Explore` button. Selecting a mappable locality calls `selectLo
 
 ## 15. Map-mode entry
 
-When at least one locality on the current page is mappable, the list view shows a `View on map` button. `openMap()` chooses the passed locality or the first mappable locality, makes it active, and sets `mapMode` to `true`. The component does not open map mode when the current page has no mappable locality.
+Map mode is opened only from a card's `Map` button. `openMap(location)` makes the passed locality active and sets `mapMode` to `true`.
+
+There is no longer a standalone `View on map` button in the list-view header. It was removed so that the map is reachable from the same place for every locality rather than defaulting to the first mappable one. `openMap()` still falls back to the first mappable locality when called without an argument, and map mode cannot be opened when the current page has no mappable locality.
 
 ## 16. Map library and worker
 
@@ -110,7 +120,11 @@ The map is created once when map mode opens and is removed when the map-mode eff
 
 ## 20. Map-mode layout
 
-In map mode the section drops its outer list-view padding. On small screens the locality strip is horizontally scrollable and the map is full-bleed below it. On large screens the locality list is a sidebar and the map is an inset rounded panel beside it. The map container has a minimum height of `46vh` on small screens and the map-mode wrapper has a minimum height of `62vh` on small screens and `75vh` at `lg`.
+In map mode the section drops its outer list-view padding. On small screens the locality strip is horizontally scrollable and the map is full-bleed below it. On large screens the locality list is a sidebar and the map is an inset rounded panel beside it. The map-mode wrapper keeps `min-h-[62vh]` on small screens and `min-h-[75vh]` at `lg`.
+
+**The map frame requires a definite height on mobile, not a minimum.** MapLibre adds `maplibregl-map`, whose `position: relative` comes from unlayered `maplibre-gl.css` and therefore overrides the Tailwind `absolute` utility on the container. The container then relies on `h-full` resolving against its parent. In the mobile `flex-col` wrapper that parent was `flex-1` with `min-h-[46vh]`, so its height was `auto` and `height: 100%` resolved to `auto`, producing a zero-height canvas and a blank map.
+
+The frame therefore uses `h-[46vh] flex-none` on small screens, restoring the stretched flex item at `lg` with `lg:h-auto lg:flex-1 lg:min-h-0`. `flex-none` is required in addition to the height: `flex-1` sets `flex-basis: 0%`, which overrides `height` and collapses the frame back to zero. `MapSection` is unaffected because its section uses a definite `h-[calc(100svh-var(--nav-h))]`.
 
 ## 21. Exiting map mode
 
@@ -138,6 +152,8 @@ The initial locality state is `loading`; the visible message is `Loading localit
 
 For properties, the component uses `idle`, `loading`, `ready`, and `error`. It displays `Loading properties…`, `Properties are unavailable right now. Please try again shortly.`, or `No properties listed in this locality yet.` as applicable. A ready property request also displays `Showing {properties.length} of {propertiesTotal} properties`.
 
+Map mode adds two further states: a `Loading map` pill while `mapReady` is false, and a full-frame failure message when `mapError` is set. All three loading messages render the shared `ila-loader ila-loader--sm` animation beside the text — see `docs\features\loading.md`.
+
 ## 27. Pagination controls
 
 The locality list provides a `Per page` select with values `5`, `10`, `20`, and `50`. Changing it sets loading, updates `perPage`, and resets the page to `1`. `Previous` and `Next` buttons use the API-derived flags, are disabled while loading or when unavailable, and display `Page {page} / {totalPages}`.
@@ -152,7 +168,7 @@ Selecting a locality directly calls `trackEvent` with event type `MAP_MARKER_CLI
 
 ## 30. Accessibility behavior
 
-The root section has an accessible label. The map-mode list uses `aria-label="Localities"`; pagination uses `aria-label="Localities pagination"`; locality buttons provide `aria-label="View {location.name} on map"`; the active map detail card uses `aria-live="polite"`. The property view also uses `aria-live="polite"`. Exact screen-reader behavior of the MapLibre canvas and custom marker is UNKNOWN — needs verification.
+The root section has an accessible label. The map-mode list uses `aria-label="Localities"`; pagination uses `aria-label="Localities pagination"`; the `Explore` button provides `aria-label="View {location.name} on map"` and the map control provides `aria-label="Show {location.name} on the map"`; the active map detail card uses `aria-live="polite"`. The property view also uses `aria-live="polite"`. Exact screen-reader behavior of the MapLibre canvas and custom marker is UNKNOWN — needs verification.
 
 ## 31. Responsive and visual behavior
 
@@ -173,4 +189,5 @@ The feature depends on React hooks, Next.js `Link`, MapLibre GL, the OpenFreeMap
 - Preserve the service query names `page`, `per_page`, and `location_slug`; the backend contract depends on them.
 - Preserve longitude/latitude order when passing coordinates to MapLibre.
 - Preserve request abort handling and MapLibre marker/map cleanup when changing the feature.
-- This documentation task creates only `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\locations.md`; application code is intentionally unchanged.
+- Keep the map frame's definite mobile height. Restoring `min-h-[46vh] flex-1` reintroduces the zero-height canvas described in section 20.
+- Recent application changes in this feature: the header `View on map` button was removed, per-card `Map` buttons were added, the map frame height was made definite on mobile, and the shared loader was applied. This documentation was updated to match.

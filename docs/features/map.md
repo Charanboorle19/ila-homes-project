@@ -23,7 +23,7 @@ The home page renders them in this order: `MapSection`, then `GrowthCorridors` (
 ### Location map (`GrowthCorridors`)
 
 1. `GrowthCorridors` loads `GET /api/locations?page=1&per_page=20`.
-2. The visitor opens map mode with the section's map action or selects a location.
+2. The visitor opens map mode from a locality card's `Map` button, which passes that locality to `openMap` so the map opens already centered on it. There is no separate `View on map` control in the list-view header.
 3. Locations with numeric latitude and longitude are shown as markers/list entries; locations without coordinates remain non-mappable.
 4. Selecting a location centers the map at that location and shows a location card.
 5. `Explore` loads properties for that location with `GET /api/properties?location_slug={slug}&page=1&per_page=10`; the resulting links use `/properties/{property.id}`.
@@ -50,6 +50,7 @@ The home page renders them in this order: `MapSection`, then `GrowthCorridors` (
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\data\plots.ts` — `Plot` and `PlotStatus` types plus legacy/sample plot data.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\satelliteTiles.ts` — satellite source configuration.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\layoutPreview.ts` and `src\lib\layoutTiff.ts` — layout image loading.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\loading.css` — shared loading animation used by both components.
 
 ## 5. Data sources used by the map
 
@@ -153,7 +154,7 @@ The current UI provides:
 - Layout open/close behavior.
 - Mobile plot-list expansion and property-sheet expansion.
 - Satellite/layout imagery visibility controls in the estate layout view.
-- Location selection, map mode open/close, location pagination, and `Explore` links in `GrowthCorridors`.
+- Per-locality `Map` and `Explore` controls, location selection, map mode open/close, location pagination, and `Explore` links in `GrowthCorridors`.
 
 The source does not expose a separate documented compass, geolocation, or drawing control. UNKNOWN — needs verification whether MapLibre's default attribution/control UI is visually enabled by the current rendered style.
 
@@ -185,7 +186,7 @@ The separate catalogue at `/properties` renders `PropertiesList` and does not sh
 
 `MapSection` has its own `query` state for filtering the visible property/plot panel. It is not connected to the homepage hero search state.
 
-`Hero` (`src/components/Hero.tsx`) accepts a typed query, tracks `PROPERTY_SEARCH`, and scrolls to `#projects` or navigates to `/#projects`. The inspected `MapSection` source does not define an `id="projects"`; the exact resulting scroll target is UNKNOWN — needs verification.
+`Hero` (`src/components/Hero.tsx`) accepts a typed query, tracks `PROPERTY_SEARCH`, and scrolls to `#projects` or navigates to `/#projects`. `scrollToProjects` looks up `PROJECTS_ANCHOR_ID` with `document.getElementById` and calls `scrollIntoView({ behavior: "smooth", block: "start" })`; it returns `false` when the element is absent so `onSearch`/`onViewMap` fall back to `router.push("/#projects")`. The target exists: `MapSection` renders `id="projects"` on its root `<section>`, and it is the only such id on `/`.
 
 ## 17. How the map connects to Locations
 
@@ -198,7 +199,7 @@ The selected location's `slug` is sent as `location_slug` to the properties endp
 - `/` — renders `MapSection` and `GrowthCorridors`.
 - `/properties` — renders the live `PropertiesList` catalogue.
 - `/properties/{propertyId}` — renders `PropertyPageView` for local static ids or `ApiPropertyView` for API UUIDs.
-- `/#projects` — hero search fallback target; presence of the target in current markup is UNKNOWN — needs verification.
+- `/#projects` — hero search fallback target; resolved to the `MapSection` root section, which carries `id="projects"`.
 - `/api/properties`, `/api/properties/{id}`, `/api/properties/{id}/units`, and `/api/locations` — remote API paths consumed by the map.
 
 ## 19. External services/integrations
@@ -213,7 +214,9 @@ The selected location's `slug` is sent as `location_slug` to the properties endp
 
 ## 20. Mobile behavior
 
-`MapSection` contains mobile-specific plot-list and property-sheet expansion state (`mobilePlotExpanded`, `propertySheetExpanded`). `GrowthCorridors` renders the map full-bleed on mobile with a minimum height of `46vh`; location cards use horizontal overflow, while the desktop layout uses a sidebar/list arrangement. The active location card is positioned over the lower map area on small screens.
+`MapSection` contains mobile-specific plot-list and property-sheet expansion state (`mobilePlotExpanded`, `propertySheetExpanded`). `GrowthCorridors` renders the map full-bleed on mobile at a fixed `h-[46vh]`; location cards use horizontal overflow, while the desktop layout uses a sidebar/list arrangement. The active location card is positioned over the lower map area on small screens.
+
+The `GrowthCorridors` mobile map frame needs a **definite** height rather than a minimum. MapLibre's `maplibregl-map { position: relative }` is unlayered CSS and overrides the Tailwind `absolute` utility on the container, so the container depends on `h-full` resolving against its parent. In the mobile `flex-col` wrapper the frame was `flex-1` with `min-h-[46vh]`, leaving its height `auto`, so `height: 100%` resolved to `auto` and the map rendered as a blank zero-height canvas. The frame now uses `h-[46vh] flex-none` on small screens, restoring the stretched flex item at `lg` with `lg:h-auto lg:flex-1 lg:min-h-0`. `MapSection` is unaffected because its section uses a definite `h-[calc(100svh-var(--nav-h))]`.
 
 Exact breakpoint behavior beyond the Tailwind classes in the components is UNKNOWN — needs verification.
 
@@ -226,6 +229,8 @@ Exact breakpoint behavior beyond the Tailwind classes in the components is UNKNO
 `MapSection` tracks `mapReady`, `mapError`, and `remoteStatus` (`loading`, `ready`, `error`). It uses abort controllers for requests, logs failures, and can show a property with no units as a pin/sheet without plot geometry. Layout image loading is intentionally separate from plot geometry; a failed/slow image does not delay the layout polygons. A failed fresh layout-image request can re-request the units endpoint for a new signed URL.
 
 `GrowthCorridors` tracks `locationsState` and `propertiesState` as `loading`, `ready`, or `error`; pagination flags are derived from the locations response. Locations without coordinates are omitted from the map. Exact user-facing error copy for every state is UNKNOWN — needs verification.
+
+Both components render their loading states with the shared `ila-loader ila-loader--sm` animation beside the existing text, defined once in `src\app\loading.css`. The previous `.ila-map-loader` class was removed from `globals.css`; see `docs\features\loading.md`.
 
 ## 23. Dependencies
 
@@ -240,7 +245,6 @@ Direct map-relevant dependencies are `maplibre-gl`, `geotiff` (layout TIFF suppo
 - Layout imagery can fail independently of the plot geometry and uses a retry path for refreshed signed URLs.
 - The default Esri World Imagery endpoint is documented in source as suitable for evaluation/development and requiring a contracted provider before commercial shipping.
 - `MapSection` includes static demo estate data alongside live API properties; the exact intended production scope of the static projects is UNKNOWN — needs verification.
-- The hero search target `#projects` is referenced by code but was not found in the inspected `src/app/page.tsx`/`MapSection` source. UNKNOWN — needs verification.
 
 ## 25. Important constraints
 

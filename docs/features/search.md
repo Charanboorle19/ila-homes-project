@@ -238,6 +238,8 @@ The `/properties` catalogue uses its own result links to `/properties/{property.
 
 The development-list empty-area message is `Loading developments…` while the list is loading and no filtered items exist.
 
+Both `MapSection` messages render the shared `ila-loader ila-loader--sm` animation beside the text; see `docs\features\loading.md`.
+
 The hero search has no loading state, spinner, async request, or pending submit state.
 
 ## 23. Error behavior
@@ -359,6 +361,24 @@ The primary Search/Map breakpoint is Tailwind `md`, which corresponds to `768px`
 - At `768px` and above: desktop sidebar and desktop overlay search are shown; mobile header search controls are hidden.
 
 The hero's mobile-specific JavaScript check is `(max-width: 767px)`. The hero layout also uses `sm` (`640px`), `md` (`768px`), and `lg` (`1024px`) utility variants. No separate Search-specific breakpoint is defined.
+
+## 34a. Hero backdrop asset
+
+The hero backdrop is a looping autoplaying video, replacing the previous pair of `next/image` stills (`hero-image-mobile.png` for small screens and `/hero-image.png` for `md` and above). `Hero.tsx` no longer imports `next/image`.
+
+The asset lives at `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\public\assets\ila-homes-intro-video_DCqMvTfy.mp4` and is referenced by URL through the module constant `HERO_VIDEO_SRC = "/assets/ila-homes-intro-video_DCqMvTfy.mp4"`.
+
+It must be served from `public/`. Importing a `.mp4` from `src/app/assets/` fails the build under Turbopack with `Unknown module type` — no loader is registered for that extension. Consequently the video is addressed by URL rather than imported, and no `*.mp4` TypeScript declaration exists or is needed.
+
+The element is a single `<video>` with `autoPlay`, `muted`, `loop`, `playsInline`, and `preload="auto"`, plus `aria-hidden` and `tabIndex={-1}` because the backdrop is decorative. `muted` and `playsInline` are both required for correct mobile playback: iOS blocks unmuted autoplay, and without `playsInline` it takes the video fullscreen. The `animate-hero-zoom` entrance is retained; it is a 1.4s one-shot in `globals.css` that settles at `scale(1)` and is already disabled under reduced motion.
+
+Encoding constraints, verified with `ffprobe`:
+
+- Codec must be `h264` with `pix_fmt=yuv420p`. The supplied source was HEVC, which only Safari decodes; it rendered as a blank canvas in Chrome and Firefox.
+- `moov` must precede `mdat` (faststart). The source had `moov` at byte 4,336,471 of 4,353,706, forcing a near-full download before playback.
+- Current encode: `h264` High, `1080x1920`, `30fps`, `yuv420p`, `4.07 MB`, 10s, audio stripped.
+
+The source footage is portrait `9:16` while the hero is landscape full-bleed. With `object-cover` only roughly the middle 31% of the frame height is visible on desktop; `object-[center_18%] md:object-center` sets the crop offsets. A landscape cut of the footage would be the real fix.
 
 ## 35. CSS classes
 

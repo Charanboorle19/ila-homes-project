@@ -122,16 +122,23 @@ export default function ShareButton({
     <div className={`pd-share pd-share--bare ${className}`}>
       <button
         type="button"
-        className="pd-btn pd-btn--ghost"
+        className="pd-btn pd-btn--ghost pd-share-trigger"
         onClick={create}
         disabled={status === "loading"}
         aria-busy={status === "loading"}
+        aria-label={
+          status === "loading"
+            ? "Creating share link"
+            : status === "error"
+              ? "Retry share"
+              : `Share ${propertyName}`
+        }
+        title={`Share ${propertyName}`}
       >
-        {status === "loading"
-          ? "Creating link…"
-          : status === "error"
-            ? "Retry share"
-            : `Share ${propertyName}`}
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+          <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7a3.3 3.3 0 0 0 0-1.4l7.05-4.11A3 3 0 1 0 15 5.5c0 .24.03.47.08.69L8.03 10.3a3 3 0 1 0 0 3.4l7.12 4.16c-.04.2-.06.4-.06.62A2.92 2.92 0 1 0 18 16.08Z" />
+        </svg>
+        <span>Share</span>
       </button>
       {status === "error" ? (
         <p className="pd-share__error" role="alert">

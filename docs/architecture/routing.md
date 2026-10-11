@@ -191,6 +191,8 @@ No App Router `loading.tsx` file exists.
 - `/properties`: `PropertiesList` initially uses `loading` state and renders a status message.
 - `/properties/[propertyId]`: `ApiPropertyView` renders `Loading property…` while the API property request is pending. Documents and life-stage fit load independently and do not block the main property render once it arrives.
 - `/property/[trackingToken]/view`: the route renders its own `Loading property…` while the tracking token resolves, then delegates to `ApiPropertyView`, which owns the property/Buyer Fit loading states from that point.
+
+Loading lines on these routes render the shared `ila-loader ila-loader--sm` animation beside the text — see `docs\features\loading.md`.
 - `/api/layout-image`: the handler performs an upstream fetch and has no UI loading state.
 
 Exact visual loading behavior for every client subsection is `UNKNOWN — needs verification`.

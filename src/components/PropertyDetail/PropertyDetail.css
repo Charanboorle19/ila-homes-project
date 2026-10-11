@@ -6,8 +6,13 @@
   --pd-line: rgba(23, 23, 23, 0.12);
   --pd-gold: #c6a46c;
   --pd-gold-bright: #d4b57e;
-  --pd-space: clamp(0.75rem, 2vw, 1.25rem);
-  --pd-max: calc(100% - (var(--pd-space) * 2));
+  /* Gold for running text on a light surface. --pd-gold is only 2.35:1 on
+     white and 2.14:1 on the journey band — both well under AA at eyebrow
+     sizes — so anything set as text in gold uses this instead. */
+  --pd-gold-ink: #7a6134;
+  /* The page gutter, shared with the header and footer. Left-anchored rather
+     than a centred box, so every section starts on the same x. */
+  --pd-space: var(--ila-gutter);
 
   width: 100%;
   max-width: 100%;
@@ -20,6 +25,26 @@
   box-sizing: border-box;
 }
 
+/* Mobile only: the page must never scroll sideways. `clip` contains any
+   overflow without turning the wrapper into a scroll container, so sticky
+   positioning and the fixed bottom bar are unaffected; the `hidden` line ahead
+   of it is the fallback for browsers without `clip`. */
+@media (max-width: 759px) {
+  .property-page {
+    overflow-x: hidden;
+    overflow-x: clip;
+  }
+
+  /* Amenity names, project names, document titles and tracked URLs all reach
+     the page from the API as single unbroken tokens. Left alone the longest
+     one sets the page width instead of wrapping inside the gutter. */
+  .pd-section__inner,
+  .pd-hero__frame,
+  .pd-sticky__inner {
+    overflow-wrap: break-word;
+  }
+}
+
 .pd-kicker {
   margin: 0 0 0.45rem;
   color: var(--pd-gold);
@@ -29,26 +54,49 @@
   text-transform: uppercase;
 }
 
+.property-page section {
+  /* Every section, including `.pd-hero` and the EMI section nested inside the
+     affordability wrapper, so a jump to any one of them leaves its eyebrow
+     clear of the sticky header. The header is `--nav-h` tall; the 16px is the
+     gap between a landed section and the bar sitting over it.
+
+     Selector is on `section` rather than `.pd-section` because two sections on
+     this page are not `.pd-section`: the hero, and the affordability shell,
+     which is the homepage EMI component reused. */
+  scroll-margin-top: calc(var(--nav-h) + 16px);
+}
+
 .pd-section {
   width: 100%;
   padding: clamp(2.25rem, 5vh, 3.75rem) var(--pd-space);
 }
 
 .pd-section__inner {
-  width: min(100%, var(--pd-max));
-  margin-inline: auto;
+  /* Left-anchored, not centred. The gutter is the padding on `.pd-section`;
+     centring the inner as well was what put a second, uneven inset between
+     the section edge and the content. */
+  width: 100%;
 }
 
+/* The section heading, defined once.
+ *
+ * Tailwind's preflight resets h1–h6 to `font-weight: inherit`, so a heading
+ * with no weight declared here renders at the section's 400 and reads as a
+ * different site from the ones that do. Everything under `.pd-section` picks
+ * this up; only a section that genuinely needs to differ should override. */
 .pd-section h2 {
   margin: 0;
-  font-size: clamp(1.55rem, 3.4vw, 2.25rem);
-  line-height: 1.15;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
   letter-spacing: -0.02em;
 }
 
 .pd-section__lead {
   margin: 0.75rem 0 0;
-  max-width: 40rem;
+  /* Capped in `ch` so the measure stays a readable line length whatever the
+     font size resolves to. Text blocks are capped; grids are not. */
+  max-width: 60ch;
   color: var(--pd-muted);
   font-size: 0.98rem;
   line-height: 1.55;
@@ -147,12 +195,10 @@
 .pd-match__result,
 .pd-future__card,
 .pd-emi__card,
-.pd-legal__list li,
 .pd-journey__detail,
 .pd-final__quote,
 .pd-similar__card,
-.pd-hero__thumb,
-.pd-lifestyle__point {
+.pd-hero__thumb {
   box-shadow:
     0 1px 2px rgba(23, 23, 23, 0.04),
     0 10px 28px rgba(23, 23, 23, 0.05);
@@ -167,8 +213,7 @@
 }
 
 .pd-hero__frame {
-  width: min(100%, var(--pd-max));
-  margin-inline: auto;
+  width: 100%;
   flex: 0 1 auto;
   display: flex;
   flex-direction: column;
@@ -176,13 +221,27 @@
 }
 
 .pd-hero__crumb {
-  display: flex;
+  display: none;
   flex-wrap: wrap;
   gap: 0.45rem;
   align-items: center;
   margin-bottom: 1.15rem;
   color: var(--pd-muted);
   font-size: 0.82rem;
+}
+
+.pd-hero__back {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 0;
+  margin-bottom: 12px;
+  position: relative;
+  top: -0.7rem;
+  color: var(--pd-muted);
+  font-size: 1.05rem;
+  font-weight: 650;
+  text-decoration: none;
 }
 
 .pd-hero__crumb a {
@@ -208,34 +267,67 @@
   min-width: 0;
 }
 
+.pd-hero__identity {
+  order: 2;
+}
+
+.pd-hero__badges--ordered {
+  order: 1;
+}
+
+.pd-hero__price-row--ordered {
+  order: 3;
+}
+
+.pd-hero__specs--ordered {
+  order: 4;
+}
+
+.pd-hero__desc--ordered {
+  order: 5;
+}
+
 .pd-hero__badges {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
   margin-bottom: 0.75rem;
+}
+
+.pd-hero__badges::-webkit-scrollbar {
+  display: none;
 }
 
 .pd-hero__badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.28rem 0.7rem;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(198, 164, 108, 0.45);
-  background: rgba(198, 164, 108, 0.15);
-  color: #7a5c28;
-  font-size: 0.7rem;
+  border: 1px solid transparent;
+  font-size: 11px;
   font-weight: 700;
+  gap: 5px;
   letter-spacing: 0.08em;
+  line-height: 1;
   text-transform: uppercase;
 }
 
-.pd-hero__badge--ink {
-  background: var(--pd-ink);
-  border-color: var(--pd-ink);
-  color: #fff;
+.pd-hero__badge--trust {
+  border-color: rgba(198, 164, 108, 0.45);
+  background: rgba(198, 164, 108, 0.15);
+  color: #7a5c28;
 }
 
-.pd-hero__badge--plain {
+.pd-hero__badge--trust > span {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.pd-hero__badge--status {
   background: rgba(255, 255, 255, 0.72);
   border-color: var(--pd-line);
   color: var(--pd-muted);
@@ -243,53 +335,113 @@
 
 .pd-hero__title {
   margin: 0;
-  font-size: clamp(1.9rem, 3.8vw, 2.9rem);
-  line-height: 1.06;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
   letter-spacing: -0.03em;
 }
 
 .pd-hero__tagline {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
   margin: 0.55rem 0 0;
-  font-size: 1.02rem;
-  font-weight: 600;
+  color: var(--pd-ink);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
-.pd-hero__desc {
-  margin: 0.7rem 0 0;
+.pd-hero__tagline--ordered {
+  order: 4;
+}
+
+.pd-hero__description {
+  margin: 24px 0 0;
+}
+
+.pd-hero__description p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  margin: 0;
   color: var(--pd-muted);
+  font-size: 15px;
   line-height: 1.55;
   max-width: 38rem;
 }
 
-/* Spec bar — a 1px gap over a line-coloured backdrop draws the dividers,
-   so the cells read as one table instead of four floating cards. */
+.pd-hero__description p.is-expanded {
+  display: block;
+}
+
+.pd-hero__read-more {
+  margin-top: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pd-ink);
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Spec bar — bordered cells read as one table without exposing an empty grid cell. */
 .pd-hero__specs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
+  gap: 0;
   margin: 1.15rem 0 0;
   border: 1px solid var(--pd-line);
-  background: var(--pd-line);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
 }
 
 .pd-hero__specs div {
-  padding: 0.6rem 0.85rem;
-  background: rgba(255, 255, 255, 0.86);
+  min-width: 0;
+  padding: 14px 16px;
+  border-top: 1px solid var(--pd-line);
+  border-left: 1px solid var(--pd-line);
+  background: #fff;
+}
+
+.pd-hero__specs div:nth-child(-n + 2) {
+  border-top: 0;
+}
+
+.pd-hero__specs div:nth-child(odd) {
+  border-left: 0;
+}
+
+.pd-hero__spec--configuration {
+  grid-column: 1 / -1;
 }
 
 .pd-hero__specs dt {
   margin: 0;
   color: var(--pd-muted);
-  font-size: 0.68rem;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .pd-hero__specs dd {
   margin: 0.2rem 0 0;
-  font-size: 0.95rem;
-  font-weight: 650;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pd-hero__price-row {
@@ -302,28 +454,132 @@
 /* Gold rule instead of a box — keeps the price prominent without adding
    another filled block competing with the image. */
 .pd-hero__price-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 65px;
   padding-left: 0.85rem;
   border-left: 3px solid var(--pd-gold);
 }
 
+.pd-hero__price-label {
+  color: var(--pd-muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
 .pd-hero__price {
   margin: 0;
-  font-size: clamp(1.5rem, 2.6vw, 1.95rem);
+  font-size: 24px;
   font-weight: 700;
+  line-height: 1.2;
   letter-spacing: -0.02em;
 }
 
 .pd-hero__meta {
-  margin: 0.3rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  margin: 0.35rem 0 0;
   color: var(--pd-muted);
-  font-size: 0.84rem;
+  font-size: 12px;
+}
+
+.pd-hero__score-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid rgba(198, 164, 108, 0.45);
+  border-radius: 999px;
+  background: rgba(198, 164, 108, 0.12);
+  color: #7a5c28;
 }
 
 .pd-hero__actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.pd-hero__actions .pd-btn {
+  min-height: 48px;
+  font-weight: 500;
+}
+
+.pd-hero__whatsapp {
+  width: 100%;
+  height: 52px;
+  min-height: 52px !important;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 700 !important;
+  line-height: 1.2;
+}
+
+.pd-hero__whatsapp svg,
+.pd-share-trigger svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.pd-hero__secondary-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.pd-hero__secondary-actions > .pd-btn,
+.pd-share--hero {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.pd-hero__schedule,
+.pd-share--hero .pd-share-trigger {
+  width: 100%;
+  height: 52px;
+  min-height: 52px !important;
+  padding: 0 16px;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid rgba(23, 23, 23, 0.18);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--pd-ink);
+  display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
+  justify-content: center;
+  gap: 0.4rem;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600 !important;
+  line-height: 1.2;
+  appearance: none;
+}
+
+.pd-share--hero {
+  display: flex;
+  align-self: stretch;
+  margin: 0;
+}
+
+.pd-share--hero.pd-share--bare {
+  margin-top: 0;
+}
+
+.pd-hero__schedule:hover,
+.pd-share--hero .pd-share-trigger:hover {
+  border-color: rgba(23, 23, 23, 0.34);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.pd-share-trigger {
+  min-width: 44px;
+  min-height: 44px;
 }
 
 /*
@@ -422,6 +678,27 @@
   min-width: 0;
 }
 
+.pd-hero__image-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.35rem;
+  color: #77736c;
+  background: #eeece8;
+  text-align: center;
+}
+
+.pd-hero__image-fallback span {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.pd-hero__image-fallback small {
+  font-size: 0.72rem;
+}
+
 .pd-hero__stage {
   position: relative;
   aspect-ratio: 16 / 10;
@@ -448,15 +725,48 @@
 
 .pd-hero__stage-img,
 .pd-hero__thumb-img,
-.pd-lifestyle__img,
 .pd-similar__media img {
   object-fit: cover;
+  object-position: center;
 }
 
 .pd-hero__thumbs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.4rem;
+}
+
+@media (max-width: 759px) {
+  .pd-hero__grid {
+    gap: 12px;
+  }
+
+  .pd-hero__badges {
+    margin-bottom: 12px;
+  }
+
+  .pd-hero__price-row {
+    margin-top: 12px;
+    gap: 16px;
+  }
+
+  .pd-hero__specs {
+    margin-top: 24px;
+  }
+
+  .pd-hero__desc--ordered {
+    margin-top: 24px;
+  }
+
+  .pd-hero__gallery {
+    width: calc(100% + (var(--pd-space) * 2));
+    margin-inline: calc(var(--pd-space) * -1);
+  }
+
+  .pd-hero__stage {
+    border-radius: 0;
+    border-inline: 0;
+  }
 }
 
 .pd-hero__thumb {
@@ -482,83 +792,329 @@
 }
 
 /* Buyer fit — the one full-bleed dark band on the page. It breaks up the
-   white run of sections and gives the interactive goal picker contrast. */
+   white run of sections and gives the interactive goal picker contrast.
+
+   One flat colour. The band used to carry a radial gold wash in the top-right
+   over a diagonal gradient, and on a 1900px screen both stop reading as
+   lighting and start reading as a smudge — there is nothing on the right of
+   this section for the highlight to point at. `#15171b` is the middle stop of
+   the old gradient, so the overall value of the band is unchanged.
+
+   The horizontal padding is the page token. It was a literal 20px, which is
+   why this band sat short of every other section once the gutter went fluid.
+
+   --pd-motif-field and --pd-motif-ink are the whole motif palette. The tile
+   itself is section-agnostic; recolouring it for a different band is these two
+   values and nothing else. A light section would set field to its own surface
+   and ink to its own accent, and read the same tile.
+
+   The card surfaces below are deliberately opaque. They were 4.5% white, which
+   read as glass only while the band behind them was one flat colour — put a
+   pattern back there and a translucent card lets it run straight through the
+   control and under its own label. These are the solid equivalents of the
+   tints they replaced, so the state contrast is unchanged. */
 .pd-match {
-  background:
-    radial-gradient(
-      ellipse 60% 70% at 88% 0%,
-      rgba(198, 164, 108, 0.16),
-      transparent 62%
-    ),
-    linear-gradient(158deg, #1d2025 0%, #15171b 55%, #101215 100%);
+  --pd-motif-field: #1e2128;
+  --pd-motif-ink: var(--pd-gold);
+
+  /* Card surfaces. A clear step above both the flat band (#15171b) and the
+     band under the motif at its current opacity, so a card never dissolves
+     into the pattern even where the mask has faded the motif out entirely. */
+  --pd-match-card: #1e2129;
+  --pd-match-card-hover: #272b34;
+  --pd-match-card-active: #453f35;
+  --pd-match-card-press: #4e4739;
+
+  /* `isolation` so the motif's negative z-index stays inside this section:
+     without it the pseudo-element would join the root stacking context and
+     could paint behind the band instead of on it. */
+  position: relative;
+  isolation: isolate;
+
+  padding: clamp(2.25rem, 5vh, 3.75rem) var(--pd-space) 48px;
+  background: #15171b;
   color: #f4f1ea;
 }
 
+/*
+ * The starburst tile, on a pseudo-element rather than the section itself.
+ *
+ * The recipe it came with carries `opacity: 0.8`, which is meant for the
+ * pattern. On the <section> that same declaration would take the heading, the
+ * goals and every reason line down to 80% as well. Here it fades only the tile,
+ * and `z-index: -1` puts the motif above the band's flat colour and below the
+ * content.
+ */
+.pd-match::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Was 0.8, which read as gold line work rather than a watermark once the
+     cards below went opaque and left the gaps showing more of the tile. The
+     effective band is field-over-band at this alpha: about #1a1c22 at the
+     centre of the mask, the flat #15171b at its edges. */
+  opacity: 0.5;
+  background-color: var(--pd-motif-field);
+  background-image:
+    radial-gradient(
+      circle farthest-side at 0% 50%,
+      var(--pd-motif-field) 23.5%,
+      transparent 0
+    ),
+    radial-gradient(
+      circle farthest-side at 0% 50%,
+      var(--pd-motif-ink) 24%,
+      transparent 0
+    ),
+    linear-gradient(
+      var(--pd-motif-field) 14%,
+      transparent 0,
+      transparent 85%,
+      var(--pd-motif-field) 0
+    ),
+    linear-gradient(
+      150deg,
+      var(--pd-motif-field) 24%,
+      var(--pd-motif-ink) 0 26%,
+      transparent 0 74%,
+      var(--pd-motif-ink) 0 76%,
+      var(--pd-motif-field) 0
+    ),
+    linear-gradient(
+      30deg,
+      var(--pd-motif-field) 24%,
+      var(--pd-motif-ink) 0 26%,
+      transparent 0 74%,
+      var(--pd-motif-ink) 0 76%,
+      var(--pd-motif-field) 0
+    ),
+    linear-gradient(
+      90deg,
+      var(--pd-motif-ink) 1.6%,
+      var(--pd-motif-field) 0 98.4%,
+      var(--pd-motif-ink) 0
+    );
+  background-position:
+    16px 23px,
+    14px 23px,
+    0 0,
+    0 0,
+    0 0,
+    0 0;
+  background-size: 30px 45px;
+  mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0) 75%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0) 75%
+  );
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+}
+
+.pd-match .pd-kicker {
+  margin-bottom: 8px;
+}
+
+/* Colour only — size, weight and leading come from `.pd-section h2`. */
 .pd-match h2 {
   color: #f4f1ea;
 }
 
 .pd-match .pd-section__lead {
-  color: #a9a59d;
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 15px;
+  line-height: 1.5;
 }
 
+/* Stacked by default: one column of goals with the result underneath, from
+   phone up to 1100px. `align-items: start` is load-bearing — the two-column
+   layout at 1100px sticks the result card, and a stretched grid item is as tall
+   as its row with nothing left to stick within. The two columns themselves are
+   set at the bottom of the file, after the 980px block. */
 .pd-match__grid {
   align-items: start;
+  gap: 20px;
+  margin-top: 20px;
 }
 
 .pd-match__goals {
   display: grid;
-  gap: 0.6rem;
+  gap: 10px;
 }
 
+/* Desktop heading block.
+ *
+ * Scoped to this section for now. The values are a section-level rhythm rather
+ * than a one-off, so once the second section confirms them they should lift
+ * into a shared `.pd-section` desktop rule — otherwise every section ends up
+ * with its own copy of 12px / 40px / 18px and they drift.
+ *
+ * Placed after the base rules above on purpose: these selectors have identical
+ * specificity to the ones they override, so source order is what decides. */
+@media (min-width: 768px) {
+  /* 80px either side. The result card was ending roughly 60px from the band
+     edge, which reads as the section being cut short rather than finished. */
+  .pd-match {
+    padding-block: 80px;
+  }
+
+  /* Colour and tracking are already right on `.pd-kicker` — gold, 0.14em. Only
+     the size and the gap down to the heading move. */
+  .pd-match .pd-kicker {
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+
+  /* Weight and colour come from `.pd-section h2` and `.pd-match h2`. */
+  .pd-match h2 {
+    font-size: 40px;
+    line-height: 1.15;
+  }
+
+  /* The measure is left at the shared 60ch cap. Going to 18px widens what that
+     resolves to, which is the honest consequence of the larger size — pinning
+     the wrap back to a pixel width here would undo the scale it belongs to. */
+  .pd-match .pd-section__lead {
+    margin-top: 14px;
+    font-size: 18px;
+    line-height: 1.55;
+  }
+
+  /* Intro to the first row of content. */
+  .pd-match__grid {
+    margin-top: 32px;
+  }
+}
+
+.pd-match__result--mobile {
+  display: none;
+}
+
+/* The 2px border is declared here as transparent and coloured on `.is-active`,
+   so the selected state already has a 2px edge — it just never reads at a
+   glance because the plate behind it is near-black. The desktop block raises
+   the fill instead. */
 .pd-match__goal {
   display: grid;
-  gap: 0.2rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
   text-align: left;
-  padding: 0.9rem 1rem;
+  min-height: 56px;
+  padding: 14px 1rem;
   border-radius: 14px;
-  border: 1px solid rgba(244, 241, 234, 0.14);
-  background: rgba(255, 255, 255, 0.045);
+  border: 2px solid transparent;
+  background: var(--pd-match-card);
   color: #f4f1ea;
   cursor: pointer;
   transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.2s ease;
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .pd-match__goal:hover {
-  border-color: rgba(198, 164, 108, 0.42);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(198, 164, 108, 0.4);
+  background: var(--pd-match-card-hover);
+}
+
+.pd-match__goal:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 3px;
+}
+
+.pd-match__goal:active {
+  transform: scale(0.98);
+  background: var(--pd-match-card-press);
 }
 
 .pd-match__goal.is-active {
   border-color: var(--pd-gold);
-  background: rgba(198, 164, 108, 0.15);
+  background: var(--pd-match-card-active);
+}
+
+.pd-match__goal-copy {
+  display: grid;
+  gap: 4px;
 }
 
 .pd-match__goal-label {
-  grid-column: 1;
-  font-weight: 650;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .pd-match__goal-desc {
-  grid-column: 1;
-  color: #a9a59d;
-  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+}
+
+.pd-match__goal-indicator {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(244, 241, 234, 0.48);
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.pd-match__goal-indicator::after {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--pd-gold);
+  content: "";
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.pd-match__goal.is-active .pd-match__goal-indicator {
+  border-color: var(--pd-gold);
+}
+
+.pd-match__goal.is-active .pd-match__goal-indicator::after {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .pd-match__result {
   padding: 1.5rem 1.4rem;
-  border-radius: 16px;
+  border-radius: 14px;
   border: 1px solid rgba(244, 241, 234, 0.16);
-  background: rgba(255, 255, 255, 0.055);
+  background: var(--pd-match-card);
+}
+
+.pd-match__result--desktop {
+  display: block;
+}
+
+@media (max-width: 759px) {
+  .pd-match__result--mobile {
+    display: block;
+    margin-top: 10px;
+  }
+
+  .pd-match__result--desktop {
+    display: none;
+  }
 }
 
 .pd-match__goalname {
   margin: 0;
   color: var(--pd-gold);
-  font-size: 0.72rem;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -573,8 +1129,8 @@
 
 .pd-match__score-value {
   color: #f4f1ea;
-  font-size: clamp(2.8rem, 6vw, 4rem);
-  font-weight: 720;
+  font-size: 40px;
+  font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 1;
   /* Keeps the digits from jittering while the count-up runs. */
@@ -582,15 +1138,15 @@
 }
 
 .pd-match__score-unit {
-  color: #a9a59d;
-  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0;
 }
 
 .pd-match__meter {
   margin-top: 1rem;
-  height: 6px;
+  height: 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
   overflow: hidden;
@@ -664,16 +1220,45 @@
   }
 }
 
-/* Goal name and reason cross-fade as the panel content changes. */
-.pd-match__goalname,
-.pd-match__reason {
-  animation: pd-match-reveal 0.45s ease-out both;
+/* The keyed result content fades quickly when the selected goal changes. */
+.pd-match__result-content {
+  animation: pd-match-result-fade 150ms ease-out both;
 }
 
 .pd-match__reason {
-  margin: 1.1rem 0 0;
   color: #cdc9c1;
   line-height: 1.6;
+}
+
+.pd-match__reasons {
+  display: grid;
+  gap: 0.45rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  color: #cdc9c1;
+  font-size: 14px;
+  line-height: 1.45;
+  list-style: none;
+}
+
+.pd-match__reasons li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: start;
+}
+
+/* Neutral dash, not a tick. Sized and coloured to sit on the first line's
+   baseline without pulling the line box taller. */
+.pd-match__reason-mark {
+  color: var(--pd-gold);
+  font-weight: 700;
+  line-height: inherit;
+}
+
+@keyframes pd-match-result-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .pd-future__toggles {
@@ -681,21 +1266,95 @@
   flex-wrap: wrap;
   gap: 0.65rem;
   align-items: center;
-  margin-top: 1.1rem;
+  margin-top: 20px;
+}
+
+/* Same 48px run-out to the next section as the Buyer Fit band above. The
+   gutter is inherited from the page rather than pinned here, and the scroll
+   margin is on `.property-page section` now. */
+.pd-future {
+  padding-bottom: 48px;
+}
+
+.pd-future .pd-kicker {
+  margin-bottom: 8px;
+}
+
+.pd-future .pd-section__lead {
+  margin-top: 12px;
+  color: var(--pd-muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.pd-future__toggles {
+  margin-top: 20px;
+}
+
+.pd-future .pd-segment {
+  padding: 2px;
+}
+
+.pd-future .pd-segment button,
+.pd-future .pd-chip {
+  min-height: 44px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pd-future .pd-segment button.is-active,
+.pd-future .pd-chip.is-active {
+  border-color: #171717;
+  background: #171717;
+  color: #ffffff;
+}
+
+.pd-future .pd-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.pd-future__location-icon {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .pd-future__near {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
   margin: 0.75rem 0 0;
   color: var(--pd-muted);
   font-size: 0.86rem;
 }
 
-/* Right-hand map column: sticky so it stays beside the scrolling list. */
+.pd-future__near--error {
+  color: #9a4b3c;
+}
+
+/* Chips → map is 16px and map → list is 16px. The shared two-column rule
+   above sets 24px/20px for every match/grid layout, so restate the scale
+   for this section only. */
+.pd-future .pd-future__layout {
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* Map column: sticky on desktop and a compact visual anchor on mobile. */
 .pd-future__map {
   position: relative;
-  min-height: 24rem;
+  aspect-ratio: 4 / 3;
+  min-height: 15rem;
   border: 1px solid var(--pd-line);
-  border-radius: 1rem;
+  border-radius: 14px;
   overflow: hidden;
   background: #e8e4dc;
   box-shadow:
@@ -706,6 +1365,7 @@
 .pd-future__canvas {
   position: absolute;
   inset: 0;
+  touch-action: pan-y;
 }
 
 /* MapLibre's own controls need to sit above the canvas, not scroll away. */
@@ -713,6 +1373,55 @@
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(23, 23, 23, 0.16);
+}
+
+.pd-future__map .maplibregl-ctrl-top-right {
+  top: 0;
+  right: 0;
+}
+
+.pd-future__map .maplibregl-ctrl button {
+  width: 44px;
+  height: 44px;
+}
+
+.pd-future__reset-group {
+  margin-top: 8px !important;
+}
+
+.pd-future__reset-control {
+  display: block;
+  width: auto !important;
+  min-width: 100px;
+  height: auto !important;
+  padding: 0 10px;
+  border: 0;
+  background: #ffffff;
+  color: var(--pd-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pd-future__reset-control:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: -3px;
+}
+
+.pd-future__map .maplibregl-popup-content {
+  padding: 9px 11px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.pd-future__map .maplibregl-popup-content strong {
+  font-size: 13px;
+}
+
+.pd-future__map .maplibregl-popup-content span {
+  color: var(--pd-muted);
+  font-size: 12px;
 }
 
 .pd-future__map .maplibregl-ctrl-attrib {
@@ -729,282 +1438,901 @@
   font-size: 0.82rem;
 }
 
+.pd-future__map-hint {
+  position: absolute;
+  z-index: 2;
+  top: 0.75rem;
+  left: 50%;
+  margin: 0;
+  padding: 0.35rem 0.6rem;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--pd-muted);
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.pd-future__map-hint.is-desktop {
+  display: none;
+}
+
+.pd-future__plot-label {
+  display: block;
+  padding: 4px 8px;
+  border: 1px solid rgba(31, 92, 69, 0.2);
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(23, 23, 23, 0.14);
+  color: #1f5c45;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (min-width: 760px) {
+  .pd-future .pd-kicker {
+    margin-bottom: 10px;
+    color: var(--pd-gold);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+  }
+
+  .pd-future h2 {
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1.15;
+  }
+
+  .pd-future .pd-section__lead {
+    max-width: 60ch;
+    margin-top: 14px;
+    font-size: 18px;
+    line-height: 1.55;
+  }
+
+  .pd-future__toggles {
+    margin-top: 28px;
+  }
+
+  .pd-future .pd-segment button,
+  .pd-future .pd-chip {
+    font-size: 15px;
+  }
+
+  .pd-future .pd-segment button:not(.is-active):hover,
+  .pd-future .pd-segment button:not(.is-active):focus-visible {
+    background: rgba(31, 92, 69, 0.08);
+    color: var(--pd-ink);
+  }
+
+  .pd-future .pd-future__layout {
+    margin-top: 28px;
+  }
+
+  .pd-future__list-group.is-expanded {
+    max-height: 34rem;
+    overflow-y: auto;
+    scrollbar-color: rgba(23, 23, 23, 0.22) transparent;
+    scrollbar-width: thin;
+  }
+
+  .pd-future__list-group.is-expanded::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .pd-future__list-group.is-expanded::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .pd-future__list-group.is-expanded::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(23, 23, 23, 0.22);
+  }
+
+  .pd-future__list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pd-future__show-all {
+    grid-column: 1 / -1;
+  }
+
+  .pd-future__map {
+    border-radius: 16px;
+  }
+
+  .pd-future__map .maplibregl-ctrl-top-right {
+    top: 16px;
+    right: 16px;
+  }
+
+  .pd-future__map .maplibregl-ctrl button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .pd-future__reset-control {
+    height: 40px !important;
+  }
+
+  .pd-future__map-hint.is-touch {
+    display: none;
+  }
+
+  .pd-future__map-hint.is-desktop {
+    display: block;
+  }
+}
+
 .pd-future__list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.5rem;
-  max-height: 34rem;
-  overflow-y: auto;
-  overscroll-behavior-y: auto;
-  padding-right: 0.35rem;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(198, 164, 108, 0.45) transparent;
+  gap: 12px;
 }
 
-.pd-future__list::-webkit-scrollbar {
-  width: 5px;
+.pd-future__list--changing {
+  animation: pd-future-list-fade 150ms ease-out both;
 }
 
-.pd-future__list::-webkit-scrollbar-track {
-  background: transparent;
+@keyframes pd-future-list-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.pd-future__list::-webkit-scrollbar-thumb {
-  background-color: rgba(198, 164, 108, 0.4);
-  border-radius: 9999px;
+.pd-future__list-group {
+  min-width: 0;
 }
 
-.pd-future__card {
-  padding: 0.65rem 0.85rem;
-  border: 1px solid var(--pd-line);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 1px 3px rgba(23, 23, 23, 0.03);
-  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
-}
-
-.pd-future__card:hover {
-  background: #ffffff;
-  border-color: rgba(198, 164, 108, 0.45);
-  transform: translateY(-1px);
-}
-
-.pd-future__card-top {
+.pd-future__list-heading {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.25rem;
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
+  gap: 1rem;
+}
+
+.pd-future__category {
+  margin: 0 0 0.65rem;
+  color: var(--pd-gold);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.pd-future__list-count {
+  flex: 0 0 auto;
   color: var(--pd-muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 
-.pd-future__kind {
-  font-weight: 700;
-  color: #8b6e3b;
-}
-
-.pd-future__status {
-  font-size: 0.68rem;
-  padding: 0.1rem 0.45rem;
-  background: rgba(23, 23, 23, 0.05);
-  border-radius: 999px;
-  color: #4a463f;
-}
-
-.pd-future__card h3 {
-  margin: 0;
-  font-size: 0.92rem;
-  font-weight: 650;
-  line-height: 1.25;
-  color: var(--pd-ink);
-}
-
-.pd-future__card p {
-  margin: 0.2rem 0 0;
-  color: var(--pd-muted);
-  font-size: 0.78rem;
-  line-height: 1.35;
-}
-
-.pd-future__dist {
-  color: #171717 !important;
-  font-weight: 700;
-  font-size: 0.78rem;
-}
-
-.pd-lifestyle__layout {
-  display: grid;
-  gap: 1.25rem;
-  margin-top: 1.5rem;
-}
-
-.pd-lifestyle__points {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.6rem;
-  align-content: start;
-}
-
-.pd-lifestyle__point {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.85rem;
+.pd-future__show-all {
+  display: flex;
   align-items: center;
+  justify-content: center;
+  gap: 8px;
   width: 100%;
-  text-align: left;
-  padding: 0.85rem 0.95rem;
-  border: 1px solid var(--pd-line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
-  color: inherit;
+  min-height: 48px;
+  margin-top: 0.75rem;
+  border: 1px solid var(--pd-gold);
+  border-radius: 10px;
+  background: transparent;
+  color: #8b6e3b;
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.2s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.pd-lifestyle__point:hover {
-  border-color: rgba(198, 164, 108, 0.5);
-  background: #fff;
+.pd-future__chevron {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.2s ease;
 }
 
-.pd-lifestyle__point.is-active {
-  border-color: var(--pd-gold);
+.pd-future__chevron.is-up {
+  transform: rotate(180deg);
+}
+
+.pd-future__show-all:hover,
+.pd-future__show-all:focus-visible {
   background: rgba(198, 164, 108, 0.12);
 }
 
-.pd-lifestyle__point-index {
-  display: inline-flex;
+/*
+ * One fixed three-zone grid for every card: number, identity, figures.
+ *
+ * This replaces two flex rows with `justify-content: space-between` and a
+ * variable number of children. That is what made the cards disagree with each
+ * other: a card with a distance had three children and floated its name into
+ * the middle, a card without had two and pushed the name to the right edge,
+ * leaving a gap in the middle. Fixed tracks remove the question — the name
+ * always starts in column two, and column three holds the figures whether or
+ * not a distance exists.
+ */
+.pd-future__card {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
+  column-gap: 14px;
+  min-height: 68px;
+  padding: 16px 20px;
   border: 1px solid var(--pd-line);
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.85);
-  color: var(--pd-muted);
-  font-size: 0.74rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 3px rgba(23, 23, 23, 0.03);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+  cursor: pointer;
 }
 
-.pd-lifestyle__point.is-active .pd-lifestyle__point-index {
-  background: var(--pd-ink);
-  border-color: var(--pd-ink);
-  color: #fff;
+/* The base fill is already white against the page, so the warm hover has to go
+   the other way to be seen at all. */
+.pd-future__card:hover {
+  background: #fdfbf7;
+  border-color: rgba(198, 164, 108, 0.4);
 }
 
-.pd-lifestyle__point-title {
-  display: block;
-  font-weight: 650;
-  line-height: 1.35;
+.pd-future__card:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 2px;
 }
 
-.pd-lifestyle__point-alt {
-  display: block;
-  margin-top: 0.15rem;
-  color: var(--pd-muted);
-  font-size: 0.84rem;
+.pd-future__card-number {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #1f5c45;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 750;
 }
 
-.pd-lifestyle__stage {
-  position: relative;
-  min-height: 20rem;
-  overflow: hidden;
-  border-radius: 1rem;
-  border: 1px solid var(--pd-line);
-  background: #d9d2c7;
-  box-shadow:
-    0 1px 2px rgba(23, 23, 23, 0.04),
-    0 10px 28px rgba(23, 23, 23, 0.06);
+.pd-future__card-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
-/* `key` on the image remounts it each swap, so this replays as a cross-fade. */
-.pd-lifestyle__img {
-  animation: pd-lifestyle-fade 0.6s ease-out both;
-}
-
-@keyframes pd-lifestyle-fade {
-  from {
-    opacity: 0;
-    transform: scale(1.03);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.pd-lifestyle__caption {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+/* The ellipsis needs `min-width: 0` on the track it sits in, which is why the
+   middle column is `minmax(0, 1fr)` rather than a bare `1fr`. */
+.pd-future__card-name {
   margin: 0;
-  padding: 2.4rem 1.1rem 1.05rem;
-  background: linear-gradient(transparent, rgba(15, 17, 20, 0.8));
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 650;
-}
-
-/* A long list — an API property publishes every amenity it has. On a phone a
-   column that tall pushes the stage image off the screen, so the points run
-   sideways as one scroll-snapping row instead. */
-.pd-lifestyle__points--dense {
-  display: flex;
-  gap: 0.5rem;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  padding-bottom: 0.35rem;
-  scrollbar-width: thin;
-}
-
-.pd-lifestyle__points--dense > li {
-  flex: 0 0 auto;
-  scroll-snap-align: start;
-}
-
-.pd-lifestyle__points--dense .pd-lifestyle__point {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pd-ink);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Stands in for a photograph when the item has none: the selected point is
-   already named in the list, so this is a quiet panel, not another headline. */
-.pd-lifestyle__panel {
+.pd-future__card-sub {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pd-muted);
+  font-size: 14px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pd-future__card-side {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+}
+
+.pd-future__dist {
+  margin: 0;
+  color: var(--pd-ink);
+  font-size: 16px;
+  font-weight: 600;
+  /* Distance column, so the numbers do not shuffle as the list scrolls. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.pd-future__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pd-muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.pd-future__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b7791f;
+}
+
+.pd-future__status.is-operational .pd-future__status-dot {
+  background: #2f855a;
+}
+
+/* Lifestyle is the second full-bleed dark band on the page, so the amenity
+   grid reads as the light-on-dark counterpoint to the Buyer Fit band above.
+   The blueprint grid sits on a pseudo-element rather than the section itself:
+   a mask on the section would fade the tiles and the copy along with it. */
+.pd-lifestyle {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(158deg, #1d2025 0%, #15171b 55%, #101215 100%);
+  color: #f4f1ea;
+}
+
+.pd-lifestyle::before {
+  content: "";
   position: absolute;
   inset: 0;
+  z-index: -1;
+  background-color: #15171b;
+  /* Same 20px cell as the light design, recoloured for this band: the blue
+     went to the section's own gold (#c6a46c, the kicker, icon and button
+     accent) so the grid belongs to the palette instead of fighting it. It
+     sits at a lower alpha than the blue did because gold carries far more
+     luminance than that blue did at the same weight, and the gradient ends on
+     transparent so it lays over the section's gradient base rather than a flat
+     colour that would not match it. */
+  background-image:
+    linear-gradient(rgba(198, 164, 108, 0.16) 1px, transparent 1px),
+    linear-gradient(to right, rgba(198, 164, 108, 0.16) 1px, transparent 1px);
+  background-size: 20px 20px;
+  mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0) 75%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0) 75%
+  );
+  /* Sized against the section rather than to it. At 100% the fade finished
+     long before the section's own edges: a section is much taller than it is
+     wide, so a centred ellipse always reaches zero at the top and bottom
+     first and the grid survives only in the middle — behind the tiles. The
+     corner distance works out to 1.886 / S, so scaling past ~470% keeps the
+     whole section covered whatever its proportions turn out to be. */
+  mask-size: 500% 500%;
+  -webkit-mask-size: 500% 500%;
+  mask-position: center;
+  -webkit-mask-position: center;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.pd-lifestyle .pd-section__lead {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Collapsing the grid scrolls this heading back into view, and the nav is
+   sticky, so it needs clearance or it lands underneath. */
+.pd-lifestyle h2 {
+  scroll-margin-top: calc(var(--nav-h) + 16px);
+}
+
+/* Amenities are a scan, not a story: every name sits in the grid up front, so
+   the tiles carry no selected/hover state and nothing to click into. Two
+   columns on a phone, three from tablet width, four on desktop. */
+.pd-lifestyle__grid {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* Grid tiles are read, not clicked, so they sit flat: no fill, no shadow, just
+   an outline. Row heights equalise themselves through the grid's default
+   stretch, which keeps a row level even when only some tiles carry a
+   description. */
+.pd-lifestyle__tile {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  min-height: 88px;
+  padding: 14px;
+  /* Empty by design: the blueprint grid belongs to the section and runs
+     straight through the tile, so the tile is drawn with its light edge alone.
+     On a dark band that edge has to be light or it disappears entirely. */
+  border: 1px solid rgba(244, 241, 234, 0.16);
+  border-radius: 14px;
+  background: transparent;
+}
+
+.pd-lifestyle__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(198, 164, 108, 0.16);
+  /* Dark green was the light-background choice; on dark it drops below a 3:1
+     ratio against the tile, so the family goes to gold instead. */
+  color: var(--pd-gold-bright);
+}
+
+.pd-lifestyle__icon svg {
+  width: 32px;
+  height: 32px;
+  fill: none;
+  stroke: currentColor;
+  /* One weight for the whole set, so no amenity reads heavier than another. */
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pd-lifestyle__tile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pd-lifestyle__tile-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #f4f1ea;
+}
+
+.pd-lifestyle__tile-alt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.pd-lifestyle__show-all {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 2rem;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  border: 1px solid var(--pd-gold);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--pd-gold);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.pd-lifestyle__show-all:hover,
+.pd-lifestyle__show-all:focus-visible {
+  background: rgba(198, 164, 108, 0.16);
+}
+
+/* The default focus ring is dark and disappears against the band. */
+.pd-lifestyle__show-all:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 2px;
+}
+
+/* Flips to point up while the list is open. */
+.pd-lifestyle__chevron {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.2s ease;
+}
+
+.pd-lifestyle__chevron--up {
+  transform: rotate(180deg);
+}
+
+/* Verification is the page's third full-bleed dark band. It reuses the Buyer
+   Fit base so the dark sections read as one family rather than three one-off
+   treatments, and so the alternating light/dark run stays legible. The band
+   background runs edge to edge; the gutter on `.pd-section` is what holds the
+   content off the left edge.
+
+   The gold wash is kept faint on purpose. It sits under every row of text, so
+   the lighter it gets the less the cards have to fight it — and softening it
+   only darkens the plate, which pushes contrast up rather than down. The
+   48px margin is white page, not band: it is what stops the dark run from
+   colliding with the light section after it. */
+.pd-legal {
+  padding-bottom: 48px;
+  margin-bottom: 48px;
   background:
     radial-gradient(
-      120% 120% at 15% 10%,
-      rgba(198, 164, 108, 0.22),
-      rgba(198, 164, 108, 0) 60%
+      ellipse 60% 70% at 88% 0%,
+      rgba(198, 164, 108, 0.08),
+      transparent 62%
     ),
-    linear-gradient(160deg, #23211d, #14161a);
-  animation: pd-lifestyle-fade 0.6s ease-out both;
+    linear-gradient(158deg, #1d2025 0%, #15171b 55%, #101215 100%);
+  color: #f4f1ea;
 }
 
-.pd-lifestyle__panel-index {
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  color: var(--pd-gold);
+.pd-legal .pd-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
 }
 
-.pd-lifestyle__panel-title {
-  margin: 0;
-  font-size: clamp(1.4rem, 2.6vw, 2rem);
-  font-weight: 650;
-  line-height: 1.2;
-  text-wrap: balance;
-  color: #fff;
+.pd-legal__kicker-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.pd-lifestyle__panel-meta {
-  margin: 0;
-  font-size: 0.84rem;
-  color: rgba(255, 255, 255, 0.66);
+.pd-legal h2 {
+  color: #f4f1ea;
+}
+
+.pd-legal .pd-section__lead {
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* The card is the link, so the whole row is one tap target and the "View" cue
+   inside it can never be a small thing to miss. */
+.pd-legal__card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.055);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+/* Scoped to the anchor on purpose. A row without an `href` is a stated fact
+   rather than a file, and must not carry the press or hover state of one. */
+a.pd-legal__card:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+a.pd-legal__card:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+a.pd-legal__card:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 2px;
+}
+
+.pd-legal__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(244, 241, 234, 0.1);
+  color: #f4f1ea;
+}
+
+.pd-legal__icon--pdf {
+  background: rgba(198, 164, 108, 0.18);
+  color: #e8c88c;
+}
+
+.pd-legal__icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pd-legal__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pd-legal__name {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #ffffff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pd-legal__meta {
+  margin: 4px 0 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.7);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A cue, not a control — the anchor around it is the real target. */
+.pd-legal__view {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(244, 241, 234, 0.28);
+  border-radius: 999px;
+  color: #f4f1ea;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pd-legal__view svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .pd-legal__list {
   list-style: none;
-  margin: 1.4rem 0 0;
+  margin: 20px 0 0;
   padding: 0;
   display: grid;
-  gap: 0.7rem;
+  gap: 10px;
+}
+
+/*
+ * The advocate note is the most protective line on the page, so it gets a box
+ * of its own rather than sharing a sentence with property facts. The icon is
+ * decorative — the sentence carries the meaning.
+ */
+.pd-legal__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pd-legal__note-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  color: var(--pd-gold);
+}
+
+.pd-legal__note-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pd-legal__note-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* The request line that stands in for an empty list. */
+.pd-legal__request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pd-legal__request-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f4f1ea;
+}
+
+.pd-legal__request-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--pd-gold);
+  color: #171717;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.pd-legal__request-btn:hover {
+  background: var(--pd-gold-bright);
+}
+
+.pd-legal__request-btn:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 3px;
+}
+
+.pd-legal__request-btn svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Replaces the View pill on the card whose file could not be opened. */
+.pd-legal__error {
+  flex: 0 1 auto;
+  max-width: 9rem;
+  font-size: 13px;
+  line-height: 1.3;
+  color: #ffb4a3;
+  text-align: right;
+}
+
+/* Matches the "Show all" affordance in the other sections: same height, same
+   weight, and a chevron that flips while the list is open. */
+.pd-legal__show-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  border: 1px solid var(--pd-gold);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--pd-gold);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.pd-legal__show-all:hover,
+.pd-legal__show-all:focus-visible {
+  background: rgba(198, 164, 108, 0.16);
+}
+
+.pd-legal__show-all:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 2px;
+}
+
+.pd-legal__chevron {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.2s ease;
+}
+
+.pd-legal__chevron--up {
+  transform: rotate(180deg);
+}
+
+/*
+ * The build-rules link deliberately borrows the card's shape — same width, same
+ * 14px radius, same 44px height — so the section keeps one rhythm, and gives
+ * up everything that says "document": no file tile, no "View" pill, no fill.
+ * The gold text is what separates it from the rows above at a glance.
+ */
+.pd-legal__rules {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  color: var(--pd-gold);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.pd-legal__rules:hover {
+  border-color: rgba(198, 164, 108, 0.45);
+  background: rgba(198, 164, 108, 0.08);
+}
+
+.pd-legal__rules:active {
+  background: rgba(198, 164, 108, 0.16);
+}
+
+.pd-legal__rules:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 2px;
+}
+
+.pd-legal__rules svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* EMI Calculator: scrollable left controls, sticky right summary */
@@ -1042,39 +2370,165 @@
   }
 }
 
-.pd-legal__list li {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.85rem;
+/* The affordability shell is shared with the homepage, where it is a dark band.
+   Here it sits among the property page's light sections, so the dark surface is
+   undone while the frame, heading and spacing stay identical.
+
+   Every selector below deliberately outranks its `.emi-appreciation` counterpart
+   rather than relying on stylesheet order: the shell sets these tokens and
+   colours on the same element (`.pd-afford` *is* `.emi-appreciation`), and its
+   heading overrides match on the title id. */
+.pd-afford.emi-appreciation {
+  background: #ffffff;
+  color: #171717;
+
+  /* Re-asserted rather than removed — `.emi-appreciation` declares them here,
+     so the calculator's scrollbar hover and inherited colours need the light
+     values back. These match `.property-page`. */
+  --pd-ink: #171717;
+  --pd-muted: #5c5852;
+  --pd-soft: #f4f1ea;
+  --pd-surface: #ffffff;
+  --pd-line: rgba(23, 23, 23, 0.12);
+  --pd-gold: #c6a46c;
+  --pd-gold-bright: #d4b57e;
+}
+
+/* This section is the homepage shell reused, and it is not a `.pd-section`:
+   the gutter lives on the frame instead, hardcoded to 1rem there. Match the
+   page token so the calculator's heading sits on the same line as the sections
+   above and below it. Scoped to the property page — the homepage shell keeps
+   its own 1rem. */
+.pd-afford .emi-appreciation__frame {
+  padding-inline: var(--pd-space);
+}
+
+/* The shell heading inherits colour, so it needs no override. The lede and the
+   calculator's own heading block are set explicitly by the shell. */
+.pd-afford .emi-appreciation__lede {
+  color: #5c5852;
+}
+
+.pd-afford .pd-section.pd-emi #pd-emi-title {
+  color: #171717;
+}
+
+.pd-afford .pd-section.pd-emi .pd-kicker {
+  color: #c6a46c;
+}
+
+.pd-afford .pd-section.pd-emi .pd-section__lead {
+  color: #5c5852;
+}
+
+/* The one action the section offers while the calculator is closed. It only
+   renders inside the mobile shell, so it is full width without a media query. */
+.pd-afford__cta {
+  display: inline-flex;
   align-items: center;
-  padding: 1rem 1.05rem;
-  border: 1px solid var(--pd-line);
-  background: rgba(255, 255, 255, 0.78);
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 20px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--pd-gold);
+  color: #171717;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
-.pd-legal__list h3 {
-  margin: 0;
-  font-size: 1rem;
+.pd-afford__cta:hover {
+  background: var(--pd-gold-bright);
 }
 
-.pd-legal__list p {
-  margin: 0.3rem 0 0;
-  color: var(--pd-muted);
-  font-size: 0.84rem;
+.pd-afford__cta:active {
+  transform: scale(0.98);
+}
+
+.pd-afford__cta:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 3px;
+}
+
+/*
+ * The popup is the homepage's, reused. Its shell is dark, so the sheet and its
+ * furniture are put back on a light surface here — the calculator inside still
+ * reads correctly because it inherits the light tokens declared above.
+ */
+.pd-afford .emi-appreciation__popup-sheet {
+  background: #ffffff;
+  border-color: rgba(23, 23, 23, 0.12);
+  box-shadow: 0 18px 50px rgba(23, 23, 23, 0.18);
+}
+
+.pd-afford .emi-appreciation__popup-grip {
+  background: rgba(23, 23, 23, 0.2);
+}
+
+.pd-afford .emi-appreciation__popup-bar {
+  border-bottom-color: rgba(23, 23, 23, 0.1);
+}
+
+.pd-afford .emi-appreciation__popup-title {
+  color: #171717;
+}
+
+.pd-afford .emi-appreciation__popup-close {
+  background: #c6a46c;
+  box-shadow: 0 4px 14px rgba(198, 164, 108, 0.35);
+}
+
+.pd-afford .emi-appreciation__popup-close:hover {
+  background: #d4b57e;
+}
+
+.pd-afford .emi-appreciation__popup-close:focus-visible {
+  outline-color: #171717;
+}
+
+/* The dialog is its own frame, so the calculator's section padding is dropped
+   here rather than pushing the heading away from the sheet's title bar. */
+.pd-afford .emi-appreciation__popup-body .pd-emi {
+  padding-block: 0;
+}
+
+/*
+ * Desktop is deliberately untouched.
+ *
+ * From 768px the section is the bare calculator again — the inline layout, the
+ * page's own light surface, its `.pd-section` padding and its own heading —
+ * and the mobile shell steps aside entirely. Both trees are in the document
+ * and CSS picks one, so neither surface has to read the viewport in JS before
+ * hydration and there is no flash of the wrong layout on the way in.
+ */
+.pd-afford-desktop {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .pd-afford-desktop {
+    display: block;
+  }
+
+  .pd-afford {
+    display: none;
+  }
+}
+
+/* The per-row flex layout, border and fill that used to sit on the `li` now
+   live on `.pd-legal__card`. What is left is the list item itself. */
+.pd-legal__list li {
+  min-width: 0;
 }
 
 .pd-legal__extras {
   display: grid;
-  gap: 0.85rem;
-  margin-top: 1.1rem;
-}
-
-.pd-legal__callout {
-  margin: 0;
-  color: var(--pd-muted);
-  font-size: 0.9rem;
-  line-height: 1.5;
+  gap: 20px;
+  margin-top: 16px;
 }
 
 .pd-sat__map-wrap {
@@ -1138,41 +2592,62 @@
   line-height: 1.55;
 }
 
+/* The gutter is inherited from the page. Kicker, heading, lead, the ordered
+   list and the step markers all start on the same line, because nothing in
+   this section offsets any of them. */
 .pd-journey {
-  --journey-ink: #151619;
-  --journey-muted: #697080;
-  --journey-gold: #c9a23a;
-  --journey-line: rgba(21, 22, 25, 0.18);
+  /* The section used to carry its own gold and its own blue-grey. Both now sit
+     on the shared tokens, so the eyebrow, the markers and the step copy cannot
+     drift away from the rest of the page. */
+  --journey-gold: #c6a46c;
+  --journey-gold-strong: #7a6134;
+  /* Deliberately darker and cooler than --pd-muted. The band is a light grey,
+     and the site grey does not separate from it enough to read comfortably at
+     this size. 7.1:1 against #f3f4f6, against 6.4:1 for --pd-muted. */
+  --journey-copy: #4b5260;
+  --journey-line: rgba(198, 164, 108, 0.4);
+  /* One source of truth for the circle, so the marker, its grid column and the
+     connector offset cannot drift apart. The connector sits at half of this,
+     because that is the centre the circles are pinned to. */
+  --journey-marker: 36px;
+  /* #f3f4f6 sits about 1.09:1 against the page's white — close enough that the
+     band's edges do not render at all, which is what makes its padding read as
+     a white strip above and leaves the last step looking like it is floating.
+     The hairlines keep the light fill the section is meant to have and give it
+     a defined start and end. */
+  --journey-edge: rgba(21, 22, 25, 0.1);
   background: #f3f4f6;
   padding-top: clamp(4.5rem, 10vw, 8rem);
-  padding-bottom: clamp(4.5rem, 10vw, 8rem);
-  color: var(--journey-ink);
+  padding-bottom: 48px;
+  border-top: 1px solid var(--journey-edge);
+  border-bottom: 1px solid var(--journey-edge);
+  color: var(--pd-ink);
 }
 
-.pd-journey .pd-section__inner {
-  width: min(100%, 90rem);
-}
+/* The five step columns take the full content width — the layout rule caps
+   text blocks, not grids. */
 
+/* Darker than --pd-gold, the eyebrow colour everywhere else on the page: that
+   gold is only 2.1:1 on this band, so the eyebrow borrows --pd-gold-ink. */
 .pd-journey .pd-kicker {
   margin-bottom: 0.8rem;
-  color: var(--journey-gold);
-  font-size: 0.7rem;
-  letter-spacing: 0.18em;
+  color: var(--pd-gold-ink);
+  font-size: 11px;
+  letter-spacing: 0.14em;
 }
 
+/* Colour only — the type comes from `.pd-section h2`. */
 .pd-journey h2 {
-  color: var(--journey-ink);
-  font-size: clamp(2rem, 4.5vw, 3.8rem);
-  font-weight: 750;
-  letter-spacing: -0.045em;
-  line-height: 1.02;
+  color: var(--pd-ink);
 }
 
 .pd-journey .pd-section__lead {
-  max-width: 34rem;
   margin-top: 1.1rem;
-  color: var(--journey-muted);
+  color: var(--pd-muted);
+  font-size: 15px;
+  line-height: 1.5;
 }
+
 
 .pd-journey__steps {
   position: relative;
@@ -1184,13 +2659,16 @@
   gap: clamp(1rem, 3vw, 3rem);
 }
 
+/* Desktop only: the five steps are side by side, so the connector is one
+   horizontal run from the first circle's centre to the last one's. On mobile it
+   is drawn per step instead — see the breakpoint below. */
 .pd-journey__steps::before {
   content: "";
   position: absolute;
-  top: 1.15rem;
-  left: 1.15rem;
-  right: 1.15rem;
-  height: 1px;
+  top: calc((var(--journey-marker) / 2) - 1px);
+  left: calc((var(--journey-marker) / 2) - 1px);
+  right: calc((var(--journey-marker) / 2) - 1px);
+  height: 2px;
   background: var(--journey-line);
 }
 
@@ -1201,60 +2679,120 @@
 
 .pd-journey__marker {
   position: relative;
+  /* Above the connector, and opaque in the band's own colour, so the line
+     never shows through a circle. */
   z-index: 1;
   display: grid;
   place-items: center;
-  width: 2.3rem;
-  height: 2.3rem;
-  border: 1px solid var(--journey-gold);
+  width: var(--journey-marker);
+  height: var(--journey-marker);
+  border: 1.5px solid var(--journey-gold-strong);
   border-radius: 50%;
   background: #f3f4f6;
-  color: var(--journey-gold);
-  font-size: 0.68rem;
-  font-weight: 750;
-  letter-spacing: 0.06em;
+  color: var(--journey-gold-strong);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* The closing step: a filled circle with a tick instead of a fifth number. */
+.pd-journey__marker--final {
+  border-color: var(--journey-gold);
+  background: var(--journey-gold);
+  color: #171717;
+}
+
+.pd-journey__marker--final svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .pd-journey__step h3 {
   margin: 1.5rem 0 0;
-  color: var(--journey-ink);
-  font-size: clamp(1rem, 1.5vw, 1.25rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  color: var(--pd-ink);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .pd-journey__step p {
   max-width: 13rem;
-  margin: 0.65rem 0 0;
-  color: var(--journey-muted);
-  font-size: 0.86rem;
-  line-height: 1.55;
+  margin: 4px 0 0;
+  color: var(--journey-copy);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 @media (max-width: 700px) {
   .pd-journey__steps {
     display: grid;
-    grid-template-columns: 2.3rem minmax(0, 1fr);
+    grid-template-columns: var(--journey-marker) minmax(0, 1fr);
     gap: 0;
     margin-top: 3.25rem;
     padding-left: 0;
   }
 
   .pd-journey__steps::before {
-    top: 1.15rem;
-    bottom: 1.15rem;
-    left: 1.15rem;
-    right: auto;
-    width: 1px;
-    height: auto;
+    content: none;
   }
 
+  /*
+   * The vertical connector is drawn per step rather than on the list. A line
+   * anchored to the list has to know how tall the last step's text is in order
+   * to stop on its circle; anchored to the step instead, each segment runs
+   * exactly one step's height — from this circle's centre to the next one —
+   * so the chain ends on the last circle with no overshoot.
+   */
+  .pd-journey__step:not(:last-child)::before,
+  .pd-journey__step:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    top: calc((var(--journey-marker) / 2) - 1px);
+    left: calc((var(--journey-marker) / 2) - 1px);
+    width: 2px;
+    /* `100%` is the step's padding box, and the segment starts a pixel above
+       the centreline so the 2px line straddles it. It therefore has to run a
+       pixel past 100% to finish on the next circle's centre rather than just
+       short of it. */
+    height: calc(100% + 1px);
+  }
+
+  .pd-journey__step:not(:last-child)::before {
+    background: var(--journey-line);
+  }
+
+  /* Gold fill, laid over the track only as far as the reader has got. The
+     classes are set by an IntersectionObserver that never runs above this
+     breakpoint or under reduced motion, so the static track is the fallback
+     rather than a second style. */
+  .pd-journey__step.is-reached:not(:last-child)::after {
+    background: var(--journey-gold);
+  }
+
+  /* A steady 28px between steps, with the title's own top margin zeroed so
+     the gap is exactly that rather than 28px plus whatever the text adds.
+     `padding-bottom` is a fixed length, so a one-line and a two-line
+     description land on the same rhythm. */
   .pd-journey__step {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: 2.3rem minmax(0, 1fr);
-    column-gap: 1.2rem;
-    padding-bottom: 2.5rem;
+    grid-template-columns: var(--journey-marker) minmax(0, 1fr);
+    /* 16px after the circle — the page gutter again, so the text column
+       lines up with everything else in the section. */
+    column-gap: 16px;
+    padding-bottom: 28px;
+  }
+
+  /* A ring rather than a fill, so it also reads on the closing step's solid
+     gold circle without fighting it. */
+  .pd-journey__step.is-current .pd-journey__marker {
+    box-shadow: 0 0 0 4px rgba(198, 164, 108, 0.22);
   }
 
   .pd-journey__step:last-child {
@@ -1272,12 +2810,16 @@
   }
 
   .pd-journey__step h3 {
-    margin-top: 0.15rem;
+    margin-top: 0;
   }
 
   .pd-journey__step p {
-    max-width: 30rem;
-    margin-top: 0.45rem;
+    /* The column is the effective cap on a phone — at 390px it comes to about
+       294px, so the text stops exactly on the right gutter. This only starts
+       to bind once the viewport is wide enough for the column to exceed 30rem,
+       where it keeps the measure from running the full width of a landscape
+       phone. */
+    max-width: min(30rem, 100%);
   }
 }
 
@@ -1365,20 +2907,98 @@
  * dismissing the bar removes the reserved space instead of leaving a gap.
  */
 .pd-final {
+  /* 48px of white above, so the journey band above and this enquiry block read
+     as two separate ideas rather than one run-on section. */
+  padding-top: 48px;
+  /* The bar's clearance. Longhand, and untouched by the gutter above: the
+     sticky CTA writes its measured height into this custom property. */
   padding-bottom: var(--pd-sticky-clearance, 0px);
 }
 
-.pd-final__toggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  margin-top: 1.2rem;
+.pd-final .pd-kicker {
+  margin-bottom: 8px;
+  color: var(--pd-gold-ink);
+  font-size: 11px;
+  letter-spacing: 0.14em;
 }
 
-.pd-final__share-note {
-  margin: 0.75rem 0 0;
-  color: var(--pd-muted);
-  font-size: 0.86rem;
+.pd-final .pd-section__lead {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/*
+ * Wishlist and share. Outside the form card and 20px clear of it, because
+ * these are not part of asking for a callback and sitting in that button row
+ * made all three read as one submission.
+ */
+.pd-final__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.pd-final__icon-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--pd-line);
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--pd-ink);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.pd-final__icon-btn:hover {
+  border-color: rgba(198, 164, 108, 0.65);
+}
+
+.pd-final__icon-btn:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 2px;
+}
+
+/* An outlined heart is "you can save this"; a solid gold one is "this is
+   yours". The fill is the only thing that changes, so the state survives being
+   read at a glance or by someone who cannot see the glyph. */
+.pd-final__icon-btn.is-on {
+  border-color: var(--pd-gold);
+  background: rgba(198, 164, 108, 0.12);
+  color: var(--pd-gold);
+}
+
+.pd-final__icon-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pd-final__icon-btn.is-on svg {
+  fill: currentColor;
+}
+
+/* Brief, and clears itself — see the timer on `toast`. */
+.pd-final__toast {
+  display: inline-flex;
+  align-items: center;
+  margin: 12px 0 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(23, 23, 23, 0.9);
+  color: #f4f1ea;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 /*
@@ -1388,7 +3008,7 @@
  */
 .pd-form {
   margin-top: 1.4rem;
-  padding: 1.25rem 1.25rem 1.4rem;
+  padding: 24px;
   border: 1px solid var(--pd-line);
   border-radius: 0.9rem;
   background: rgba(244, 241, 234, 0.5);
@@ -1400,13 +3020,13 @@
 .pd-form__row {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0.9rem;
+  gap: 20px;
 }
 
 .pd-form__field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -1414,10 +3034,10 @@
   display: flex;
   align-items: baseline;
   gap: 0.45rem;
-  color: var(--pd-ink);
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  color: var(--pd-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -1425,34 +3045,45 @@
    rather than as a separate note competing with the input. */
 .pd-form__hint {
   color: var(--pd-muted);
-  font-size: 0.74rem;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
 }
 
+/*
+ * 16px is not a style choice here — it is the threshold below which iOS Safari
+ * zooms the viewport on focus, and the zoom does not reset when the field is
+ * blurred, which leaves the form off-screen. 52px is the matching comfortable
+ * touch height. The border is a fixed warm grey because --pd-line is a 12%
+ * black and all but vanishes against the beige card.
+ */
 .pd-form__input {
   width: 100%;
-  min-height: 2.85rem;
-  padding: 0.7rem 0.85rem;
-  border: 1px solid var(--pd-line);
-  border-radius: 0.6rem;
-  background: var(--pd-surface);
+  min-height: 52px;
+  padding: 0 14px;
+  border: 1px solid #d9d2c0;
+  border-radius: 10px;
+  background: #ffffff;
   color: var(--pd-ink);
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 16px;
   line-height: 1.4;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .pd-form__input::placeholder {
-  color: rgba(92, 88, 82, 0.65);
+  color: rgba(92, 88, 82, 0.55);
 }
 
+/* A ring rather than a thicker border: changing border-width on focus shifts
+   the field by a pixel and the text jumps. */
 .pd-form__input:focus {
   outline: none;
   border-color: var(--pd-gold);
-  box-shadow: 0 0 0 3px rgba(198, 164, 108, 0.22);
+  box-shadow:
+    0 0 0 2px var(--pd-gold),
+    0 0 0 6px rgba(198, 164, 108, 0.22);
 }
 
 .pd-form__input[aria-invalid="true"] {
@@ -1460,34 +3091,271 @@
 }
 
 .pd-form__input[aria-invalid="true"]:focus {
-  box-shadow: 0 0 0 3px rgba(163, 53, 43, 0.18);
+  border-color: #a3352b;
+  box-shadow:
+    0 0 0 2px #a3352b,
+    0 0 0 6px rgba(163, 53, 43, 0.18);
+}
+
+/* The +91 chip is fixed, so the border, fill and focus ring live on the wrapper
+   and the input inside is borderless. */
+.pd-form__phone {
+  display: flex;
+  align-items: stretch;
+  min-height: 52px;
+  border: 1px solid #d9d2c0;
+  border-radius: 10px;
+  background: #ffffff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pd-form__phone:focus-within {
+  border-color: var(--pd-gold);
+  box-shadow:
+    0 0 0 2px var(--pd-gold),
+    0 0 0 6px rgba(198, 164, 108, 0.22);
+}
+
+.pd-form__phone.is-invalid {
+  border-color: #a3352b;
+}
+
+.pd-form__phone.is-invalid:focus-within {
+  border-color: #a3352b;
+  box-shadow:
+    0 0 0 2px #a3352b,
+    0 0 0 6px rgba(163, 53, 43, 0.18);
+}
+
+.pd-form__phone-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 10px 0 14px;
+  border-right: 1px solid #d9d2c0;
+  color: var(--pd-muted);
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pd-form__phone-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 50px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.pd-form__phone-input:focus {
+  box-shadow: none;
 }
 
 .pd-form__textarea {
-  min-height: 5.5rem;
-  resize: vertical;
+  min-height: 96px;
+  padding: 14px;
+  /* The corner handle is the one detail that reads as unfinished on a phone,
+     and there is nothing to resize to on a touch screen anyway. */
+  resize: none;
 }
 
 .pd-form__error {
   margin: 0;
   color: #a3352b;
-  font-size: 0.78rem;
+  font-size: 12px;
   line-height: 1.35;
 }
 
 .pd-form__field--wide {
-  margin-top: 0.9rem;
+  margin-top: 20px;
+}
+
+/*
+ * Visit slot. A day row that scrolls rather than squashes — six chips plus
+ * gaps are wider than a phone, and chips narrowed to 32px are unreadable — and
+ * a slot row of three that shares the width evenly.
+ */
+.pd-visit {
+  display: grid;
+  gap: 8px;
+}
+
+.pd-visit__row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+
+.pd-visit__row::-webkit-scrollbar {
+  display: none;
+}
+
+.pd-visit__chip {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 56px;
+  min-height: 52px;
+  padding: 6px 12px;
+  border: 1px solid #d9d2c0;
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--pd-ink);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.pd-visit__row--slots .pd-visit__chip {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.pd-visit__chip:hover {
+  border-color: rgba(198, 164, 108, 0.65);
+}
+
+.pd-visit__chip.is-on {
+  border-color: var(--pd-gold);
+  background: rgba(198, 164, 108, 0.16);
+}
+
+.pd-visit__chip:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 2px;
+}
+
+/* Today's Morning can already be gone by the time it is offered. */
+.pd-visit__chip:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.pd-visit__weekday {
+  color: var(--pd-muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pd-visit__numeral {
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .pd-form__field--wide .pd-form__hint {
   margin-top: 0.15rem;
 }
 
+/* The visit hint carries the "leave it empty" instruction, so it reads at
+   13px rather than the 12px used for the trailing field notes. */
+.pd-form__hint--visit {
+  font-size: 13px;
+}
+
+/*
+ * Stacked, not side by side. Two buttons sharing a phone's width came out
+ * about 30px tall each with the labels wrapping, and neither read as the
+ * primary action. Full width also gives both a comfortable thumb target.
+ */
 .pd-form__submit {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.pd-form__submit .pd-btn--primary {
+  /* Visual only. The buttons are ordered in the markup so the primary is the
+     last tab stop, and this puts it back on top without moving it back in the
+     tab sequence. */
+  order: -1;
+  width: 100%;
+  min-height: 52px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pd-form__submit .pd-btn--ghost {
+  width: 100%;
+  min-height: 48px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* The shared loader is 55px; inside a button it needs to sit next to the label
+   rather than beside it. Dark ink, because the primary button is gold. */
+.pd-form__submit .ila-loader {
+  --ila-loader-size: 18px;
+}
+
+.pd-form__privacy {
+  margin: 12px 0 0;
+  color: var(--pd-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Confirmation, in place of the form's outcome line. The tick is decorative —
+   the sentence beside it carries the meaning. */
+.pd-form__done {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem;
-  margin-top: 1.15rem;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgba(198, 164, 108, 0.4);
+  border-radius: 12px;
+  background: rgba(198, 164, 108, 0.12);
+}
+
+.pd-form__done-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--pd-gold);
+  color: #ffffff;
+}
+
+.pd-form__done-mark svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pd-form__done-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.pd-form__done-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--pd-ink);
+}
+
+.pd-form__done-slot {
+  font-size: 13px;
+  color: var(--pd-muted);
 }
 
 /* The visit-slot control is a normal full-width field inside .pd-form, so the
@@ -1517,23 +3385,43 @@
   color: #a3352b;
 }
 
+/*
+ * Pull quote. The gold bar needs something to sit against, and the old fill was
+ * 72% white on a white page — so the block had no visible body at all and read
+ * as a stray glyph rather than as a panel.
+ */
 .pd-final__quote {
-  margin: 1.5rem 0 0;
-  padding: 1.15rem 1.2rem;
+  margin: 24px 0 0;
+  padding: 14px 16px;
   border-left: 3px solid var(--pd-gold);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--pd-soft);
 }
 
 .pd-final__quote p {
   margin: 0;
-  font-size: 1.05rem;
-  line-height: 1.5;
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.6;
+  color: var(--pd-ink);
 }
 
 .pd-final__quote footer {
-  margin-top: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  font-style: normal;
+}
+
+.pd-final__quote-author {
+  color: var(--pd-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pd-final__quote-role {
   color: var(--pd-muted);
-  font-size: 0.86rem;
+  font-size: 12px;
 }
 
 .pd-sticky {
@@ -1542,36 +3430,46 @@
   right: 0;
   bottom: 0;
   z-index: 60;
+  /* Deliberately tighter than the page gutter. The bar is an overlay on top of
+     the content, not a column in it, and the page gutter there would push the
+     buttons away from the edge they belong to. */
+  --pd-space: 20px;
   padding: 0.75rem var(--pd-space) calc(0.75rem + env(safe-area-inset-bottom));
   background: rgba(23, 23, 23, 0.92);
   color: #f4f1ea;
   backdrop-filter: blur(10px);
 }
 
+/* One row, and it has to be one: the two actions plus a 44px close are about
+   310px wide, so anything else — a label above them, a wider gutter, looser
+   button padding — pushes the row to wrap on a 360px phone. */
 .pd-sticky__inner {
-  width: min(100%, var(--pd-max));
-  margin-inline: auto;
+  width: 100%;
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.pd-sticky__label {
-  margin: 0;
-  font-weight: 700;
-}
-
-.pd-sticky__meta {
-  margin: 0.2rem 0 0;
-  color: rgba(244, 241, 234, 0.72);
-  font-size: 0.84rem;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .pd-sticky__actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  gap: 8px;
   align-items: center;
+  width: 100%;
+}
+
+.pd-sticky__actions .pd-btn {
+  min-height: 44px;
+  padding-inline: 0.9rem;
+  white-space: nowrap;
+}
+
+.pd-sticky__actions .pd-btn:first-child {
+  flex: 0 1 auto;
+}
+
+.pd-sticky__actions .pd-btn:nth-child(2) {
+  flex: 1 1 auto;
 }
 
 .pd-sticky .pd-btn--ghost {
@@ -1580,9 +3478,9 @@
 }
 
 .pd-sticky__close {
-  margin-left: auto;
-  width: 2.2rem;
-  height: 2.2rem;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
   border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
@@ -1593,36 +3491,20 @@
 
 /* Lifestyle: point cards left, single image right. */
 @media (min-width: 760px) {
+  .pd-hero__crumb {
+    display: flex;
+  }
+
   /* Name and phone side by side once there is room; the description always
      spans the full width so the optional field reads as a separate step. */
   .pd-form__row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .pd-lifestyle__layout {
-    grid-template-columns: 0.85fr 1.15fr;
-    align-items: start;
-    gap: 1.75rem;
-  }
-
-  /* Room for the row, so the dense points can be a two-column grid again. */
-  .pd-lifestyle__points--dense {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.6rem;
-    overflow: visible;
-    padding-bottom: 0;
-  }
-
-  .pd-lifestyle__points--dense .pd-lifestyle__point {
-    white-space: normal;
-  }
-
-  .pd-lifestyle__stage {
-    position: sticky;
-    top: calc(var(--nav-h) + 1rem);
-    height: 30rem;
-    min-height: 0;
+  /* Room for the grid to breathe: the amenity tiles gain a column rather than
+     growing into a sparse single row. */
+  .pd-lifestyle__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -1646,6 +3528,49 @@
     gap: 2rem;
   }
 
+  .pd-hero__gallery {
+    order: 2;
+  }
+
+  .pd-hero__copy {
+    order: 1;
+  }
+
+  .pd-hero__badges--ordered,
+  .pd-hero__identity,
+  .pd-hero__tagline--ordered,
+  .pd-hero__price-row--ordered,
+  .pd-hero__specs--ordered,
+  .pd-hero__desc--ordered {
+    order: initial;
+  }
+
+  .pd-hero__desc--ordered {
+    order: 3;
+  }
+
+  .pd-hero__specs--ordered {
+    order: 4;
+  }
+
+  .pd-hero__price-row--ordered {
+    order: 5;
+  }
+
+  .pd-hero__gallery {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .pd-hero__copy {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .pd-hero__back {
+    display: none;
+  }
+
   .pd-hero__price-row {
     flex-direction: row;
     justify-content: space-between;
@@ -1661,37 +3586,34 @@
     max-height: 20rem;
   }
 
-  .pd-match__grid,
   .pd-future__layout,
   .pd-sat__layout {
     grid-template-columns: 0.95fr 1.05fr;
   }
 
-  /* Map column: sticky so it stays beside the list while the list scrolls. */
+  /* Desktop keeps the map beside the page-growing list. */
   .pd-future__map {
     position: sticky;
-    top: calc(var(--nav-h) + 1rem);
+    order: 2;
+    top: calc(var(--nav-h) + 24px);
     height: 34rem;
     min-height: 0;
   }
 
-  /* Goal buttons need the extra width for label + description + score. */
-  .pd-match__grid {
-    grid-template-columns: 1.15fr 0.85fr;
+  .pd-future__list-group {
+    order: 1;
   }
 
   .pd-similar__grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
-  .pd-sticky__inner {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
 }
 
 @media (min-width: 980px) {
+  .pd-lifestyle__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   /* An API property can publish five facts (plot size, plot size in sq ft,
      project area, plot count, configuration), so the row fits itself to the
      width instead of always taking four columns and leaving a ragged gap. */
@@ -1704,23 +3626,170 @@
   }
 }
 
+/*
+ * Buyer Fit, desktop layout and option scale.
+ *
+ * This has to sit after the 980px block above, not with the rest of the section:
+ * `.pd-match__goals { grid-template-columns: 1fr 1fr }` is declared there, and
+ * the two selectors have identical specificity, so an earlier rule that resets
+ * it to a single column would simply lose.
+ *
+ * The 2x2 grid was the wrong shape for this. Two boxes across ~900px each held
+ * a short title and one line of description, so they read as empty. A vertical
+ * list in a narrower column gives each option a sensible line length, and
+ * putting the result beside the choice means the score is visible at the moment
+ * of choosing rather than below the fold.
+ *
+ * The option scale below is sized for that narrower column. Paired to the same
+ * breakpoint rather than the 768px heading block: between 768 and 1100 the
+ * options are full width or half width, so these dimensions would be solving a
+ * problem that does not exist there. Widening it is a one-word change if the
+ * tablet range should match.
+ */
+@media (min-width: 1100px) {
+  /* `fr` divides the space left after the gap, so 45/55 is the split of the
+     content width rather than of the full width. `minmax(0, ...)` keeps a long
+     goal description from forcing the column wider than its share. */
+  .pd-match__grid {
+    grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
+    gap: 32px;
+  }
+
+  /* Back to a single column of options. The vertical list is the whole point:
+     it is what stops each one stretching to half the screen. */
+  .pd-match__goals {
+    grid-template-columns: 1fr;
+  }
+
+  /* Follows the choice down the page. `align-items: start` on the grid is what
+     makes this work — a stretched grid item is as tall as its row and has
+     nothing left to stick within. */
+  .pd-match__result--desktop {
+    position: sticky;
+    top: calc(var(--nav-h) + 24px);
+  }
+
+  /*
+   * Result card.
+   *
+   * The number carries this card, so it is sized like a headline rather than
+   * like body copy. `align-items: baseline` on `.pd-match__score` is what keeps
+   * "% match" sitting on the digit's baseline instead of its middle, and
+   * `tabular-nums` stops the digits jittering while the count-up runs.
+   */
+  .pd-match__result {
+    padding: 32px;
+    border-radius: 16px;
+  }
+
+  .pd-match__score-value {
+    font-size: 56px;
+  }
+
+  .pd-match__score-unit {
+    font-size: 16px;
+  }
+
+  /* Track and fill ends are already 999px, and the meter carries a
+     `key={goal}-{target}` so the fill animation replays on every goal change.
+     Only the height needed raising. */
+  .pd-match__meter {
+    height: 10px;
+  }
+
+  /*
+   * Option scale.
+   *
+   * 88px is a floor, not a height: 20px of padding top and bottom plus a 2px
+   * border leaves 44px, and an 18px title over a 15px description with a 4px
+   * gap comes to about 42. The two together land on 86, so the padding is
+   * never fighting a fixed height. With `box-sizing: border-box` from
+   * `.property-page *` that all sits inside the 88.
+   */
+  .pd-match__goal {
+    min-height: 88px;
+    padding: 20px 24px;
+    /* Was 14px, which matched the result card only by accident — the card went
+       to 16px in the block above, so this follows it to keep one radius across
+       the two controls. */
+    border-radius: 16px;
+  }
+
+  /* The selected tint was 0.22 of gold over a near-black plate, which reads as
+     almost nothing on a large monitor. The 2px border is unchanged — it was
+     already 2px, declared transparent and coloured on `.is-active` — so what
+     actually needed raising was the fill behind it. */
+  .pd-match__goal.is-active {
+    background: var(--pd-match-card-active);
+  }
+
+  /* Only visible when pressing an option that is not already selected: source
+     order puts `.is-active` after `:active`, so on the current goal the press
+     keeps the selected fill rather than swapping to this one. */
+  .pd-match__goal:active {
+    background: var(--pd-match-card-press);
+  }
+
+  .pd-match__goal-label {
+    font-size: 18px;
+  }
+
+  .pd-match__goal-desc {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 15px;
+  }
+
+  /* Scaled with the row. The dot goes 10px inside a 20px ring; a 24px ring with
+     the same 2px border leaves room for 12px to keep the proportion. */
+  .pd-match__goal-indicator {
+    width: 24px;
+    height: 24px;
+  }
+
+  .pd-match__goal-indicator::after {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+/*
+ * Below 1100px the options get no hover tint.
+ *
+ * These rules live at every width today, where `:hover` sticks after a touch on
+ * most phones: tap an option and it keeps the hover gold border until you tap
+ * somewhere else, so the box reads as selected when it is not. Stripping it back
+ * below the two-column breakpoint leaves the focus ring and the cursor, which
+ * are both width-independent and still correct. The base rule at the top of the
+ * section keeps the hover values for 1100px and up.
+ */
+@media (max-width: 1099px) {
+  .pd-match__goal:hover {
+    border-color: transparent;
+    background: var(--pd-match-card);
+  }
+
+  .pd-match__goal:active {
+    background: var(--pd-match-card-active);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pd-btn,
   .pd-chip,
   .pd-similar__card,
   .pd-hero__thumb,
-  .pd-lifestyle__point {
+  .pd-lifestyle__chevron,
+  .pd-legal__chevron,
+  .pd-afford__cta {
     transition: none;
-  }
-
-  .pd-lifestyle__img {
-    animation: none;
   }
 
   .pd-match__meter > span,
   .pd-match__meter--pending::after,
   .pd-match__goalname,
-  .pd-match__reason {
+  .pd-match__reason,
+  .pd-match__result-content,
+  .pd-future__list--changing {
     animation: none;
   }
 }

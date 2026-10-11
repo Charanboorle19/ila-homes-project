@@ -166,7 +166,7 @@ The component defines the local function `formatBytes(bytes?: number)`. It retur
 
 ## 24. Loading behavior
 
-During `documentsState === "loading"`, the lead says `Loading the latest property documents…`. The list contains one item with heading `Loading documents` and a `role="status"` paragraph saying `Fetching the verification files for this property…`. The normal document map is not rendered in this branch. API property/page loading is separate: the main page may render while documents are still loading.
+During `documentsState === "loading"`, the lead says `Loading the latest property documents…`. The list contains one item with heading `Loading documents` and a `role="status"` paragraph saying `Fetching the verification files for this property…`. Both render the shared `ila-loader ila-loader--sm` animation beside the text — see `docs\features\loading.md`. The normal document map is not rendered in this branch. API property/page loading is separate: the main page may render while documents are still loading.
 
 ## 25. Error behavior
 

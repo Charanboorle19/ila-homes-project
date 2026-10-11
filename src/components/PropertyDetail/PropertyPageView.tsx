@@ -7,7 +7,6 @@ import { getSimilarProperties } from "@/lib/similar";
 import {
   computeConnectivityScore,
   formatInr,
-  siteVisitMailto,
   whatsappUrl,
 } from "@/lib/propertyUtils";
 import PropertyHero from "@/components/PropertyDetail/PropertyHero";
@@ -16,7 +15,7 @@ import FutureNeighbourhoodMap from "@/components/PropertyDetail/FutureNeighbourh
 import Lifestyle from "@/components/PropertyDetail/Lifestyle";
 import AffordabilityFinancing from "@/components/PropertyDetail/AffordabilityFinancing";
 import LegalDocuments from "@/components/PropertyDetail/LegalDocuments";
-import SatelliteBeforeAfter from "@/components/PropertyDetail/SatelliteBeforeAfter";
+import PriceHistoryGraph from "@/components/PropertyDetail/PriceHistoryGraph";
 import BuyingJourneySteps from "@/components/PropertyDetail/BuyingJourneySteps";
 import SimilarProperties from "@/components/PropertyDetail/SimilarProperties";
 import PropertyFinalCta from "@/components/PropertyDetail/PropertyFinalCta";
@@ -27,15 +26,30 @@ import "./PropertyDetail.css";
 type PropertyPageViewProps = {
   property: PropertyRecord;
   documentsState?: "loading" | "ready" | "error";
+  imagesLoading?: boolean;
 };
 
 export default function PropertyPageView({
   property,
   documentsState = "ready",
+  imagesLoading = false,
 }: PropertyPageViewProps) {
   const heroRef = useRef<HTMLElement | null>(null);
   /** The enquiry form, so the sticky bar can step aside while it is on screen. */
   const formRef = useRef<HTMLElement | null>(null);
+
+  const scrollToNextStep = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    const target =
+      formRef.current ??
+      document.getElementById("next-step") ??
+      document.querySelector(".pd-final");
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth" });
+      const nameInput = target.querySelector<HTMLInputElement>("input[name='name']");
+      nameInput?.focus({ preventScroll: true });
+    }
+  };
 
   // PROPERTY_VIEW on entry, TIME_ON_PROPERTY + PROPERTY_REVISIT on exit.
   useTrackPropertyView(property.id);
@@ -66,8 +80,10 @@ export default function PropertyPageView({
         onSelectGallery={setActiveGalleryId}
         connectivityScore={connectivityScore}
         whatsappHref={whatsappUrl(waText)}
-        siteVisitHref={siteVisitMailto(property)}
+        siteVisitHref="#next-step"
+        onScheduleVisit={scrollToNextStep}
         priceLabel={property.priceLabel ?? formatInr(property.price)}
+        imagesLoading={imagesLoading}
       />
 
       <LifeStageMatch property={property} />
@@ -75,11 +91,10 @@ export default function PropertyPageView({
       <Lifestyle key={property.id} property={property} />
       <AffordabilityFinancing property={property} />
       <LegalDocuments
-        key={property.id}
         property={property}
         documentsState={documentsState}
       />
-      <SatelliteBeforeAfter property={property} />
+      <PriceHistoryGraph property={property} />
       <BuyingJourneySteps />
       <SimilarProperties items={similar} />
       <PropertyFinalCta property={property} formRef={formRef} />
@@ -87,7 +102,8 @@ export default function PropertyPageView({
         property={property}
         heroRef={heroRef}
         formRef={formRef}
-        siteVisitHref={siteVisitMailto(property)}
+        siteVisitHref="#next-step"
+        onScheduleVisit={scrollToNextStep}
       />
     </div>
   );

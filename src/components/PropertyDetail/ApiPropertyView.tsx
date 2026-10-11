@@ -8,8 +8,10 @@ import {
   fetchPropertyById,
   fetchPropertyDocuments,
   fetchPropertyLifeStageFit,
+  fetchPropertyMedia,
   isPropertyUuid,
   type ApiProperty,
+  type ApiPropertyMediaItem,
 } from "@/services/propertiesService";
 import {
   apiDocumentsToRecords,
@@ -33,6 +35,8 @@ import { useTrackPropertyView } from "@/services/analytics/usePropertyView";
 
 export default function ApiPropertyView({ id }: { id: string }) {
   const [property, setProperty] = useState<ApiProperty | null>(null);
+  const [media, setMedia] = useState<ApiPropertyMediaItem[]>([]);
+  const [mediaLoading, setMediaLoading] = useState(true);
   const [lifeStage, setLifeStage] = useState<LifeStageSource>({
     status: "pending",
   });
@@ -53,6 +57,7 @@ export default function ApiPropertyView({ id }: { id: string }) {
     fetchPropertyById(id, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
+        console.log("=== [TOP SECTION API RESPONSE] GET /api/properties/{id} ===", result);
         setProperty(result);
         setState("ready");
       })
@@ -60,6 +65,27 @@ export default function ApiPropertyView({ id }: { id: string }) {
         if (controller.signal.aborted) return;
         console.warn("[property] fetch failed", error);
         setState("error");
+      });
+
+    return () => controller.abort();
+  }, [id]);
+
+  useEffect(() => {
+    if (!isPropertyUuid(id)) return;
+
+    const controller = new AbortController();
+
+    fetchPropertyMedia(id, controller.signal)
+      .then((items) => {
+        if (controller.signal.aborted) return;
+        console.log("=== [TOP SECTION API RESPONSE] GET /api/properties/{id}/media ===", items);
+        setMedia(items);
+        setMediaLoading(false);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.warn("[property] media fetch failed", error);
+        setMediaLoading(false);
       });
 
     return () => controller.abort();
@@ -112,8 +138,7 @@ export default function ApiPropertyView({ id }: { id: string }) {
   if (state === "loading") {
     return (
       <div
-        className="property-page flex min-h-[70vh] items-center justify-center"
-        style={{ paddingTop: "calc(var(--nav-h) + 2rem)" }}
+        className="property-page flex min-h-[70vh] items-center justify-center pt-8 sm:pt-[calc(var(--nav-h)+2rem)]"
       >
         <p
           className="inline-flex items-center gap-2 text-sm text-[#5c5852]"
@@ -129,8 +154,7 @@ export default function ApiPropertyView({ id }: { id: string }) {
   if (state === "error" || !property) {
     return (
       <div
-        className="property-page"
-        style={{ paddingTop: "calc(var(--nav-h) + 2rem)" }}
+        className="property-page pt-8 sm:pt-[calc(var(--nav-h)+2rem)]"
       >
         <div className="pd-section">
           <div className="pd-section__inner">
@@ -154,8 +178,18 @@ export default function ApiPropertyView({ id }: { id: string }) {
     );
   }
 
-  // Render the shared property template with API data mapped into its shape.
-  const record = apiPropertyToRecord(property, lifeStage, documents.items) as PropertyRecord;
+  const record = apiPropertyToRecord(
+    property,
+    lifeStage,
+    documents.items,
+    media,
+  );
 
-  return <PropertyPageView property={record} documentsState={documents.status} />;
+  return (
+    <PropertyPageView
+      property={record}
+      documentsState={documents.status}
+      imagesLoading={mediaLoading}
+    />
+  );
 }

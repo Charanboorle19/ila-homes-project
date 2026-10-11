@@ -1007,8 +1007,18 @@ export function getPropertyById(id: string): PropertyRecord | undefined {
   };
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function getPropertyGallery(property: PropertyRecord): GalleryItem[] {
-  return property.gallery ?? DEFAULT_GALLERY;
+  if (property.gallery) {
+    return property.gallery;
+  }
+  // API properties must only display images from the API, never frontend defaults.
+  if (UUID_RE.test(property.id)) {
+    return [];
+  }
+  return DEFAULT_GALLERY;
 }
 
 export function getPropertyLifestyle(property: PropertyRecord): LifestyleItem[] {

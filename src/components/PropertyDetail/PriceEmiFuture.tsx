@@ -68,7 +68,7 @@ export default function PriceEmiFuture({
 
   // Amortization table controls
   const [amortizationMode, setAmortizationMode] = useState<"yearly" | "monthly">("yearly");
-  const [isAmortizationExpanded, setIsAmortizationExpanded] = useState<boolean>(true);
+  const [isAmortizationExpanded, setIsAmortizationExpanded] = useState<boolean>(false);
   const [budgetOpen, setBudgetOpen] = useState<boolean>(false);
 
   const printAreaRef = useRef<HTMLDivElement>(null);
@@ -201,9 +201,12 @@ export default function PriceEmiFuture({
         principalPct: 0,
         interestPct: 0,
         circumference: 2 * Math.PI * 40,
-        downOffset: 0,
-        principalOffset: 0,
-        interestOffset: 0,
+        dStroke: 0,
+        pStroke: 0,
+        iStroke: 0,
+        dOffset: 0,
+        pOffset: 0,
+        iOffset: 0,
       };
     }
 
@@ -828,131 +831,132 @@ export default function PriceEmiFuture({
 
         {/* Amortization Schedule Section (Below Main Calculator Cards) */}
         {showAmortizationSchedule ? (
-        <div className="mt-10 rounded-2xl border border-black/10 bg-white p-5 sm:p-7 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-black/10 pb-5">
-            <div>
-              <h3 className="text-lg font-bold text-[#171717] tracking-tight">
-                Amortization Schedule
-              </h3>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                Detailed timeline of balance repayment, principal deductions, and accrued interest over the loan life.
-              </p>
-            </div>
+        <div className="mt-10">
+          {/* Collapsible Header - styled like Lifestyle "Show more" button */}
+          <button
+            type="button"
+            onClick={() => setIsAmortizationExpanded(!isAmortizationExpanded)}
+            className="inline-flex items-center justify-center gap-2 min-w-[220px] min-h-[48px] px-6 text-sm font-semibold text-[#c6a46c] border border-[#c6a46c] rounded-[14px] bg-transparent hover:bg-[#c6a46c]/10 transition-[background-color,color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c6a46c] focus-visible:ring-offset-2"
+            aria-expanded={isAmortizationExpanded}
+            aria-controls="pd-amortization-table"
+          >
+            <span className="truncate">Amortization Schedule</span>
+            <svg
+              className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${isAmortizationExpanded ? "rotate-180" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
 
-            <div className="flex items-center gap-3">
-              {/* Yearly vs Monthly Toggle */}
-              <div className="inline-flex rounded-lg border border-neutral-200 bg-neutral-100 p-0.5 text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setAmortizationMode("yearly")}
-                  className={`rounded-md px-3 py-1.5 transition ${
-                    amortizationMode === "yearly"
-                      ? "bg-white text-[#171717] shadow-xs"
-                      : "text-neutral-500 hover:text-neutral-800"
-                  }`}
-                >
-                  Yearly Summary
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAmortizationMode("monthly")}
-                  className={`rounded-md px-3 py-1.5 transition ${
-                    amortizationMode === "monthly"
-                      ? "bg-white text-[#171717] shadow-xs"
-                      : "text-neutral-500 hover:text-neutral-800"
-                  }`}
-                >
-                  Monthly Schedule
-                </button>
+          {/* Expanded Content */}
+          {isAmortizationExpanded && (
+            <div id="pd-amortization-table" className="mt-4 rounded-2xl border border-black/10 bg-white p-5 sm:p-7 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-5 border-b border-black/10">
+                <p className="text-xs text-neutral-500">
+                  Detailed timeline of balance repayment, principal deductions, and accrued interest over the loan life.
+                </p>
+
+                <div className="flex items-center gap-3">
+                  {/* Yearly vs Monthly Toggle */}
+                  <div className="inline-flex rounded-lg border border-neutral-200 bg-neutral-100 p-0.5 text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setAmortizationMode("yearly")}
+                      className={`rounded-md px-3 py-1.5 transition ${
+                        amortizationMode === "yearly"
+                          ? "bg-white text-[#171717] shadow-xs"
+                          : "text-neutral-500 hover:text-neutral-800"
+                      }`}
+                    >
+                      Yearly Summary
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAmortizationMode("monthly")}
+                      className={`rounded-md px-3 py-1.5 transition ${
+                        amortizationMode === "monthly"
+                          ? "bg-white text-[#171717] shadow-xs"
+                          : "text-neutral-500 hover:text-neutral-800"
+                      }`}
+                    >
+                      Monthly Schedule
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              {/* Expand / Collapse toggle */}
-              <button
-                type="button"
-                onClick={() => setIsAmortizationExpanded(!isAmortizationExpanded)}
-                className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs font-semibold text-neutral-600 hover:bg-neutral-50"
-              >
-                {isAmortizationExpanded ? "Collapse" : "Expand"}
-                <svg
-                  className={`w-3.5 h-3.5 transition-transform ${isAmortizationExpanded ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {/* Table Container */}
-          {isAmortizationExpanded && (
-            <div className="mt-5 overflow-x-auto max-h-115 overflow-y-auto rounded-xl border border-neutral-200">
-              <table className="w-full text-left text-xs text-neutral-600">
-                <thead className="sticky top-0 z-10 bg-neutral-100/95 backdrop-blur-xs text-[11px] font-bold uppercase tracking-wider text-neutral-700 border-b border-neutral-200">
-                  <tr>
-                    <th scope="col" className="px-4 py-3">
-                      {amortizationMode === "yearly" ? "Year" : "Payment #"}
-                    </th>
-                    <th scope="col" className="px-4 py-3">
-                      Beginning Balance
-                    </th>
-                    <th scope="col" className="px-4 py-3">
-                      {amortizationMode === "yearly" ? "Annual Payment" : "Monthly EMI"}
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-emerald-700">
-                      Principal Paid
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-amber-700">
-                      Interest Paid
-                    </th>
-                    <th scope="col" className="px-4 py-3 text-right">
-                      Ending Balance
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-200 bg-white">
-                  {amortizationMode === "yearly" ? (
-                    yearlySchedule.map((row) => (
-                      <tr key={`year-${row.year}`} className="hover:bg-neutral-50/80 transition-colors">
-                        <td className="px-4 py-3 font-bold text-neutral-900">
-                          Year {row.year}
-                        </td>
-                        <td className="px-4 py-3">{formatInr(Math.round(row.beginningBalance))}</td>
-                        <td className="px-4 py-3 font-medium text-neutral-900">{formatInr(Math.round(row.totalEmi))}</td>
-                        <td className="px-4 py-3 font-semibold text-emerald-700">
-                          {formatInr(Math.round(row.principalPaid))}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-amber-700">
-                          {formatInr(Math.round(row.interestPaid))}
-                        </td>
-                        <td className="px-4 py-3 font-bold text-neutral-900 text-right">
-                          {formatInr(Math.round(row.endingBalance))}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    monthlySchedule.map((row) => (
-                      <tr key={`month-${row.paymentNumber}`} className="hover:bg-neutral-50/80 transition-colors">
-                        <td className="px-4 py-3 font-bold text-neutral-900">
-                          #{row.paymentNumber}
-                        </td>
-                        <td className="px-4 py-3">{formatInr(Math.round(row.beginningBalance))}</td>
-                        <td className="px-4 py-3 font-medium text-neutral-900">{formatInr(Math.round(row.emi))}</td>
-                        <td className="px-4 py-3 font-semibold text-emerald-700">
-                          {formatInr(Math.round(row.principalPaid))}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-amber-700">
-                          {formatInr(Math.round(row.interestPaid))}
-                        </td>
-                        <td className="px-4 py-3 font-bold text-neutral-900 text-right">
-                          {formatInr(Math.round(row.endingBalance))}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+              {/* Table Container */}
+              <div className="overflow-x-auto max-h-115 overflow-y-auto rounded-xl border border-neutral-200">
+                <table className="w-full text-left text-xs text-neutral-600">
+                  <thead className="sticky top-0 z-10 bg-neutral-100/95 backdrop-blur-xs text-[11px] font-bold uppercase tracking-wider text-neutral-700 border-b border-neutral-200">
+                    <tr>
+                      <th scope="col" className="px-4 py-3">
+                        {amortizationMode === "yearly" ? "Year" : "Payment #"}
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Beginning Balance
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        {amortizationMode === "yearly" ? "Annual Payment" : "Monthly EMI"}
+                      </th>
+                      <th scope="col" className="px-4 py-3 text-emerald-700">
+                        Principal Paid
+                      </th>
+                      <th scope="col" className="px-4 py-3 text-amber-700">
+                        Interest Paid
+                      </th>
+                      <th scope="col" className="px-4 py-3 text-right">
+                        Ending Balance
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-200 bg-white">
+                    {amortizationMode === "yearly" ? (
+                      yearlySchedule.map((row) => (
+                        <tr key={`year-${row.year}`} className="hover:bg-neutral-50/80 transition-colors">
+                          <td className="px-4 py-3 font-bold text-neutral-900">
+                            Year {row.year}
+                          </td>
+                          <td className="px-4 py-3">{formatInr(Math.round(row.beginningBalance))}</td>
+                          <td className="px-4 py-3 font-medium text-neutral-900">{formatInr(Math.round(row.totalEmi))}</td>
+                          <td className="px-4 py-3 font-semibold text-emerald-700">
+                            {formatInr(Math.round(row.principalPaid))}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-amber-700">
+                            {formatInr(Math.round(row.interestPaid))}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-neutral-900 text-right">
+                            {formatInr(Math.round(row.endingBalance))}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      monthlySchedule.map((row) => (
+                        <tr key={`month-${row.paymentNumber}`} className="hover:bg-neutral-50/80 transition-colors">
+                          <td className="px-4 py-3 font-bold text-neutral-900">
+                            #{row.paymentNumber}
+                          </td>
+                          <td className="px-4 py-3">{formatInr(Math.round(row.beginningBalance))}</td>
+                          <td className="px-4 py-3 font-medium text-neutral-900">{formatInr(Math.round(row.emi))}</td>
+                          <td className="px-4 py-3 font-semibold text-emerald-700">
+                            {formatInr(Math.round(row.principalPaid))}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-amber-700">
+                            {formatInr(Math.round(row.interestPaid))}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-neutral-900 text-right">
+                            {formatInr(Math.round(row.endingBalance))}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

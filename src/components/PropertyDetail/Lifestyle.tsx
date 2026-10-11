@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import type { PropertyRecord } from "@/data/properties";
 import { getPropertyLifestyle } from "@/data/properties";
 
@@ -86,9 +87,61 @@ const AMENITY_ICON_KEYWORDS: ReadonlyArray<readonly [RegExp, AmenityIconName]> =
   [/gate|entrance|entry/i, "gate"],
 ];
 
+function formatAmenityCaption(caption: string): string {
+  if (!caption) return "";
+  return caption
+    .trim()
+    .replace(/_+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      if (word.toLowerCase() === "24/7" || word === "24" || word === "7") return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
 function iconFor(caption: string): AmenityIconName {
-  const hit = AMENITY_ICON_KEYWORDS.find(([pattern]) => pattern.test(caption));
+  const clean = caption.replace(/_+/g, " ");
+  const hit = AMENITY_ICON_KEYWORDS.find(([pattern]) => pattern.test(clean));
   return hit ? hit[1] : "fallback";
+}
+
+/**
+ * Columns follow the tile count so every row fills instead of trailing off.
+ * Six amenity points sit on three columns (3+3), eight on four (4+4), four on
+ * one row of four. The desktop grid used to be a flat four columns whatever
+ * the count, which left a six-tile grid two slots short in its second row and
+ * read as an unfinished right edge rather than a grid.
+ *
+ * Every tile stays one fixed width in every row: the last row is never allowed
+ * to stretch to fill, because a stretched row makes the tiles read as two
+ * different objects.
+ *
+ * The stylesheet caps this per breakpoint, because four columns of ~100px
+ * tiles is not a grid a phone can hold.
+ */
+const TILE_COLUMN_CHOICES = [4, 3, 2] as const;
+
+function columnCountForTileCount(tileCount: number): number {
+  if (tileCount <= 2) return Math.max(tileCount, 1);
+
+  // A choice that divides the tile count leaves no row short.
+  for (const columns of TILE_COLUMN_CHOICES) {
+    if (tileCount % columns === 0) return columns;
+  }
+
+  // Nothing divides it evenly (7, 11, 13 …), so the last row takes the
+  // remainder. Keep that row as full as possible and, all else equal, the grid
+  // as short as possible — seven amenities land on four columns, so 4+3.
+  return TILE_COLUMN_CHOICES.reduce((best, columns) => {
+    const bestGap = best - (tileCount % best);
+    const gap = columns - (tileCount % columns);
+    if (gap !== bestGap) return gap < bestGap ? columns : best;
+    return Math.ceil(tileCount / columns) < Math.ceil(tileCount / best)
+      ? columns
+      : best;
+  });
 }
 
 export default function Lifestyle({ property }: { property: PropertyRecord }) {
@@ -104,7 +157,14 @@ export default function Lifestyle({ property }: { property: PropertyRecord }) {
   const hiddenCount = items.length - visibleItems.length;
 
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const tilesRef = useRef<HTMLUListElement>(null);
   const collapsing = useRef(false);
+  /* The grid's height immediately before a toggle, kept until the effect below
+     has run with the new tile count in the DOM. Once React has re-rendered,
+     the old height is gone from the layout, so the click handler is the only
+     place it can still be read. */
+  const heightBeforeToggle = useRef<number | null>(null);
+  const resizeAnimation = useRef<Animation | null>(null);
 
   function toggleTiles() {
     // Expanding only adds rows below the button the reader is already looking
@@ -112,18 +172,43 @@ export default function Lifestyle({ property }: { property: PropertyRecord }) {
     // strands someone: rows vanish from under them and the shorter document
     // clamps the scroll out from under their feet. That one scrolls back.
     collapsing.current = showAll;
+    heightBeforeToggle.current =
+      tilesRef.current?.getBoundingClientRect().height ?? null;
     setShowAll((value) => !value);
   }
 
   useEffect(() => {
+    const from = heightBeforeToggle.current;
+    heightBeforeToggle.current = null;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+
+    const tiles = tilesRef.current;
+    if (tiles && from !== null && !reduceMotion) {
+      const to = tiles.getBoundingClientRect().height;
+      if (Math.abs(to - from) > 1) {
+        // Web Animations rather than a CSS transition: the target is whatever
+        // height the new tile count needs, and there is no `auto` value to
+        // transition to. Nothing is written to the element, so there is no
+        // inline style left to clean up and no transitionend to chase.
+        resizeAnimation.current?.cancel();
+        resizeAnimation.current = tiles.animate(
+          [
+            { height: `${from}px` },
+            { height: `${to}px` },
+          ],
+          { duration: 200, easing: "ease-out" },
+        );
+      }
+    }
+
     if (!collapsing.current) return;
     collapsing.current = false;
     const heading = headingRef.current;
     if (!heading) return;
     heading.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
+      behavior: reduceMotion ? "auto" : "smooth",
       block: "start",
     });
   }, [showAll]);
@@ -132,6 +217,8 @@ export default function Lifestyle({ property }: { property: PropertyRecord }) {
   // over an empty grid would announce a section with nothing in it. Checked
   // after the hooks so their order stays unconditional.
   if (items.length === 0) return null;
+
+  const tileColumns = columnCountForTileCount(visibleItems.length);
 
   return (
     <section className="pd-section pd-lifestyle" aria-labelledby="pd-life-title">
@@ -145,26 +232,40 @@ export default function Lifestyle({ property }: { property: PropertyRecord }) {
         {/* No tabs, no stage: every name is already on screen, so there is
             nothing for a tap to reveal. The tiles stay inert — a tile that
             looks tappable but does nothing is worse than a quiet tile. */}
-        <ul id="pd-lifestyle-tiles" className="pd-lifestyle__grid" role="list">
-          {visibleItems.map((item) => (
-            <li key={item.id} className="pd-lifestyle__tile">
-              <span className="pd-lifestyle__icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false">
-                  {AMENITY_ICON_PATHS[iconFor(item.caption)].map((d) => (
-                    <path key={d} d={d} />
-                  ))}
-                </svg>
-              </span>
-              <span className="pd-lifestyle__tile-body">
-                <span className="pd-lifestyle__tile-title">{item.caption}</span>
-                {/* Amenities usually arrive with no second line. Rendering it
-                    conditionally leaves no gap and no placeholder behind. */}
-                {item.alt ? (
-                  <span className="pd-lifestyle__tile-alt">{item.alt}</span>
-                ) : null}
-              </span>
-            </li>
-          ))}
+        <ul
+          id="pd-lifestyle-tiles"
+          ref={tilesRef}
+          className="pd-lifestyle__grid"
+          role="list"
+          style={{ "--pd-lifestyle-columns": tileColumns } as CSSProperties}
+        >
+          {visibleItems.map((item) => {
+            const formattedCaption = formatAmenityCaption(item.caption);
+            return (
+              <li key={item.id} className="pd-lifestyle__tile">
+                <span className="pd-lifestyle__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    {AMENITY_ICON_PATHS[iconFor(formattedCaption)].map((d) => (
+                      <path key={d} d={d} />
+                    ))}
+                  </svg>
+                </span>
+                <span className="pd-lifestyle__tile-body">
+                  <span
+                    className="pd-lifestyle__tile-title"
+                    title={formattedCaption}
+                  >
+                    {formattedCaption}
+                  </span>
+                  {/* Amenities usually arrive with no second line. Rendering it
+                      conditionally leaves no gap and no placeholder behind. */}
+                  {item.alt ? (
+                    <span className="pd-lifestyle__tile-alt">{item.alt}</span>
+                  ) : null}
+                </span>
+              </li>
+            );
+          })}
         </ul>
 
         {collapsible ? (

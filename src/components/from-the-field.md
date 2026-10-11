@@ -128,14 +128,12 @@ The section uses a light warm background with gold accents:
 
 At viewport widths of `980px` and below:
 
-- The two-column layout becomes a single column.
-- The active reel card becomes a horizontally scrollable row when present.
-- Horizontal scrolling uses scroll snapping.
-- Scrollbars are hidden visually while touch scrolling remains enabled.
-- Each card uses a compact mobile width of up to `12.5rem`.
-- The profile card moves below the reel row.
-
-At viewport widths of `520px` and below, cards use a smaller maximum width of `11.25rem` while preserving the vertical reel format.
+- The video display is strictly driven by the active tenant reels API response:
+  - When the API returns multiple active reels, they are displayed in a touch-friendly, horizontal swipeable carousel (`scroll-snap-type: x mandatory`).
+  - When the API returns a single active reel, it is presented as a dedicated featured card centered on mobile.
+  - When the API returns `data: null` or no active reels, no placeholder cards are shown; the reels area cleanly clears while the profile bar remains.
+- The top profile bar displays the ILA Homes avatar in a gold gradient story ring, the `@ila.homes` handle with verified badge, follower and reel counts, a quick "Follow" pill button, and direct Instagram link.
+- At viewport widths of `480px` and below, card widths, padding, and text adjust fluidly to fit phone viewports.
 
 ## Accessibility
 

@@ -1,78 +1,154 @@
-# Real Estate Background Layer (`GrowthCorridors.tsx`)
+# Property Price Over The Years Graph API
 
-This snippet replaces only the background visual layer. None of your cards, buttons, map integration, state logic, or typography are changed.
+This endpoint returns the yearly property price trend for a property, using the price_over_the_years column.
 
----
+## Endpoint
 
-## 1. What to Replace
+GET /api/properties/{property_id}/price-over-the-years
 
-In `GrowthCorridors.tsx`, locate lines 371 to 544 (the existing `<div className="real-estate-bg-container">...</div>` wrapper and `<svg>` block) and replace **only that block** with the following:
+Alternative route aliases:
 
-```tsx
-      {/* Real Estate Topo + Cadastral Street Map Background */}
-      <div 
-        aria-hidden="true" 
-        className="pointer-events-none absolute inset-0 z-0 h-full w-full overflow-hidden select-none"
-      >
-        <svg
-          className="absolute inset-0 h-full w-full"
-          viewBox="0 0 1000 1600"
-          preserveAspectRatio="xMidYMin slice"
-          fill="none"
-        >
-          <defs>
-            {/* Cadastral Land Plot & Street Grid Pattern (Tilted 30deg) */}
-            <pattern
-              id="cadastral-city-grid"
-              width="90"
-              height="90"
-              patternUnits="userSpaceOnUse"
-              patternTransform="rotate(30 45 45)"
-            >
-              {/* Primary Avenue / Sector Boundary */}
-              <line x1="0" y1="0" x2="90" y2="0" stroke="#7e8896" strokeWidth="1.8" strokeOpacity="0.25" />
-              <line x1="0" y1="0" x2="0" y2="90" stroke="#7e8896" strokeWidth="1.8" strokeOpacity="0.25" />
+- GET /api/properties/{property_id}/graph
+- GET /api/properties/{property_id}/price-graph
 
-              {/* Secondary Access Lanes */}
-              <line x1="45" y1="0" x2="45" y2="90" stroke="#8a95a5" strokeWidth="1" strokeOpacity="0.18" strokeDasharray="3 3" />
-              <line x1="0" y1="45" x2="90" y2="45" stroke="#8a95a5" strokeWidth="1" strokeOpacity="0.18" strokeDasharray="3 3" />
+## Purpose
 
-              {/* Individual Plots */}
-              <rect x="6" y="6" width="33" height="33" stroke="#8a95a5" strokeWidth="0.8" strokeOpacity="0.2" fill="none" />
-              <rect x="51" y="6" width="33" height="33" stroke="#8a95a5" strokeWidth="0.8" strokeOpacity="0.2" fill="none" />
-              <rect x="6" y="51" width="33" height="33" stroke="#8a95a5" strokeWidth="0.8" strokeOpacity="0.2" fill="none" />
-              <rect x="51" y="51" width="33" height="33" stroke="#8a95a5" strokeWidth="0.8" strokeOpacity="0.2" fill="none" />
-            </pattern>
-          </defs>
+The API is designed to provide data for a chart that shows how the property price per square yard has changed over years.
 
-          {/* TOP HALF: Flowing Topographic Land Contours */}
-          <g stroke="#8a94a3" strokeLinecap="round" opacity="0.32">
-            <path d="M-60,100 Q180,20 460,120 T940,70 T1200,130" strokeWidth="1.2" />
-            <path d="M-40,190 Q220,90 520,210 T1000,150 T1240,210" strokeWidth="1.6" />
-            <path d="M-20,290 Q260,170 590,290 T1060,230 T1280,300" strokeWidth="1.1" strokeDasharray="5 4" />
-            <path d="M10,400 Q310,260 670,390 T1130,320 T1320,400" strokeWidth="1.5" />
-            <path d="M50,520 Q380,370 760,500 T1210,420" strokeWidth="1.8" />
-            <path d="M100,640 Q470,490 860,620 T1290,530" strokeWidth="1.3" />
+It returns:
 
-            {/* Elevated Knoll Loop (Top-Right) */}
-            <path d="M680,180 C780,110 970,100 1080,170 C1160,220 1140,330 1060,370 C970,410 810,400 740,340 Z" strokeWidth="1.3" />
-            <path d="M740,210 C820,155 950,150 1020,200 C1070,240 1060,310 1010,340 C950,370 830,360 780,320 Z" strokeWidth="1.6" />
-            <path d="M800,240 C850,205 930,200 970,235 C1000,265 990,305 960,320 C920,335 845,330 820,305 Z" strokeWidth="1.2" strokeDasharray="4 3" />
-          </g>
+- the year
+- the price value for that year
+- the yearly change from the previous year
+- the yearly growth percentage
 
-          {/* BOTTOM HALF: Cadastral City & Layout Grid */}
-          <rect x="0" y="720" width="1000" height="900" fill="url(#cadastral-city-grid)" />
+## Example response
 
-          {/* Arterial Road Network Overlay */}
-          <g stroke="#717c8d" strokeLinecap="round" opacity="0.38">
-            {/* Major Arterial Corridor */}
-            <path d="M140,1600 L580,1120 L1040,840" strokeWidth="5" />
-            <path d="M140,1600 L580,1120 L1040,840" strokeWidth="1.2" stroke="#ffffff" strokeDasharray="10 8" />
+{
+  "success": true,
+  "data": [
+    {
+      "year": 2019,
+      "price": 1200,
+      "yearly_change": null,
+      "yearly_growth": null
+    },
+    {
+      "year": 2020,
+      "price": 1450,
+      "yearly_change": 250,
+      "yearly_growth": 20.0
+    },
+    {
+      "year": 2021,
+      "price": 1680,
+      "yearly_change": 230,
+      "yearly_growth": 15.86
+    },
+    {
+      "year": 2022,
+      "price": 1850,
+      "yearly_change": 170,
+      "yearly_growth": 10.12
+    },
+    {
+      "year": 2023,
+      "price": 2100,
+      "yearly_change": 250,
+      "yearly_growth": 13.51
+    }
+  ]
+}
 
-            {/* Connecting Roads */}
-            <path d="M580,1120 L280,820" strokeWidth="3" />
-            <path d="M420,1340 L860,1520" strokeWidth="3.2" />
-            <path d="M760,1010 L1050,1170" strokeWidth="2.5" strokeDasharray="6 4" />
-          </g>
-        </svg>
-      </div>
+## Meaning of fields
+
+- year: the year for the data point
+- price: price per square yard for that year
+- yearly_change: difference compared to the previous year
+- yearly_growth: percentage change from the previous year
+
+### Example
+
+For 2021:
+
+- previous value = 1450
+- current value = 1680
+- yearly_change = 1680 - 1450 = 230
+- yearly_growth = (230 / 1450) \* 100 = 15.86
+
+## Accepted input format in the database column
+
+The price_over_the_years column can store data in either of these shapes:
+
+### 1) Object map format
+
+{
+  "2019": 1200,
+  "2020": 1450,
+  "2021": 1680
+}
+
+### 2) Array of objects format
+
+[
+  { "year": 2019, "price_per_sq_yard": 1200 },
+  { "year": 2020, "price_per_sq_yard": 1450 },
+  { "year": 2021, "price_per_sq_yard": 1680 }
+]
+
+The API normalizes both into a chart-friendly output.
+
+## Frontend interpretation
+
+The frontend can treat the response as a series of chart points.
+
+### Example for plotting
+
+```js
+const years = data.map((item) => item.year);
+const prices = data.map((item) => item.price);
+```
+
+### Example chart configuration
+
+```js
+const chartData = {
+  labels: data.map((item) => item.year),
+  datasets: [
+    {
+      label: "Price / sq yard",
+      data: data.map((item) => item.price),
+      borderColor: "#3b82f6",
+      backgroundColor: "rgba(59,130,246,0.2)",
+      tension: 0.3,
+      fill: true,
+    },
+  ],
+};
+
+## Notes
+
+- The first entry has `null` for `yearly_change` and `yearly_growth` because there is no previous year.
+- The API sorts values by year before returning them to the chart.
+- The endpoint does not require the property to be `ACTIVE` for the graph to work.
+
+## SQL example for testing
+
+```sql
+UPDATE properties
+SET price_over_the_years = '[
+  {"year": 2019, "price_per_sq_yard": 1200},
+  {"year": 2020, "price_per_sq_yard": 1450},
+  {"year": 2021, "price_per_sq_yard": 1680},
+  {"year": 2022, "price_per_sq_yard": 1850},
+  {"year": 2023, "price_per_sq_yard": 2100}
+]'::jsonb
+WHERE id = 'your-property-id';
+
+Then test:
+
+GET /api/properties/your-property-id/price-over-the-years
+
+## Summary
+
+This endpoint gives the frontend everything it needs to draw a trend line or bar chart for the property's price-per-square-yard history over time.

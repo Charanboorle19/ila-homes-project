@@ -15,7 +15,9 @@ type PropertyHeroProps = {
   connectivityScore: number;
   whatsappHref: string;
   siteVisitHref: string;
+  onScheduleVisit?: (e: React.MouseEvent) => void;
   priceLabel: string;
+  imagesLoading?: boolean;
 };
 
 const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
@@ -28,7 +30,9 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
       connectivityScore,
       whatsappHref,
       siteVisitHref,
+      onScheduleVisit,
       priceLabel,
+      imagesLoading,
     },
     ref,
   ) {
@@ -36,11 +40,20 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
       (item) => item.id === activeImage?.id,
     );
     const [imageErrorId, setImageErrorId] = useState<string | null>(null);
+    const [imageLoaded, setImageLoaded] = useState(false);
     const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
     useEffect(() => {
       setDescriptionExpanded(false);
     }, [property.id]);
+
+    useEffect(() => {
+      setImageLoaded(false);
+    }, [activeImage?.id, activeImage?.src]);
+
+    useEffect(() => {
+      console.log("=== [TOP SECTION HERO] Active Images / Gallery ===", gallery);
+    }, [gallery]);
 
     // API properties publish structured facts (plot-size range, project area,
     // plot count) rather than the static catalogue's facing/dimensions, so the
@@ -85,6 +98,11 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
           <div className="pd-hero__grid">
             <div className="pd-hero__gallery">
               <div className="pd-hero__stage">
+                {(imagesLoading || (!imageLoaded && activeImage && imageErrorId !== activeImage.id)) && (
+                  <div className="pd-hero__stage-loading" role="status" aria-label="Loading image">
+                    <span className="ila-loader ila-loader--sm" aria-hidden="true" />
+                  </div>
+                )}
                 {activeImage && imageErrorId !== activeImage.id ? (
                   <Image
                     src={activeImage.src}
@@ -92,45 +110,59 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
                     fill
                     priority
                     sizes="(max-width: 900px) 100vw, 42vw"
-                    className="pd-hero__stage-img"
-                    onError={() => setImageErrorId(activeImage.id)}
+                    className={`pd-hero__stage-img ${imageLoaded ? "is-loaded" : "is-loading"}`}
+                    onLoad={() => setImageLoaded(true)}
+                    onError={() => {
+                      setImageErrorId(activeImage.id);
+                      setImageLoaded(true);
+                    }}
+                    unoptimized={activeImage.src.startsWith("http")}
                   />
-                ) : (
+                ) : !imagesLoading ? (
                   <div className="pd-hero__image-fallback" role="img" aria-label="Property image unavailable">
                     <span aria-hidden="true">▧</span>
-                    <small>Image unavailable</small>
+                    <small>No image available</small>
                   </div>
-                )}
+                ) : null}
                 {activeIndex >= 0 ? (
                   <p className="pd-hero__count">
                     {activeIndex + 1} / {gallery.length}
                   </p>
                 ) : null}
               </div>
-              <div className="pd-hero__thumbs" role="list">
-                {gallery.map((item) => {
-                  const selected = item.id === activeImage?.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      role="listitem"
-                      className={`pd-hero__thumb${selected ? " is-active" : ""}`}
-                      aria-pressed={selected}
-                      aria-label={`Show ${item.alt}`}
-                      onClick={() => onSelectGallery(item.id)}
-                    >
-                      <Image
-                        src={item.src}
-                        alt=""
-                        fill
-                        sizes="96px"
-                        className="pd-hero__thumb-img"
-                      />
-                    </button>
-                  );
-                })}
-              </div>
+              {gallery.length > 1 ? (
+                <div className="pd-hero__thumbs" role="list">
+                  {gallery.map((item) => {
+                    const selected = item.id === activeImage?.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="listitem"
+                        className={`pd-hero__thumb${selected ? " is-active" : ""}`}
+                        aria-pressed={selected}
+                        aria-label={`Show ${item.alt}`}
+                        onClick={() => onSelectGallery(item.id)}
+                      >
+                        <Image
+                          src={item.src}
+                          alt=""
+                          fill
+                          sizes="96px"
+                          className="pd-hero__thumb-img"
+                          unoptimized={item.src.startsWith("http")}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : imagesLoading ? (
+                <div className="pd-hero__thumbs pd-hero__thumbs--skeleton" aria-hidden="true">
+                  <div className="pd-hero__thumb pd-hero__thumb--skeleton" />
+                  <div className="pd-hero__thumb pd-hero__thumb--skeleton" />
+                  <div className="pd-hero__thumb pd-hero__thumb--skeleton" />
+                </div>
+              ) : null}
             </div>
 
             <div className="pd-hero__copy">
@@ -186,6 +218,7 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
                     <a
                       className="pd-btn pd-btn--ghost pd-hero__schedule"
                       href={siteVisitHref}
+                      onClick={onScheduleVisit}
                     >
                       Schedule site visit
                     </a>

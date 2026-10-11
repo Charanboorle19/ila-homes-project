@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
+import Image from "next/image";
 import type { PropertyRecord } from "@/data/properties";
 import { isPropertyUuid } from "@/services/propertiesService";
 import {
@@ -541,366 +542,416 @@ export default function PropertyFinalCta({
 
   return (
     <section
+      id="next-step"
       className="pd-section pd-final"
       ref={formRef}
       aria-labelledby="pd-final-title"
     >
       <div className="pd-section__inner pd-final__inner">
-        <p className="pd-kicker">Next step</p>
-        {/* The property name is already in the hero and on every card above;
-            carrying it here too wrapped the heading to three lines. */}
-        <h2 id="pd-final-title">Ready to visit this plot?</h2>
-        <p className="pd-section__lead">
-          Leave your details and our team will call you back with availability.
-          You can also pick a preferred slot and book a site visit directly.
-        </p>
-
-        <form className="pd-form" noValidate onSubmit={submitEnquiry}>
-          <div className="pd-form__row">
-            <div className="pd-form__field">
-              <label className="pd-form__label" htmlFor={nameId}>
-                Name
-              </label>
-              {/*
-                `required` carries the requirement to assistive tech; the form
-                is `noValidate`, so the browser's own bubble never appears and
-                the message below is the one that is read. Both are needed —
-                the attribute alone never reaches a screen reader as a prompt.
-              */}
-              <input
-                id={nameId}
-                className="pd-form__input"
-                type="text"
-                name="name"
-                autoComplete="name"
-                required
-                aria-required="true"
-                value={fields.name}
-                onChange={update("name")}
-                aria-invalid={Boolean(errors.name)}
-                aria-describedby={errors.name ? `${nameId}-error` : undefined}
-              />
-              {errors.name ? (
-                <p
-                  className="pd-form__error"
-                  id={`${nameId}-error`}
-                  aria-live="polite"
-                >
-                  {errors.name}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="pd-form__field">
-              <label className="pd-form__label" htmlFor={phoneId}>
-                Phone number
-              </label>
-              {/*
-                The +91 is a chip in the field rather than part of the
-                placeholder. A placeholder showing a prefix invites it being
-                typed, which is how the country code ends up in the number
-                twice. The visitor types ten digits; `toStoredPhone` puts the
-                code back on when the lead is posted.
-
-                `tel-national` rather than `tel`: the country code is already
-                fixed here, so autofill should fill the national number and not
-                push a full +91 number into a ten-digit field.
-              */}
-              <div
-                className={`pd-form__phone${
-                  errors.phone ? " is-invalid" : ""
-                }`}
-              >
-                <span className="pd-form__phone-prefix" aria-hidden="true">
-                  {PHONE_PREFIX}
-                </span>
-                <input
-                  id={phoneId}
-                  className="pd-form__input pd-form__phone-input"
-                  type="tel"
-                  name="phone"
-                  inputMode="tel"
-                  autoComplete="tel-national"
-                  maxLength={LOCAL_DIGITS}
-                  placeholder="98765 43210"
-                  required
-                  aria-required="true"
-                  value={fields.phone}
-                  onChange={updatePhone}
-                  aria-invalid={Boolean(errors.phone)}
-                  aria-describedby={
-                    errors.phone ? `${phoneId}-error` : undefined
-                  }
-                />
-              </div>
-              {errors.phone ? (
-                <p
-                  className="pd-form__error"
-                  id={`${phoneId}-error`}
-                  aria-live="polite"
-                >
-                  {errors.phone}
-                </p>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Optional, and last, so the two required fields are answered first. */}
-          <div className="pd-form__field pd-form__field--wide">
-            <label className="pd-form__label" htmlFor={descriptionId}>
-              Description
-              <span className="pd-form__hint">Optional</span>
-            </label>
-            <textarea
-              id={descriptionId}
-              className="pd-form__input pd-form__textarea"
-              name="description"
-              rows={3}
-              placeholder="Tell us what you are looking for — plot size, facing, budget, timeline."
-              value={fields.description}
-              onChange={update("description")}
-              aria-describedby={`${descriptionId}-hint`}
-            />
-            <p className="pd-form__hint" id={`${descriptionId}-hint`}>
-              Anything you add helps us shortlist the right plots.
-            </p>
-          </div>
-
-          {/* Visit slot, as a field of the same form rather than a separate
-              block: it reuses the name and phone above, so it belongs with
-              them. Only offered when a real property UUID exists. */}
-          {canBookVisit ? (
-            <div className="pd-form__field pd-form__field--wide">
-              {/* A group of buttons, not a form control, so this is a span and
-                  the label relationship is carried by aria-labelledby. */}
-              <span className="pd-form__label" id={`${visitAtId}-label`}>
-                Preferred visit slot
-                {/* Marked optional because it is: a callback needs neither a
-                    day nor a slot, and a field that only looks required is one
-                    more reason to put the form down. */}
-                <span className="pd-form__hint">Optional</span>
-              </span>
-
-              <div
-                className="pd-visit"
-                ref={visitRef}
-                role="group"
-                aria-labelledby={`${visitAtId}-label`}
-                aria-describedby={`${visitAtId}-hint`}
-              >
-                <div className="pd-visit__row">
-                  {visitDays.map((day) => (
-                    <button
-                      key={day.iso}
-                      type="button"
-                      className={`pd-visit__chip pd-visit__chip--day${
-                        selectedDay === day.iso ? " is-on" : ""
-                      }`}
-                      aria-pressed={selectedDay === day.iso}
-                      onClick={() => selectDay(day.iso)}
-                    >
-                      <span className="pd-visit__weekday">{day.weekday}</span>
-                      <span className="pd-visit__numeral">{day.day}</span>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="pd-visit__row pd-visit__row--slots">
-                  {VISIT_SLOTS.map((slot) => (
-                    <button
-                      key={slot.id}
-                      type="button"
-                      className={`pd-visit__chip pd-visit__chip--slot${
-                        selectedTime === slot.time ? " is-on" : ""
-                      }`}
-                      aria-pressed={selectedTime === slot.time}
-                      disabled={slotHasPassed(slot)}
-                      onClick={() => selectSlot(slot)}
-                    >
-                      {slot.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <p
-                className="pd-form__hint pd-form__hint--visit"
-                id={`${visitAtId}-hint`}
-              >
-                Pick a slot to book a visit, or leave it empty and we&rsquo;ll
-                call you back.
-              </p>
-              {visitError ? (
-                <p
-                  className="pd-form__error"
-                  id={`${visitAtId}-error`}
-                  aria-live="polite"
-                >
-                  {visitError}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="pd-form__submit">
-            {/*
-              DOM order, not visual order. Someone tabbing through the form has
-              filled every field by the time they reach the buttons, so the
-              primary action should be the last stop rather than the first.
-              `.pd-form__submit .pd-btn--primary { order: -1 }` puts it back on
-              top visually. Within a two-button group the one upward step is a
-              fair trade for landing on "Request a callback".
-            */}
-
-            {/*
-              Booking is an alternative to the callback, not an extra step: the
-              endpoint creates or reuses the visitor's lead for this property, so
-              doing both would produce two interactions for one visitor. Only
-              rendered for a real property UUID, because the endpoint requires
-              property_id and cannot omit it.
-            */}
-            {canBookVisit ? (
-              <button
-                type="button"
-                className="pd-btn pd-btn--ghost"
-                onClick={requestVisit}
-                disabled={busy || sent}
-                aria-busy={visitStatus === "submitting"}
-              >
-                {visitStatus === "submitting" ? (
-                  <>
-                    <span className="ila-loader" aria-hidden />
-                    Booking…
-                  </>
-                ) : visitStatus === "sent" ? (
-                  "Booked"
-                ) : (
-                  "Schedule site visit"
-                )}
-              </button>
-            ) : null}
-
-            <button
-              type="submit"
-              className="pd-btn pd-btn--primary"
-              disabled={busy || sent}
-              aria-busy={status === "submitting"}
-            >
-              {status === "submitting" ? (
-                <>
-                  <span className="ila-loader" aria-hidden />
-                  Sending…
-                </>
-              ) : status === "sent" ? (
-                "Sent"
-              ) : (
-                "Request a callback"
-              )}
-            </button>
-          </div>
-
-          <p className="pd-form__privacy">
-            We&rsquo;ll only use your number to contact you about this property.
+        <div className="pd-final__copy">
+          <p className="pd-kicker">Next step</p>
+          {/* The property name is already in the hero and on every card above;
+              carrying it here too wrapped the heading to three lines. */}
+          <h2 id="pd-final-title">Ready to visit this plot?</h2>
+          <p className="pd-section__lead">
+            Leave your details and our team will call you back with
+            availability. You can also pick a preferred slot and book a site
+            visit directly.
           </p>
 
-          {sent ? (
-            <div className="pd-form__done" role="status">
-              <span className="pd-form__done-mark" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false">
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-              </span>
-              <span className="pd-form__done-copy">
-                <span className="pd-form__done-title">
-                  Thanks, we&rsquo;ll call you shortly
-                </span>
-                {confirmedSlot ? (
-                  <span className="pd-form__done-slot">
-                    Site visit: {confirmedSlot}
-                  </span>
-                ) : null}
-              </span>
-            </div>
-          ) : null}
-
-          {/* Errors only. Success is the confirmation above, so a second line
-              of prose under it would just repeat the same news. */}
-          {status === "error" && statusMessage ? (
-            <p className="pd-form__status pd-form__status--error" role="alert">
-              {statusMessage}
-            </p>
-          ) : null}
-
-          {visitStatus === "error" && visitMessage ? (
-            <p
-              className="pd-form__status pd-form__status--error"
-              role="alert"
-            >
-              {visitMessage}
-            </p>
-          ) : null}
-        </form>
-
-        {/*
-          Not part of the form. Saving and sharing are different actions from
-          asking for a callback, and sitting in the form's button row made all
-          three read as one submission. Both are icon buttons here, so the only
-          text on screen in this row is whatever the toast is saying.
-        */}
-        <div className="pd-final__actions">
-          <button
-            type="button"
-            className={`pd-final__icon-btn${wishlist ? " is-on" : ""}`}
-            aria-pressed={wishlist}
-            aria-label={
-              wishlist ? "Remove from wishlist" : "Save to wishlist"
-            }
-            onClick={() => toggle("wishlist")}
-            data-track="PROPERTY_FAVORITE"
-            data-track-property={property.id}
-            data-track-meta={`{"action":"${wishlist ? "remove" : "add"}","button_location":"property_final_cta"}`}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-            </svg>
-          </button>
-
-          <button
-            type="button"
-            className="pd-final__icon-btn"
-            aria-label="Share this property"
-            onClick={() => void share()}
-            data-track="PROPERTY_SHARE"
-            data-track-property={property.id}
-            data-track-meta='{"button_location":"property_final_cta"}'
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-              <path d="M16 6l-4-4-4 4" />
-              <path d="M12 2v13" />
-            </svg>
-          </button>
+          {/*
+            Illustration for the desktop layout only — see `.pd-final__art`,
+            which is hidden until the copy column sits beside the form. It is
+            decorative: the heading above carries the meaning, and nothing in
+            the artwork is text a screen reader would be missing.
+          */}
+          <div className="pd-final__art" aria-hidden="true">
+            <Image
+              src="/assets/Call%20center.gif"
+              alt=""
+              fill
+              sizes="(min-width: 1100px) 22rem"
+              unoptimized
+            />
+          </div>
         </div>
 
-        {toast ? (
-          <p className="pd-final__toast" role="status" aria-live="polite">
-            {toast}
-          </p>
-        ) : null}
+        <div className="pd-final__aside">
+          <form className="pd-form" noValidate onSubmit={submitEnquiry}>
+            <div className="pd-form__row">
+              <div className="pd-form__field">
+                <label className="pd-form__label" htmlFor={nameId}>
+                  Name
+                </label>
+                {/*
+                  `required` carries the requirement to assistive tech; the form
+                  is `noValidate`, so the browser's own bubble never appears and
+                  the message below is the one that is read. Both are needed —
+                  the attribute alone never reaches a screen reader as a prompt.
+                */}
+                <input
+                  id={nameId}
+                  className="pd-form__input"
+                  type="text"
+                  name="name"
+                  autoComplete="name"
+                  required
+                  aria-required="true"
+                  value={fields.name}
+                  onChange={update("name")}
+                  aria-invalid={Boolean(errors.name)}
+                  aria-describedby={errors.name ? `${nameId}-error` : undefined}
+                />
+                {errors.name ? (
+                  <p
+                    className="pd-form__error"
+                    id={`${nameId}-error`}
+                    aria-live="polite"
+                  >
+                    {errors.name}
+                  </p>
+                ) : null}
+              </div>
 
-        {/* No quote mark glyphs: the gold bar and the italic carry it, and
-            literal quotation marks on top of those read as decoration. */}
-        {hasTestimonial ? (
-          <blockquote className="pd-final__quote">
-            <p>{testimonial.quote}</p>
-            <footer>
-              <span className="pd-final__quote-author">
-                {testimonial.author}
-              </span>
-              <span className="pd-final__quote-role">{testimonial.role}</span>
-            </footer>
-          </blockquote>
-        ) : null}
+              <div className="pd-form__field">
+                <label className="pd-form__label" htmlFor={phoneId}>
+                  Phone number
+                </label>
+                {/*
+                  The +91 is a chip in the field rather than part of the
+                  placeholder. A placeholder showing a prefix invites it being
+                  typed, which is how the country code ends up in the number
+                  twice. The visitor types ten digits; `toStoredPhone` puts the
+                  code back on when the lead is posted.
+
+                  `tel-national` rather than `tel`: the country code is already
+                  fixed here, so autofill should fill the national number and not
+                  push a full +91 number into a ten-digit field.
+                */}
+                <div
+                  className={`pd-form__phone${
+                    errors.phone ? " is-invalid" : ""
+                  }`}
+                >
+                  <span className="pd-form__phone-prefix" aria-hidden="true">
+                    {PHONE_PREFIX}
+                  </span>
+                  <input
+                    id={phoneId}
+                    className="pd-form__input pd-form__phone-input"
+                    type="tel"
+                    name="phone"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                    maxLength={LOCAL_DIGITS}
+                    placeholder="98765 43210"
+                    required
+                    aria-required="true"
+                    value={fields.phone}
+                    onChange={updatePhone}
+                    aria-invalid={Boolean(errors.phone)}
+                    aria-describedby={
+                      errors.phone ? `${phoneId}-error` : undefined
+                    }
+                  />
+                </div>
+                {errors.phone ? (
+                  <p
+                    className="pd-form__error"
+                    id={`${phoneId}-error`}
+                    aria-live="polite"
+                  >
+                    {errors.phone}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Optional, and last, so the two required fields are answered first. */}
+            <div className="pd-form__field pd-form__field--wide">
+              <label className="pd-form__label" htmlFor={descriptionId}>
+                Description
+                <span className="pd-form__hint">Optional</span>
+              </label>
+              <textarea
+                id={descriptionId}
+                className="pd-form__input pd-form__textarea"
+                name="description"
+                rows={3}
+                placeholder="Tell us what you are looking for — plot size, facing, budget, timeline."
+                value={fields.description}
+                onChange={update("description")}
+                aria-describedby={`${descriptionId}-hint`}
+              />
+              <p className="pd-form__hint" id={`${descriptionId}-hint`}>
+                Anything you add helps us shortlist the right plots.
+              </p>
+            </div>
+
+            {/* Visit slot, as a field of the same form rather than a separate
+                block: it reuses the name and phone above, so it belongs with
+                them. Only offered when a real property UUID exists. */}
+            {canBookVisit ? (
+              <div className="pd-form__field pd-form__field--wide">
+                {/* A group of buttons, not a form control, so this is a span and
+                    the label relationship is carried by aria-labelledby. */}
+                <span className="pd-form__label" id={`${visitAtId}-label`}>
+                  Preferred visit slot
+                  {/* Marked optional because it is: a callback needs neither a
+                      day nor a slot, and a field that only looks required is one
+                      more reason to put the form down. */}
+                  <span className="pd-form__hint">Optional</span>
+                </span>
+
+                <div
+                  className="pd-visit"
+                  ref={visitRef}
+                  role="group"
+                  aria-labelledby={`${visitAtId}-label`}
+                  aria-describedby={`${visitAtId}-hint`}
+                >
+                  <div className="pd-visit__row">
+                    {visitDays.map((day) => (
+                      <button
+                        key={day.iso}
+                        type="button"
+                        className={`pd-visit__chip pd-visit__chip--day${
+                          selectedDay === day.iso ? " is-on" : ""
+                        }`}
+                        aria-pressed={selectedDay === day.iso}
+                        onClick={() => selectDay(day.iso)}
+                      >
+                        <span className="pd-visit__weekday">{day.weekday}</span>
+                        <span className="pd-visit__numeral">{day.day}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/*
+                    A full calendar alongside the quick chips. The six offered
+                    days cover the coming week; the date control takes any later
+                    day with it, so the choice is limited by when a visit is
+                    possible rather than by what the row showed. It rewrites the
+                    date half of `scheduledAt` through the same `selectDay` the
+                    chips use, keeping the picked time.
+                  */}
+                  <div className="pd-visit__row pd-visit__row--date">
+                    <label
+                      className="pd-visit__date-label"
+                      htmlFor={`${visitAtId}-date`}
+                    >
+                      Or pick a date
+                      <span className="pd-form__hint">Optional</span>
+                    </label>
+                    <input
+                      id={`${visitAtId}-date`}
+                      className="pd-visit__date"
+                      type="date"
+                      value={selectedDay}
+                      min={visitDays[0]?.iso}
+                      onChange={(event) => {
+                        if (event.target.value) selectDay(event.target.value);
+                      }}
+                    />
+                  </div>
+
+                  <div className="pd-visit__row pd-visit__row--slots">
+                    {VISIT_SLOTS.map((slot) => (
+                      <button
+                        key={slot.id}
+                        type="button"
+                        className={`pd-visit__chip pd-visit__chip--slot${
+                          selectedTime === slot.time ? " is-on" : ""
+                        }`}
+                        aria-pressed={selectedTime === slot.time}
+                        disabled={slotHasPassed(slot)}
+                        onClick={() => selectSlot(slot)}
+                      >
+                        {slot.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <p
+                  className="pd-form__hint pd-form__hint--visit"
+                  id={`${visitAtId}-hint`}
+                >
+                  Pick a slot to book a visit, or leave it empty and we&rsquo;ll
+                  call you back.
+                </p>
+                {visitError ? (
+                  <p
+                    className="pd-form__error"
+                    id={`${visitAtId}-error`}
+                    aria-live="polite"
+                  >
+                    {visitError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="pd-form__submit">
+              {/*
+                DOM order, not visual order. Someone tabbing through the form has
+                filled every field by the time they reach the buttons, so the
+                primary action should be the last stop rather than the first.
+                `.pd-form__submit .pd-btn--primary { order: -1 }` puts it back on
+                top visually. Within a two-button group the one upward step is a
+                fair trade for landing on "Request a callback".
+              */}
+
+              {/*
+                Booking is an alternative to the callback, not an extra step: the
+                endpoint creates or reuses the visitor's lead for this property, so
+                doing both would produce two interactions for one visitor. Only
+                rendered for a real property UUID, because the endpoint requires
+                property_id and cannot omit it.
+              */}
+              {canBookVisit ? (
+                <button
+                  type="button"
+                  className="pd-btn pd-btn--ghost"
+                  onClick={requestVisit}
+                  disabled={busy || sent}
+                  aria-busy={visitStatus === "submitting"}
+                >
+                  {visitStatus === "submitting" ? (
+                    <>
+                      <span className="ila-loader" aria-hidden />
+                      Booking…
+                    </>
+                  ) : visitStatus === "sent" ? (
+                    "Booked"
+                  ) : (
+                    "Schedule site visit"
+                  )}
+                </button>
+              ) : null}
+
+              <button
+                type="submit"
+                className="pd-btn pd-btn--primary"
+                disabled={busy || sent}
+                aria-busy={status === "submitting"}
+              >
+                {status === "submitting" ? (
+                  <>
+                    <span className="ila-loader" aria-hidden />
+                    Sending…
+                  </>
+                ) : status === "sent" ? (
+                  "Sent"
+                ) : (
+                  "Request a callback"
+                )}
+              </button>
+            </div>
+
+            <p className="pd-form__privacy">
+              We&rsquo;ll only use your number to contact you about this property.
+            </p>
+
+            {sent ? (
+              <div className="pd-form__done" role="status">
+                <span className="pd-form__done-mark" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                </span>
+                <span className="pd-form__done-copy">
+                  <span className="pd-form__done-title">
+                    Thanks, we&rsquo;ll call you shortly
+                  </span>
+                  {confirmedSlot ? (
+                    <span className="pd-form__done-slot">
+                      Site visit: {confirmedSlot}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+            ) : null}
+
+            {/* Errors only. Success is the confirmation above, so a second line
+                of prose under it would just repeat the same news. */}
+            {status === "error" && statusMessage ? (
+              <p className="pd-form__status pd-form__status--error" role="alert">
+                {statusMessage}
+              </p>
+            ) : null}
+
+            {visitStatus === "error" && visitMessage ? (
+              <p
+                className="pd-form__status pd-form__status--error"
+                role="alert"
+              >
+                {visitMessage}
+              </p>
+            ) : null}
+          </form>
+
+            {/*
+              Not part of the form. Saving and sharing are different actions from
+              asking for a callback, and sitting in the form's button row made all
+              three read as one submission. Both are icon buttons here, so the only
+              text on screen in this row is whatever the toast is saying.
+            */}
+            <div className="pd-final__actions">
+              <button
+                type="button"
+                className={`pd-final__icon-btn${wishlist ? " is-on" : ""}`}
+                aria-pressed={wishlist}
+                aria-label={
+                  wishlist ? "Remove from wishlist" : "Save to wishlist"
+                }
+                onClick={() => toggle("wishlist")}
+                data-track="PROPERTY_FAVORITE"
+                data-track-property={property.id}
+                data-track-meta={`{"action":"${wishlist ? "remove" : "add"}","button_location":"property_final_cta"}`}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+                </svg>
+              </button>
+
+              <button
+                type="button"
+                className="pd-final__icon-btn"
+                aria-label="Share this property"
+                onClick={() => void share()}
+                data-track="PROPERTY_SHARE"
+                data-track-property={property.id}
+                data-track-meta='{"button_location":"property_final_cta"}'
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                  <path d="M16 6l-4-4-4 4" />
+                  <path d="M12 2v13" />
+                </svg>
+              </button>
+            </div>
+
+            {toast ? (
+              <p className="pd-final__toast" role="status" aria-live="polite">
+                {toast}
+              </p>
+            ) : null}
+
+            {/* No quote mark glyphs: the gold bar and the italic carry it, and
+                literal quotation marks on top of those read as decoration. */}
+            {hasTestimonial ? (
+              <blockquote className="pd-final__quote">
+                <p>{testimonial.quote}</p>
+                <footer>
+                  <span className="pd-final__quote-author">
+                    {testimonial.author}
+                  </span>
+                  <span className="pd-final__quote-role">{testimonial.role}</span>
+                </footer>
+              </blockquote>
+            ) : null}
+        </div>
       </div>
     </section>
   );

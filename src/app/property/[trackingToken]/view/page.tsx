@@ -53,8 +53,7 @@ export default function SharedPropertyViewPage({ params }: PageProps) {
   if (state === "loading") {
     return (
       <div
-        className="property-page flex min-h-[70vh] items-center justify-center"
-        style={{ paddingTop: "calc(var(--nav-h) + 2rem)" }}
+        className="property-page flex min-h-[70vh] items-center justify-center pt-8 sm:pt-[calc(var(--nav-h)+2rem)]"
       >
         <p
           className="inline-flex items-center gap-2 text-sm text-[#5c5852]"
@@ -72,8 +71,7 @@ export default function SharedPropertyViewPage({ params }: PageProps) {
   if (state === "error" || !propertyId) {
     return (
       <div
-        className="property-page"
-        style={{ paddingTop: "calc(var(--nav-h) + 2rem)" }}
+        className="property-page pt-8 sm:pt-[calc(var(--nav-h)+2rem)]"
       >
         <div className="pd-section">
           <div className="pd-section__inner">

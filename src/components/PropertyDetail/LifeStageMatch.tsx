@@ -32,19 +32,19 @@ export default function LifeStageMatch({
 }: {
   property: PropertyRecord;
 }) {
-  const [goal, setGoal] = useState<LifeStageKey>("family");
-  const match = property.lifeStageMatch[goal];
-  const activeGoal = GOALS.find((item) => item.id === goal) ?? GOALS[0];
+  const [goal, setGoal] = useState<LifeStageKey | null>(null);
+  const match = goal ? property.lifeStageMatch[goal] : null;
+  const activeGoal = goal ? GOALS.find((item) => item.id === goal) ?? null : null;
 
   // API-backed properties fetch their fit after the page renders. Until it
   // lands — or if it never does — show a placeholder rather than a misleading
   // 0% match.
-  const pending = Boolean(match.pending);
-  const noScore = pending || Boolean(match.unavailable);
+  const pending = Boolean(match?.pending);
+  const noScore = !match || pending || Boolean(match?.unavailable);
 
   // Count the score up instead of snapping it, so switching goals reads as a
   // single animated transition rather than a content swap.
-  const target = match.score;
+  const target = match ? match.score : 0;
   // The animated value is tagged with the goal it belongs to. Without that, a
   // count-up still running when another goal is picked would keep showing the
   // previous goal's number until its first frame landed — and if the visitor
@@ -64,6 +64,8 @@ export default function LifeStageMatch({
   };
 
   useEffect(() => {
+    if (!goal || !match) return;
+
     const to = target;
 
     if (noScore) {
@@ -98,12 +100,12 @@ export default function LifeStageMatch({
 
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [goal, noScore, target]);
+  }, [goal, noScore, target, match]);
 
   // Only ever render a value that belongs to the goal on screen.
   const displayScore =
     animated && animated.goal === goal ? animated.value : target;
-  const activeGoalIndex = GOALS.findIndex((item) => item.id === goal);
+  const activeGoalIndex = goal ? GOALS.findIndex((item) => item.id === goal) : -1;
 
   /**
    * Fit notes for the selected goal, capped at the three the card has room for.
@@ -114,7 +116,7 @@ export default function LifeStageMatch({
    * second case, which printed it directly under a real number.
    */
   const notes = (
-    noScore
+    !match || noScore
       ? []
       : match.reasons?.length
         ? match.reasons
@@ -140,50 +142,72 @@ export default function LifeStageMatch({
   const renderResult = (
     modifier = "",
     style?: CSSProperties,
-  ) => (
-    <div key={goal} className={`pd-match__result${modifier ? ` ${modifier}` : ""}`} style={style} aria-live="polite">
-      <div className="pd-match__result-content">
-        <p className="pd-match__goalname">{activeGoal.label}</p>
-        {noScore ? null : (
-          <>
-            <p className="pd-match__score">
-              <span className="pd-match__score-value">{displayScore}</span>
-              <span className="pd-match__score-unit">% match</span>
+  ) => {
+    if (!goal || !activeGoal || !match) {
+      if (modifier.includes("mobile")) {
+        return null;
+      }
+      return (
+        <div
+          className={`pd-match__result${modifier ? ` ${modifier}` : ""}`}
+          style={style}
+          aria-live="polite"
+        >
+          <div className="pd-match__result-content">
+            <p className="pd-match__goalname">Personalized match</p>
+            <p className="pd-match__reason" style={{ marginTop: "0.85rem" }}>
+              Select a goal to see how {property.name} matches your plans.
             </p>
-            <div
-              key={`${goal}-${target}`}
-              className="pd-match__meter"
-              role="img"
-              aria-label={`${target} percent match`}
-            >
-              <span style={{ width: `${target}%` }} />
-            </div>
-          </>
-        )}
-        {noScore ? (
-          <p className="pd-match__reason">
-            {pending
-              ? "We’re working out how this property fits your goal."
-              : "No fit score published for this property yet."}
-          </p>
-        ) : notes.length > 0 ? (
-          <ul className="pd-match__reasons" aria-label="Fit notes for this goal">
-            {notes.map((note) => (
-              <li key={note}>
-                {/* A neutral dash, not a tick. A tick asserts the note is a
-                    positive result, and these are observations — "western
-                    corridor spillover continues toward Isnapur" is not a
-                    compliment. One of them was literally the "no fit score"
-                    message, wearing a tick. */}
-                <span className="pd-match__reason-mark" aria-hidden="true">—</span>
-                <span>{note}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={goal}
+        className={`pd-match__result${modifier ? ` ${modifier}` : ""}`}
+        style={style}
+        aria-live="polite"
+      >
+        <div className="pd-match__result-content">
+          <p className="pd-match__goalname">{activeGoal.label}</p>
+          {noScore ? null : (
+            <>
+              <p className="pd-match__score">
+                <span className="pd-match__score-value">{displayScore}</span>
+                <span className="pd-match__score-unit">% match</span>
+              </p>
+              <div
+                key={`${goal}-${target}`}
+                className="pd-match__meter"
+                role="img"
+                aria-label={`${target} percent match`}
+              >
+                <span style={{ width: `${target}%` }} />
+              </div>
+            </>
+          )}
+          {noScore ? (
+            <p className="pd-match__reason">
+              {pending
+                ? "We’re working out how this property fits your goal."
+                : "No fit score published for this property yet."}
+            </p>
+          ) : notes.length > 0 ? (
+            <ul className="pd-match__reasons" aria-label="Fit notes for this goal">
+              {notes.map((note) => (
+                <li key={note}>
+                  <span className="pd-match__reason-mark" aria-hidden="true">—</span>
+                  <span>{note}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <section className="pd-section pd-match" aria-labelledby="pd-match-title">
@@ -205,6 +229,7 @@ export default function LifeStageMatch({
           >
             {GOALS.map((item, index) => {
               const active = item.id === goal;
+              const isTabCandidate = goal === null ? index === 0 : active;
               return (
                 <button
                   key={item.id}
@@ -215,9 +240,9 @@ export default function LifeStageMatch({
                   }}
                   role="radio"
                   aria-checked={active}
-                  tabIndex={active ? 0 : -1}
+                  tabIndex={isTabCandidate ? 0 : -1}
                   style={{ order: index * 2 }}
-                  onClick={() => setGoal(item.id)}
+                  onClick={() => setGoal(goal === item.id ? null : item.id)}
                   onKeyDown={(event) => {
                     if (event.key === "ArrowDown" || event.key === "ArrowRight") {
                       event.preventDefault();
@@ -248,9 +273,11 @@ export default function LifeStageMatch({
                 </button>
               );
             })}
-            {renderResult("pd-match__result--mobile", {
-              order: activeGoalIndex * 2 + 1,
-            })}
+            {activeGoalIndex >= 0
+              ? renderResult("pd-match__result--mobile", {
+                  order: activeGoalIndex * 2 + 1,
+                })
+              : null}
           </div>
 
           {renderResult("pd-match__result--desktop")}

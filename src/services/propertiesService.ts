@@ -128,6 +128,11 @@ export type ApiProperty = {
   possession_status: string | null;
   possession_date: string | null;
   cover_url: string | null;
+  images?: unknown;
+  gallery?: unknown;
+  photos?: unknown;
+  media?: unknown;
+  image_urls?: unknown;
   video_url: string | null;
   floor_plan_url: string | null;
   /** Extent of the master plan, in WGS84 degrees. Null until a survey exists. */
@@ -172,6 +177,38 @@ export async function fetchPropertyDocuments(
 
   const items = Array.isArray(response?.data?.items) ? response.data.items : [];
   return { items, total: response?.data?.total ?? items.length };
+}
+
+export type ApiPropertyMediaItem = {
+  id: string;
+  name?: string | null;
+  file_url: string;
+  file_type?: string | null;
+  sort_order?: number | null;
+  is_cover?: boolean | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+/** Media files (images, videos) for a property, via GET /api/properties/{id}/media. */
+export async function fetchPropertyMedia(
+  propertyId: string,
+  signal?: AbortSignal,
+): Promise<ApiPropertyMediaItem[]> {
+  try {
+    const response = await apiFetch<{
+      success?: boolean;
+      data?: { items?: ApiPropertyMediaItem[] } | ApiPropertyMediaItem[];
+    }>(`/api/properties/${encodeURIComponent(propertyId)}/media`, { signal });
+
+    const data = response?.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray((data as { items?: ApiPropertyMediaItem[] }).items)) {
+      return (data as { items: ApiPropertyMediaItem[] }).items;
+    }
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 const UUID_RE =

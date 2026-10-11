@@ -446,7 +446,8 @@ export default function FutureNeighbourhoodMap({
     if (meta) {
       const metaLine = document.createElement("span");
       metaLine.textContent = meta;
-      content.appendChild(document.createElement("br"), metaLine);
+      content.appendChild(document.createElement("br"));
+      content.appendChild(metaLine);
     }
 
     popupRef.current = new Popup({

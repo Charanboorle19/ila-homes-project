@@ -11,8 +11,7 @@ export default function PropertiesIndexPage() {
   return (
     <div className="property-page">
       <section
-        className="pd-section"
-        style={{ paddingTop: "calc(var(--nav-h) + 2rem)" }}
+        className="pd-section !pt-6 sm:!pt-[calc(var(--nav-h)+2rem)]"
       >
         <div className="pd-section__inner">
           <p className="pd-kicker">Catalogue</p>

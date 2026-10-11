@@ -179,3 +179,24 @@ export async function fetchUnits(
 
   return result?.data ?? result;
 }
+
+/** Fetches the property price trend over the years. */
+export interface PriceHistoryPoint {
+  year: number;
+  price: number;
+  yearly_change: number | null;
+  yearly_growth: number | null;
+}
+
+export async function fetchPriceHistory(
+  propertyId: string,
+  signal?: AbortSignal,
+): Promise<PriceHistoryPoint[]> {
+  const result = await apiFetch<{ success?: boolean; data?: PriceHistoryPoint[] } | PriceHistoryPoint[]>(
+    `/api/properties/${encodeURIComponent(propertyId)}/price-over-the-years`,
+    { signal },
+  );
+
+  if (Array.isArray(result)) return result;
+  return result?.data ?? [];
+}

@@ -207,9 +207,15 @@
 /* Hero */
 .pd-hero {
   width: 100%;
-  padding: calc(var(--nav-h) + 0.75rem) var(--pd-space) 2rem;
+  padding: 0.5rem var(--pd-space) 2rem;
   display: flex;
   flex-direction: column;
+}
+
+@media (min-width: 760px) {
+  .pd-hero {
+    padding-top: calc(var(--nav-h) + 0.75rem);
+  }
 }
 
 .pd-hero__frame {
@@ -237,11 +243,17 @@
   margin-top: 0;
   margin-bottom: 12px;
   position: relative;
-  top: -0.7rem;
+  top: 0;
   color: var(--pd-muted);
   font-size: 1.05rem;
   font-weight: 650;
   text-decoration: none;
+}
+
+@media (min-width: 760px) {
+  .pd-hero__back {
+    top: -0.7rem;
+  }
 }
 
 .pd-hero__crumb a {
@@ -289,15 +301,10 @@
 
 .pd-hero__badges {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
   margin-bottom: 0.75rem;
-}
-
-.pd-hero__badges::-webkit-scrollbar {
-  display: none;
 }
 
 .pd-hero__badge {
@@ -709,6 +716,26 @@
   box-shadow: 0 12px 30px rgba(23, 23, 23, 0.09);
 }
 
+.pd-hero__stage-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background: #eae6df;
+  color: #5c5852;
+  font-size: 0.8rem;
+  font-weight: 500;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pd-hero__stage-loading .ila-loader {
+  --ila-loader-color: #c6a46c;
+}
+
 .pd-hero__count {
   position: absolute;
   right: 0.6rem;
@@ -721,6 +748,7 @@
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.04em;
+  z-index: 3;
 }
 
 .pd-hero__stage-img,
@@ -730,19 +758,70 @@
   object-position: center;
 }
 
+.pd-hero__stage-img {
+  transition: opacity 0.3s ease;
+}
+
+.pd-hero__stage-img.is-loading {
+  opacity: 0;
+}
+
+.pd-hero__stage-img.is-loaded {
+  opacity: 1;
+}
+
+.pd-hero__thumbs--skeleton {
+  pointer-events: none;
+}
+
+.pd-hero__thumb--skeleton {
+  background: linear-gradient(90deg, #e5e0d8 25%, #f2efe9 50%, #e5e0d8 75%);
+  background-size: 200% 100%;
+  animation: pd-hero-shimmer 1.5s infinite;
+  border-color: transparent;
+}
+
+@keyframes pd-hero-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 .pd-hero__thumbs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   gap: 0.4rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (max-width: 759px) {
+  .pd-hero__thumbs {
+    padding-inline: var(--pd-space);
+  }
+
   .pd-hero__grid {
     gap: 12px;
   }
 
   .pd-hero__badges {
-    margin-bottom: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 6px;
+    margin-bottom: 14px;
+    overflow-x: visible;
+  }
+
+  .pd-hero__badge {
+    min-height: 28px;
+    padding: 0 11px;
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
   }
 
   .pd-hero__price-row {
@@ -770,11 +849,17 @@
 }
 
 .pd-hero__thumb {
+  flex: 0 0 calc((100% - 0.8rem) / 3);
+  min-width: 76px;
+  max-width: 140px;
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
   padding: 0;
   border-radius: 0.6rem;
+  background: linear-gradient(90deg, #e5e0d8 25%, #f2efe9 50%, #e5e0d8 75%);
+  background-size: 200% 100%;
+  animation: pd-hero-shimmer 1.5s infinite;
 }
 
 .pd-hero__thumb.is-active {
@@ -1093,7 +1178,7 @@
   padding: 1.5rem 1.4rem;
   border-radius: 14px;
   border: 1px solid rgba(244, 241, 234, 0.16);
-  background: var(--pd-match-card);
+  background: linear-gradient(155deg, #272c38 0%, #171920 100%);
 }
 
 .pd-match__result--desktop {
@@ -1772,7 +1857,7 @@
 
 /* Lifestyle is the second full-bleed dark band on the page, so the amenity
    grid reads as the light-on-dark counterpoint to the Buyer Fit band above.
-   The blueprint grid sits on a pseudo-element rather than the section itself:
+   The dot grid sits on a pseudo-element rather than the section itself:
    a mask on the section would fade the tiles and the copy along with it. */
 .pd-lifestyle {
   position: relative;
@@ -1786,18 +1871,15 @@
   position: absolute;
   inset: 0;
   z-index: -1;
+  opacity: 0.8;
+  /* Staggered gold dot grid matching the section palette.
+     Base is the section's mid-tone; dots are the gold accent at ~40% opacity. */
   background-color: #15171b;
-  /* Same 20px cell as the light design, recoloured for this band: the blue
-     went to the section's own gold (#c6a46c, the kicker, icon and button
-     accent) so the grid belongs to the palette instead of fighting it. It
-     sits at a lower alpha than the blue did because gold carries far more
-     luminance than that blue did at the same weight, and the gradient ends on
-     transparent so it lays over the section's gradient base rather than a flat
-     colour that would not match it. */
   background-image:
-    linear-gradient(rgba(198, 164, 108, 0.16) 1px, transparent 1px),
-    linear-gradient(to right, rgba(198, 164, 108, 0.16) 1px, transparent 1px);
+    radial-gradient(rgba(198, 164, 108, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(rgba(198, 164, 108, 0.4) 1.5px, #15171b 1.5px);
   background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
   mask-image: radial-gradient(
     ellipse at center,
     rgba(0, 0, 0, 0.7) 0%,
@@ -1808,16 +1890,8 @@
     rgba(0, 0, 0, 0.7) 0%,
     rgba(0, 0, 0, 0) 75%
   );
-  /* Sized against the section rather than to it. At 100% the fade finished
-     long before the section's own edges: a section is much taller than it is
-     wide, so a centred ellipse always reaches zero at the top and bottom
-     first and the grid survives only in the middle — behind the tiles. The
-     corner distance works out to 1.886 / S, so scaling past ~470% keeps the
-     whole section covered whatever its proportions turn out to be. */
-  mask-size: 500% 500%;
-  -webkit-mask-size: 500% 500%;
-  mask-position: center;
-  -webkit-mask-position: center;
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
   mask-repeat: no-repeat;
   -webkit-mask-repeat: no-repeat;
   pointer-events: none;
@@ -1835,42 +1909,65 @@
 
 /* Amenities are a scan, not a story: every name sits in the grid up front, so
    the tiles carry no selected/hover state and nothing to click into. Two
-   columns on a phone, three from tablet width, four on desktop. */
+   columns on a phone, and the count climbs with the width from there. */
 .pd-lifestyle__grid {
   list-style: none;
   margin: 20px 0 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  /* The tile count decides how many columns are used — the component hands the
+     number over as `--pd-lifestyle-columns` — and the breakpoint caps how many
+     the width will actually hold: six amenity points ask for three columns,
+     which three 100px tiles on a 360px phone cannot deliver, so the cap keeps
+     the phone on two until the width is there. `min()` of the two is what lets
+     one rule carry both. Left-anchored by default, sharing the heading's
+     gutter from `.pd-section`; nothing here centres or stretches the tiles. */
+  --pd-tile-column-cap: 2;
+  /* The uncapped count comes first and the capped repeat overrides it, so a
+     browser that cannot resolve a math function inside `repeat()` keeps the
+     first declaration instead of dropping both and stacking the tiles. */
+  grid-template-columns: repeat(
+    var(--pd-lifestyle-columns, 2),
+    minmax(0, 1fr)
+  );
+  grid-template-columns: repeat(
+    min(var(--pd-lifestyle-columns, 2), var(--pd-tile-column-cap)),
+    minmax(0, 1fr)
+  );
+  gap: 16px;
 }
 
-/* Grid tiles are read, not clicked, so they sit flat: no fill, no shadow, just
-   an outline. Row heights equalise themselves through the grid's default
-   stretch, which keeps a row level even when only some tiles carry a
-   description. */
+/* Grid tiles are read, not clicked, so they sit flat: no hover, no shadow, no
+   pointer cursor. Horizontal by design — icon on the left, name beside it. The
+   stacked shape spent most of its ~124px height on air, and eleven of those in
+   a column read as endless. One 82px line per tile is about a third shorter,
+   which is what makes a long amenity list finite. */
 .pd-lifestyle__tile {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
   min-width: 0;
-  min-height: 88px;
-  padding: 14px;
-  /* Empty by design: the blueprint grid belongs to the section and runs
-     straight through the tile, so the tile is drawn with its light edge alone.
-     On a dark band that edge has to be light or it disappears entirely. */
-  border: 1px solid rgba(244, 241, 234, 0.16);
+  /* 80 is a floor, not a height: 44px of icon plus 18px of padding top and
+     bottom plus the 2px border is 82, so the padding sets the height and this
+     only catches a tile whose content is somehow shorter. */
+  min-height: 80px;
+  padding: 18px 20px;
+  /* Faint but present. The band carries a blueprint grid, and a fully
+     transparent tile let that grid run straight through the name, which left
+     the 20% edge the only thing marking the tile. A 4% wash lifts the tile
+     just clear of its background so the outline has a plate to sit on. */
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
-  background: transparent;
+  background: rgba(244, 241, 234, 0.04);
 }
 
 .pd-lifestyle__icon {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: rgba(198, 164, 108, 0.16);
   /* Dark green was the light-background choice; on dark it drops below a 3:1
@@ -1879,8 +1976,8 @@
 }
 
 .pd-lifestyle__icon svg {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   fill: none;
   stroke: currentColor;
   /* One weight for the whole set, so no amenity reads heavier than another. */
@@ -1889,44 +1986,55 @@
   stroke-linejoin: round;
 }
 
+/* `align-items: center` on the tile is what keeps a name-only tile vertically
+   centred instead of hugging the top edge; a tile with a description lets the
+   block fill instead. */
 .pd-lifestyle__tile-body {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  justify-content: center;
+  gap: 2px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .pd-lifestyle__tile-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  font-size: 15px;
+  display: block;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
+  font-size: 16px;
   font-weight: 600;
   line-height: 1.3;
   color: #f4f1ea;
 }
 
 .pd-lifestyle__tile-alt {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
+  display: block;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
   font-size: 13px;
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.7);
 }
 
+/* Auto-width and left-aligned with the grid, not a full-bleed bar: at the
+   grid's width the full-width button read as a section divider rather than a
+   control. 220px is a floor so the label sits comfortably; the height matches
+   the row rhythm of the tiles above it. */
 .pd-lifestyle__show-all {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 100%;
+  width: auto;
+  min-width: 220px;
   min-height: 48px;
-  margin-top: 12px;
+  margin-top: 16px;
+  padding: 0 24px;
   border: 1px solid var(--pd-gold);
   border-radius: 14px;
   background: transparent;
@@ -1962,6 +2070,56 @@
 
 .pd-lifestyle__chevron--up {
   transform: rotate(180deg);
+}
+
+@media (max-width: 759px) {
+  .pd-lifestyle__grid {
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .pd-lifestyle__tile {
+    padding: 10px 12px;
+    gap: 9px;
+    min-height: 56px;
+    border-radius: 12px;
+  }
+
+  .pd-lifestyle__icon {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+  }
+
+  .pd-lifestyle__icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .pd-lifestyle__tile-body {
+    min-width: 0;
+    gap: 0;
+  }
+
+  .pd-lifestyle__tile-title {
+    display: block;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal;
+    hyphens: none;
+    font-size: 13px;
+    line-height: 1.25;
+  }
+
+  .pd-lifestyle__tile-alt {
+    display: none;
+  }
+
+  .pd-lifestyle__show-all {
+    width: 100%;
+    min-width: 0;
+    margin-top: 14px;
+  }
 }
 
 /* Verification is the page's third full-bleed dark band. It reuses the Buyer
@@ -2018,25 +2176,25 @@
   line-height: 1.5;
 }
 
-/* The card is the link, so the whole row is one tap target and the "View" cue
+/* The card is the link — the whole row is the tap target and the "View" cue
    inside it can never be a small thing to miss. */
 .pd-legal__card {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px;
+  padding: 18px 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(255, 255, 255, 0.04);
   color: inherit;
   text-decoration: none;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
-/* Scoped to the anchor on purpose. A row without an `href` is a stated fact
-   rather than a file, and must not carry the press or hover state of one. */
 a.pd-legal__card:hover {
-  border-color: rgba(255, 255, 255, 0.28);
+  border-color: rgba(198, 164, 108, 0.3);
+  background: rgba(255, 255, 255, 0.07);
+  cursor: pointer;
 }
 
 a.pd-legal__card:active {
@@ -2045,28 +2203,31 @@ a.pd-legal__card:active {
 
 a.pd-legal__card:focus-visible {
   outline: 2px solid var(--pd-gold);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
+/* 48px icon tile with a 1px border so it matches the card's edge. */
 .pd-legal__icon {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: rgba(244, 241, 234, 0.1);
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(244, 241, 234, 0.08);
   color: #f4f1ea;
 }
 
 .pd-legal__icon--pdf {
   background: rgba(198, 164, 108, 0.18);
+  border-color: rgba(198, 164, 108, 0.35);
   color: #e8c88c;
 }
 
 .pd-legal__icon svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
@@ -2079,11 +2240,12 @@ a.pd-legal__card:focus-visible {
   flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
+  gap: 6px;
 }
 
 .pd-legal__name {
   overflow: hidden;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   line-height: 1.3;
   color: #ffffff;
@@ -2091,30 +2253,48 @@ a.pd-legal__card:focus-visible {
   white-space: nowrap;
 }
 
+/* Meta line: sentence case, 14px, 70% white. Type shown as a small tag. */
 .pd-legal__meta {
-  margin: 4px 0 0;
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.35;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
   color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
   text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.pd-legal__meta-tag {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.8);
   white-space: nowrap;
 }
 
-/* A cue, not a control — the anchor around it is the real target. */
+/* View cue — the whole card is the link, so this is purely visual. */
 .pd-legal__view {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   flex: 0 0 auto;
-  min-height: 44px;
+  height: 44px;
   padding: 0 16px;
-  border: 1px solid rgba(244, 241, 234, 0.28);
+  border: 1px solid rgba(244, 241, 234, 0.24);
   border-radius: 999px;
   color: #f4f1ea;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .pd-legal__view svg {
@@ -2125,6 +2305,12 @@ a.pd-legal__card:focus-visible {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+a.pd-legal__card:hover .pd-legal__view {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(244, 241, 234, 0.35);
 }
 
 .pd-legal__list {
@@ -2135,34 +2321,76 @@ a.pd-legal__card:focus-visible {
   gap: 10px;
 }
 
+/* >4 documents: two-column grid, each card ~520px at full width. */
+.pd-legal__list--dense {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Two-column layout: document list left (capped ~760px), disclaimer right (~360px). */
+.pd-legal__content {
+  display: grid;
+  grid-template-columns: minmax(0, 760px) minmax(0, 360px);
+  gap: 48px;
+  align-items: start;
+}
+
+.pd-legal__main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pd-legal__sidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* Below 1100px: stack to one column. */
+@media (max-width: 1100px) {
+  .pd-legal__content {
+    grid-template-columns: 1fr;
+  }
+
+  .pd-legal__list--dense {
+    grid-template-columns: 1fr;
+  }
+}
+
 /*
  * The advocate note is the most protective line on the page, so it gets a box
- * of its own rather than sharing a sentence with property facts. The icon is
- * decorative — the sentence carries the meaning.
+ * of its own rather than sharing a sentence with property facts. On desktop it
+ * sits in the right column, top-aligned with the first document card.
  */
 .pd-legal__note {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 10px;
-  padding: 14px;
+  padding: 18px 20px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
+}
+
+.pd-legal__note-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .pd-legal__note-icon {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   margin-top: 1px;
   color: var(--pd-gold);
 }
 
 .pd-legal__note-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -2173,7 +2401,7 @@ a.pd-legal__card:focus-visible {
 .pd-legal__note-text {
   margin: 0;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: rgba(255, 255, 255, 0.75);
 }
 
@@ -2247,13 +2475,15 @@ a.pd-legal__card:focus-visible {
 /* Matches the "Show all" affordance in the other sections: same height, same
    weight, and a chevron that flips while the list is open. */
 .pd-legal__show-all {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 100%;
+  width: auto;
+  min-width: 220px;
   min-height: 48px;
-  margin-top: 12px;
+  margin-top: 16px;
+  padding: 0 24px;
   border: 1px solid var(--pd-gold);
   border-radius: 14px;
   background: transparent;
@@ -2261,7 +2491,7 @@ a.pd-legal__card:focus-visible {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .pd-legal__show-all:hover,
@@ -2525,47 +2755,7 @@ a.pd-legal__card:focus-visible {
   min-width: 0;
 }
 
-.pd-legal__extras {
-  display: grid;
-  gap: 20px;
-  margin-top: 16px;
-}
-
-.pd-sat__map-wrap {
-  position: relative;
-  min-height: 18rem;
-  border: 1px solid var(--pd-line);
-  overflow: hidden;
-  background: #1c1f24;
-}
-
-.pd-sat__map {
-  width: 100%;
-  height: 18rem;
-}
-
-.pd-sat__overlay {
-  position: absolute;
-  left: 0.85rem;
-  bottom: 0.85rem;
-  display: grid;
-  gap: 0.15rem;
-  padding: 0.65rem 0.8rem;
-  background: rgba(15, 17, 20, 0.72);
-  color: #fff;
-  font-size: 0.84rem;
-}
-
-.pd-sat__fallback {
-  position: absolute;
-  inset: auto 0.85rem 3.5rem;
-  margin: 0;
-  padding: 0.7rem 0.8rem;
-  background: rgba(15, 17, 20, 0.8);
-  color: #fff;
-  font-size: 0.84rem;
-}
-
+/* Satellite Before/After — now a pure timeline story, no map. */
 .pd-sat__years {
   display: flex;
   flex-wrap: wrap;
@@ -2590,6 +2780,451 @@ a.pd-legal__card:focus-visible {
   margin: 0.55rem 0 0;
   color: var(--pd-muted);
   line-height: 1.55;
+}
+
+/*
+ * Price history — summary cards, the line graph and the year-by-year table.
+ *
+ * The section sits on the page's light surface, so the old white-on-white
+ * labels, grid and dots are gone: everything here reads in ink and gold on the
+ * page tokens rather than on a dark band this section never had.
+ */
+.pd-price {
+  /* Movement colours. Both are AA on the page white and on the soft card
+     fill, which is where they appear: a badge is a claim about the data, so it
+     has to stay legible at its size. */
+  --pd-price-up: #1c7a4b;
+  --pd-price-down: #b3261e;
+  /* Gold, the one chart colour, kept in one place so the line, the grid
+     highlight and the focus ring cannot drift apart. */
+  --pd-price-line: #c6a46c;
+  --pd-price-ink: var(--pd-ink);
+  --pd-price-muted: var(--pd-muted);
+}
+
+/* Visually hidden, still read: the live region that narrates the graph, and
+   the table's caption. */
+.pd-price__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- summary cards ---- */
+.pd-price__stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 760px) {
+  .pd-price__stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+.pd-price__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem 0.95rem;
+  border: 1px solid var(--pd-line);
+  border-radius: 0.9rem;
+  background: rgba(244, 241, 234, 0.55);
+}
+
+.pd-price__stat-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pd-price-muted);
+}
+
+.pd-price__stat-value {
+  font-size: clamp(1.15rem, 2.4vw, 1.4rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--pd-price-ink);
+  /* Long rupee figures wrap rather than widen the card. */
+  overflow-wrap: anywhere;
+}
+
+.pd-price__stat-note {
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--pd-price-muted);
+}
+
+/* ---- the chart card ---- */
+.pd-price__chart-card {
+  /* The card is the figure; the figcaption is its own header row, so the
+     caption renders inside the border rather than outside it. */
+  margin: 1.25rem 0 0;
+  padding: 1rem 1rem 0.85rem;
+  border: 1px solid var(--pd-line);
+  border-radius: 1rem;
+  background: var(--pd-surface);
+  box-shadow:
+    0 1px 2px rgba(23, 23, 23, 0.04),
+    0 10px 28px rgba(23, 23, 23, 0.05);
+}
+
+@media (min-width: 760px) {
+  .pd-price__chart-card {
+    padding: 1.25rem 1.5rem 1rem;
+  }
+}
+
+.pd-price__chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.pd-price__chart-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pd-price-ink);
+}
+
+.pd-price__chart-range {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--pd-gold-ink);
+}
+
+.pd-price__plot {
+  position: relative;
+  /* The whole plot is the interaction surface: a reader sweeping for a year
+     should not have to hit a 4px dot. */
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.pd-price__plot:focus-visible {
+  outline: 2px solid var(--pd-price-line);
+  outline-offset: 3px;
+  border-radius: 0.5rem;
+}
+
+.pd-price__svg {
+  display: block;
+  /* The svg carries its own measured width and height, so nothing here may
+     size it: any CSS width would distort the plot. */
+  overflow: visible;
+}
+
+.pd-price__grid {
+  stroke: rgba(23, 23, 23, 0.07);
+  stroke-width: 1;
+}
+
+.pd-price__axis {
+  stroke: rgba(23, 23, 23, 0.16);
+  stroke-width: 1;
+}
+
+.pd-price__tick,
+.pd-price__year {
+  font-size: 11.5px;
+  fill: var(--pd-price-muted);
+}
+
+.pd-price__tick {
+  font-weight: 600;
+}
+
+.pd-price__area {
+  opacity: 0;
+  animation: pd-price-fade 500ms ease-out 220ms forwards;
+}
+
+/* `pathLength={1}` normalises the path to a unit length, so the dash pattern
+   is one dash of "the whole line" whatever its real pixel length. */
+.pd-price__line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: pd-price-draw 900ms ease-out 80ms forwards;
+}
+
+.pd-price__point {
+  fill: var(--pd-price-line);
+  stroke: #ffffff;
+  stroke-width: 2;
+  opacity: 0;
+  /* Without a fill-box the scale in the keyframes resolves against the SVG
+     origin, so every dot would fly in from the top-left corner of the plot
+     instead of growing where it sits. */
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pd-price-pop 260ms ease-out forwards;
+  transition: r 120ms ease;
+}
+
+.pd-price__point.is-active {
+  stroke: #ffffff;
+  stroke-width: 2.5;
+}
+
+.pd-price__halo {
+  fill: rgba(198, 164, 108, 0.22);
+}
+
+.pd-price__crosshair {
+  stroke: rgba(198, 164, 108, 0.55);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+@keyframes pd-price-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pd-price-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pd-price-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ---- tooltip ---- */
+.pd-price__tip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 8.5rem;
+  padding: 0.5rem 0.7rem 0.55rem;
+  border: 1px solid rgba(198, 164, 108, 0.45);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 8px 24px rgba(23, 23, 23, 0.14);
+  /* Painted for the eye; the live region carries the same words to a screen
+     reader, and a pointer cannot hover a tooltip anyway. */
+  pointer-events: none;
+}
+
+.pd-price__tip-year {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pd-price-muted);
+}
+
+.pd-price__tip-price {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--pd-price-ink);
+}
+
+.pd-price__tip-unit {
+  margin-left: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--pd-price-muted);
+}
+
+.pd-price__tip-delta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.pd-price__tip-delta.is-up {
+  color: var(--pd-price-up);
+}
+
+.pd-price__tip-delta.is-down {
+  color: var(--pd-price-down);
+}
+
+.pd-price__tip-delta.is-flat {
+  color: var(--pd-price-muted);
+  font-weight: 600;
+}
+
+.pd-price__tip-abs {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--pd-price-muted);
+}
+
+.pd-price__hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--pd-price-muted);
+}
+
+/* ---- the year-by-year table ---- */
+.pd-price__table {
+  width: 100%;
+  margin-top: 1.5rem;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.pd-price__table th,
+.pd-price__table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--pd-line);
+  text-align: left;
+  font-size: 0.88rem;
+}
+
+.pd-price__table thead th {
+  padding-top: 0;
+  border-bottom: 1px solid rgba(23, 23, 23, 0.2);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pd-price-muted);
+}
+
+.pd-price__table tbody th {
+  font-weight: 700;
+  color: var(--pd-price-ink);
+}
+
+.pd-price__table td {
+  color: var(--pd-price-ink);
+}
+
+.pd-price__table-price {
+  font-weight: 650;
+}
+
+/* The latest row is the one a reader came for: tinted rather than bolded, so
+   the rest of the column keeps its hierarchy. */
+.pd-price__table tbody tr.is-current {
+  background: rgba(198, 164, 108, 0.1);
+}
+
+.pd-price__table tbody tr.is-current th,
+.pd-price__table tbody tr.is-current td {
+  border-bottom-color: rgba(198, 164, 108, 0.35);
+}
+
+.pd-price__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem 0.15rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.pd-price__delta.is-up {
+  background: rgba(28, 122, 75, 0.1);
+  color: var(--pd-price-up);
+}
+
+.pd-price__delta.is-down {
+  background: rgba(179, 38, 30, 0.08);
+  color: var(--pd-price-down);
+}
+
+.pd-price__delta.is-flat {
+  background: rgba(23, 23, 23, 0.05);
+  color: var(--pd-price-muted);
+  font-weight: 600;
+}
+
+.pd-price__table-change {
+  margin-left: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--pd-price-muted);
+}
+
+@media (max-width: 559px) {
+  /* The absolute change is the second half of the badge's story; on a phone
+     the percentage alone has to carry the row. */
+  .pd-price__table-change {
+    display: none;
+  }
+
+  .pd-price__table th,
+  .pd-price__table td {
+    padding: 0.55rem 0.5rem;
+  }
+}
+
+/* ---- loading skeleton ---- */
+.pd-price__loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.pd-price__skeleton {
+  border-radius: 0.9rem;
+  background: linear-gradient(
+    90deg,
+    rgba(23, 23, 23, 0.05) 25%,
+    rgba(23, 23, 23, 0.09) 37%,
+    rgba(23, 23, 23, 0.05) 63%
+  );
+  background-size: 400% 100%;
+  animation: pd-price-shimmer 1.4s ease-in-out infinite;
+}
+
+.pd-price__skeleton--stat {
+  height: 5.4rem;
+  border: 1px solid var(--pd-line);
+}
+
+.pd-price__skeleton--chart {
+  height: 17rem;
+  margin-top: 1.25rem;
+  border: 1px solid var(--pd-line);
+  border-radius: 1rem;
+}
+
+@keyframes pd-price-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: 0 0;
+  }
 }
 
 /* The gutter is inherited from the page. Kicker, heading, lead, the ordered
@@ -2907,17 +3542,34 @@ a.pd-legal__card:focus-visible {
  * dismissing the bar removes the reserved space instead of leaving a gap.
  */
 .pd-final {
-  /* 48px of white above, so the journey band above and this enquiry block read
-     as two separate ideas rather than one run-on section. */
-  padding-top: 48px;
-  /* The bar's clearance. Longhand, and untouched by the gutter above: the
-     sticky CTA writes its measured height into this custom property. */
-  padding-bottom: var(--pd-sticky-clearance, 0px);
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(160deg, #1d2026 0%, #15171c 50%, #0e1014 100%);
+  color: #f4f1ea;
+  padding-top: clamp(2.5rem, 5vh, 4rem);
+  padding-bottom: calc(var(--pd-sticky-clearance, 0px) + 2rem);
+}
+
+.pd-final::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 85% 15%,
+    rgba(198, 164, 108, 0.08) 0%,
+    transparent 55%
+  );
+}
+
+.pd-final h2 {
+  color: #ffffff;
 }
 
 .pd-final .pd-kicker {
   margin-bottom: 8px;
-  color: var(--pd-gold-ink);
+  color: var(--pd-gold);
   font-size: 11px;
   letter-spacing: 0.14em;
 }
@@ -2925,6 +3577,7 @@ a.pd-legal__card:focus-visible {
 .pd-final .pd-section__lead {
   font-size: 15px;
   line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
 }
 
 /*
@@ -2939,16 +3592,26 @@ a.pd-legal__card:focus-visible {
   margin-top: 20px;
 }
 
+/*
+ * Illustration under the heading — desktop only. Below the two-column
+ * breakpoint the copy is full width with the form directly under it, so the
+ * artwork would only push the form further down the page. Hidden here and
+ * shown in the 1100px block further down this file.
+ */
+.pd-final__art {
+  display: none;
+}
+
 .pd-final__icon-btn {
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
   padding: 0;
-  border: 1px solid var(--pd-line);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 50%;
-  background: #ffffff;
-  color: var(--pd-ink);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f4f1ea;
   cursor: pointer;
   transition:
     border-color 0.15s ease,
@@ -2957,7 +3620,9 @@ a.pd-legal__card:focus-visible {
 }
 
 .pd-final__icon-btn:hover {
-  border-color: rgba(198, 164, 108, 0.65);
+  border-color: var(--pd-gold);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 .pd-final__icon-btn:focus-visible {
@@ -2970,7 +3635,7 @@ a.pd-legal__card:focus-visible {
    read at a glance or by someone who cannot see the glyph. */
 .pd-final__icon-btn.is-on {
   border-color: var(--pd-gold);
-  background: rgba(198, 164, 108, 0.12);
+  background: rgba(198, 164, 108, 0.2);
   color: var(--pd-gold);
 }
 
@@ -2995,8 +3660,9 @@ a.pd-legal__card:focus-visible {
   margin: 12px 0 0;
   padding: 8px 14px;
   border-radius: 999px;
-  background: rgba(23, 23, 23, 0.9);
-  color: #f4f1ea;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
   font-size: 13px;
   line-height: 1.4;
 }
@@ -3009,12 +3675,12 @@ a.pd-legal__card:focus-visible {
 .pd-form {
   margin-top: 1.4rem;
   padding: 24px;
-  border: 1px solid var(--pd-line);
-  border-radius: 0.9rem;
-  background: rgba(244, 241, 234, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1rem;
+  background: linear-gradient(165deg, rgba(32, 36, 45, 0.9) 0%, rgba(22, 25, 32, 0.95) 100%);
   box-shadow:
-    0 1px 2px rgba(23, 23, 23, 0.04),
-    0 10px 28px rgba(23, 23, 23, 0.05);
+    0 20px 45px -12px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 }
 
 .pd-form__row {
@@ -3034,7 +3700,7 @@ a.pd-legal__card:focus-visible {
   display: flex;
   align-items: baseline;
   gap: 0.45rem;
-  color: var(--pd-muted);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -3044,7 +3710,7 @@ a.pd-legal__card:focus-visible {
 /* Sits inside the label row, so "Optional" reads as part of the field name
    rather than as a separate note competing with the input. */
 .pd-form__hint {
-  color: var(--pd-muted);
+  color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0;
@@ -3055,17 +3721,16 @@ a.pd-legal__card:focus-visible {
  * 16px is not a style choice here — it is the threshold below which iOS Safari
  * zooms the viewport on focus, and the zoom does not reset when the field is
  * blurred, which leaves the form off-screen. 52px is the matching comfortable
- * touch height. The border is a fixed warm grey because --pd-line is a 12%
- * black and all but vanishes against the beige card.
+ * touch height.
  */
 .pd-form__input {
   width: 100%;
   min-height: 52px;
   padding: 0 14px;
-  border: 1px solid #d9d2c0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 10px;
-  background: #ffffff;
-  color: var(--pd-ink);
+  background: #14171d;
+  color: #ffffff;
   font-family: inherit;
   font-size: 16px;
   line-height: 1.4;
@@ -3073,7 +3738,7 @@ a.pd-legal__card:focus-visible {
 }
 
 .pd-form__input::placeholder {
-  color: rgba(92, 88, 82, 0.55);
+  color: rgba(255, 255, 255, 0.35);
 }
 
 /* A ring rather than a thicker border: changing border-width on focus shifts
@@ -3087,14 +3752,14 @@ a.pd-legal__card:focus-visible {
 }
 
 .pd-form__input[aria-invalid="true"] {
-  border-color: #a3352b;
+  border-color: #e5534b;
 }
 
 .pd-form__input[aria-invalid="true"]:focus {
-  border-color: #a3352b;
+  border-color: #e5534b;
   box-shadow:
-    0 0 0 2px #a3352b,
-    0 0 0 6px rgba(163, 53, 43, 0.18);
+    0 0 0 2px #e5534b,
+    0 0 0 6px rgba(229, 83, 75, 0.22);
 }
 
 /* The +91 chip is fixed, so the border, fill and focus ring live on the wrapper
@@ -3103,9 +3768,9 @@ a.pd-legal__card:focus-visible {
   display: flex;
   align-items: stretch;
   min-height: 52px;
-  border: 1px solid #d9d2c0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 10px;
-  background: #ffffff;
+  background: #14171d;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -3117,22 +3782,22 @@ a.pd-legal__card:focus-visible {
 }
 
 .pd-form__phone.is-invalid {
-  border-color: #a3352b;
+  border-color: #e5534b;
 }
 
 .pd-form__phone.is-invalid:focus-within {
-  border-color: #a3352b;
+  border-color: #e5534b;
   box-shadow:
-    0 0 0 2px #a3352b,
-    0 0 0 6px rgba(163, 53, 43, 0.18);
+    0 0 0 2px #e5534b,
+    0 0 0 6px rgba(229, 83, 75, 0.22);
 }
 
 .pd-form__phone-prefix {
   display: flex;
   align-items: center;
   padding: 0 10px 0 14px;
-  border-right: 1px solid #d9d2c0;
-  color: var(--pd-muted);
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.65);
   font-size: 16px;
   font-weight: 600;
   white-space: nowrap;
@@ -3146,9 +3811,15 @@ a.pd-legal__card:focus-visible {
   border: 0;
   border-radius: 0;
   background: transparent;
+  color: #ffffff;
+}
+
+.pd-form__phone-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .pd-form__phone-input:focus {
+  outline: none;
   box-shadow: none;
 }
 
@@ -3162,7 +3833,7 @@ a.pd-legal__card:focus-visible {
 
 .pd-form__error {
   margin: 0;
-  color: #a3352b;
+  color: #ff7b72;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -3204,10 +3875,10 @@ a.pd-legal__card:focus-visible {
   min-width: 56px;
   min-height: 52px;
   padding: 6px 12px;
-  border: 1px solid #d9d2c0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 12px;
-  background: #ffffff;
-  color: var(--pd-ink);
+  background: #161920;
+  color: #f4f1ea;
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
@@ -3222,11 +3893,13 @@ a.pd-legal__card:focus-visible {
 
 .pd-visit__chip:hover {
   border-color: rgba(198, 164, 108, 0.65);
+  background: #20242e;
 }
 
 .pd-visit__chip.is-on {
   border-color: var(--pd-gold);
-  background: rgba(198, 164, 108, 0.16);
+  background: rgba(198, 164, 108, 0.22);
+  color: #ffffff;
 }
 
 .pd-visit__chip:focus-visible {
@@ -3241,7 +3914,7 @@ a.pd-legal__card:focus-visible {
 }
 
 .pd-visit__weekday {
-  color: var(--pd-muted);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
@@ -3251,6 +3924,55 @@ a.pd-legal__card:focus-visible {
 .pd-visit__numeral {
   font-size: 16px;
   font-weight: 600;
+  color: #ffffff;
+}
+
+/*
+ * The calendar row. No scroll — the date input is one line and its own picker
+ * opens above the page — so the row sits as a label plus a field that takes the
+ * rest of the width. Styled to match the chips rather than left native, so the
+ * group still reads as one control.
+ */
+.pd-visit__row--date {
+  overflow: visible;
+  align-items: center;
+  gap: 10px;
+}
+
+.pd-visit__date-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pd-visit__date {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  background: #14171d;
+  color: #ffffff;
+  color-scheme: dark;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pd-visit__date:hover {
+  border-color: rgba(198, 164, 108, 0.65);
+}
+
+.pd-visit__date:focus-visible {
+  outline: 2px solid var(--pd-gold);
+  outline-offset: 2px;
 }
 
 .pd-form__field--wide .pd-form__hint {
@@ -3261,6 +3983,7 @@ a.pd-legal__card:focus-visible {
    13px rather than the 12px used for the trailing field notes. */
 .pd-form__hint--visit {
   font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 /*
@@ -3290,6 +4013,14 @@ a.pd-legal__card:focus-visible {
   min-height: 48px;
   font-size: 15px;
   font-weight: 600;
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #f4f1ea;
+  background: transparent;
+}
+
+.pd-form__submit .pd-btn--ghost:hover {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* The shared loader is 55px; inside a button it needs to sit next to the label
@@ -3300,7 +4031,7 @@ a.pd-legal__card:focus-visible {
 
 .pd-form__privacy {
   margin: 12px 0 0;
-  color: var(--pd-muted);
+  color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -3315,7 +4046,7 @@ a.pd-legal__card:focus-visible {
   padding: 14px;
   border: 1px solid rgba(198, 164, 108, 0.4);
   border-radius: 12px;
-  background: rgba(198, 164, 108, 0.12);
+  background: rgba(198, 164, 108, 0.15);
 }
 
 .pd-form__done-mark {
@@ -3350,16 +4081,13 @@ a.pd-legal__card:focus-visible {
 .pd-form__done-title {
   font-size: 15px;
   font-weight: 700;
-  color: var(--pd-ink);
+  color: #ffffff;
 }
 
 .pd-form__done-slot {
   font-size: 13px;
-  color: var(--pd-muted);
+  color: rgba(255, 255, 255, 0.7);
 }
-
-/* The visit-slot control is a normal full-width field inside .pd-form, so the
-   booking button sits beside the callback button in .pd-form__submit. */
 
 /*
  * Submission outcome. Only "sent" is styled as good news, so a failure can
@@ -3374,15 +4102,15 @@ a.pd-legal__card:focus-visible {
 }
 
 .pd-form__status--sent {
-  border: 1px solid #bcd9c6;
-  background: rgba(242, 247, 242, 0.9);
-  color: #1f5c45;
+  border: 1px solid rgba(47, 133, 90, 0.5);
+  background: rgba(47, 133, 90, 0.2);
+  color: #8ce1b2;
 }
 
 .pd-form__status--error {
-  border: 1px solid rgba(163, 53, 43, 0.32);
-  background: rgba(253, 242, 240, 0.9);
-  color: #a3352b;
+  border: 1px solid rgba(229, 83, 75, 0.4);
+  background: rgba(229, 83, 75, 0.2);
+  color: #ff9b94;
 }
 
 /*
@@ -3394,7 +4122,8 @@ a.pd-legal__card:focus-visible {
   margin: 24px 0 0;
   padding: 14px 16px;
   border-left: 3px solid var(--pd-gold);
-  background: var(--pd-soft);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0 10px 10px 0;
 }
 
 .pd-final__quote p {
@@ -3402,7 +4131,7 @@ a.pd-legal__card:focus-visible {
   font-size: 15px;
   font-style: italic;
   line-height: 1.6;
-  color: var(--pd-ink);
+  color: #f4f1ea;
 }
 
 .pd-final__quote footer {
@@ -3414,14 +4143,104 @@ a.pd-legal__card:focus-visible {
 }
 
 .pd-final__quote-author {
-  color: var(--pd-ink);
+  color: #ffffff;
   font-size: 13px;
   font-weight: 600;
 }
 
 .pd-final__quote-role {
-  color: var(--pd-muted);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 12px;
+}
+
+/*
+ * Next step, desktop. Copy left, enquiry right.
+ *
+ * The single full-width column put the heading a screen away from the form it
+ * introduces, and the form itself ran the width of the page, which is what made
+ * the visit slot read as three separate bands. Two columns fix both: the copy
+ * keeps its measure on the left and the form beside it is narrow enough that
+ * the chips, the date field and the slots sit together as one control.
+ */
+@media (min-width: 1100px) {
+  .pd-final__inner {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: 56px;
+    align-items: start;
+  }
+
+  /* Follows the form down the page. `align-items: start` above is what leaves
+     the column shorter than its row and so something to stick within. Same
+     offset as the map and the buyer-fit result. */
+  .pd-final__copy {
+    position: sticky;
+    top: calc(var(--nav-h) + 24px);
+  }
+
+  .pd-final .pd-section__lead {
+    font-size: 16px;
+  }
+
+  /* The top margin separated the form from the lead above it. Across columns
+     there is a 56px gap for that, and a leading margin would push the card
+     off the top of its own column. */
+  .pd-final__aside .pd-form {
+    margin-top: 0;
+  }
+
+  /*
+   * Visit slot. Wraps instead of scrolling — nothing is off-screen at this
+   * width, so the scroller was only ever a phone affordance — and the date row
+   * becomes a trailing control beside the chips rather than a full-width band
+   * of its own. The slots keep a line to themselves, since three of them share
+   * the width evenly only when they have the whole row.
+   */
+  .pd-visit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .pd-visit__row {
+    overflow: visible;
+  }
+
+  .pd-visit__row--slots {
+    flex: 1 1 100%;
+  }
+
+  .pd-visit__row--date {
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  .pd-visit__date {
+    flex: 0 0 auto;
+    width: 9.5rem;
+    min-height: 44px;
+  }
+
+  /*
+   * The illustration under the heading. A square on the copy side of the
+   * section, sized to the column rather than to the image: on a phone the copy
+   * is full width with the form directly under it, and an illustration there
+   * would only push the form further down.
+   */
+  .pd-final__art {
+    display: block;
+    position: relative;
+    width: 100%;
+    max-width: 22rem;
+    margin-top: 36px;
+    /* The artwork is square; the ratio keeps the box from collapsing before
+       the image paints. */
+    aspect-ratio: 1 / 1;
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+  }
 }
 
 .pd-sticky {
@@ -3502,9 +4321,11 @@ a.pd-legal__card:focus-visible {
   }
 
   /* Room for the grid to breathe: the amenity tiles gain a column rather than
-     growing into a sparse single row. */
+     growing into a sparse single row. The tile count still chooses how many
+     columns are used; this only raises the ceiling, so three columns at tablet
+     width and four once there is room for them. */
   .pd-lifestyle__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    --pd-tile-column-cap: 3;
   }
 }
 
@@ -3586,8 +4407,7 @@ a.pd-legal__card:focus-visible {
     max-height: 20rem;
   }
 
-  .pd-future__layout,
-  .pd-sat__layout {
+  .pd-future__layout {
     grid-template-columns: 0.95fr 1.05fr;
   }
 
@@ -3611,7 +4431,7 @@ a.pd-legal__card:focus-visible {
 
 @media (min-width: 980px) {
   .pd-lifestyle__grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    --pd-tile-column-cap: 4;
   }
 
   /* An API property can publish five facts (plot size, plot size in sq ft,
@@ -3779,6 +4599,7 @@ a.pd-legal__card:focus-visible {
   .pd-similar__card,
   .pd-hero__thumb,
   .pd-lifestyle__chevron,
+  .pd-lifestyle__show-all,
   .pd-legal__chevron,
   .pd-afford__cta {
     transition: none;
@@ -3791,5 +4612,31 @@ a.pd-legal__card:focus-visible {
   .pd-match__result-content,
   .pd-future__list--changing {
     animation: none;
+  }
+
+  /*
+   * The price graph animates its line, area and points in. Each of those starts
+   * hidden in CSS and is brought in by a `forwards` animation, so stopping the
+   * animation alone would leave the chart blank — the end state has to be
+   * written out as well.
+   */
+  .pd-price__line {
+    stroke-dashoffset: 0;
+  }
+
+  .pd-price__area {
+    opacity: 1;
+  }
+
+  .pd-price__point {
+    opacity: 1;
+  }
+
+  .pd-price__line,
+  .pd-price__area,
+  .pd-price__point,
+  .pd-price__skeleton {
+    animation: none;
+    transition: none;
   }
 }

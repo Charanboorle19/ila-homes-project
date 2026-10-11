@@ -416,9 +416,10 @@ export default function BuyingJourney() {
         <div className="bj-m__content" aria-live="polite" key={current.id}>
           <p className="bj-m__step-kicker">Step {current.number}</p>
           <h3 className="bj-m__step-title">{current.name}</h3>
-          <p className="bj-m__step-time">
-            Typical timeline · {current.time}
-          </p>
+          <div className="bj-m__time-card">
+            <span className="bj-m__time-label">Typical timeline</span>
+            <span className="bj-m__time-value">{current.time}</span>
+          </div>
 
           <div className="bj-m__media">
             <Image

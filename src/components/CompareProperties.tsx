@@ -286,7 +286,7 @@ export default function CompareProperties() {
    */
   const actionRowClass =
     selectedIds.length > 0
-      ? "sticky bottom-0 z-20 bg-[#f7f8fa] pb-[env(safe-area-inset-bottom)] sm:static sm:z-auto sm:bg-white/80 sm:pb-0"
+      ? "sticky bottom-0 z-20 -mx-5 rounded-b-2xl bg-[#f7f8fa] px-5 pb-[env(safe-area-inset-bottom)] sm:static sm:mx-0 sm:z-auto sm:rounded-none sm:bg-white/80 sm:px-0 sm:pb-0"
       : "";
 
   const toggleProperty = useCallback(
@@ -513,11 +513,8 @@ export default function CompareProperties() {
             on this wrapper at all before, which is why the next section
             followed the button almost immediately. */}
       <div className="content-slot w-full px-5 pb-4 sm:px-8 sm:pb-12 lg:px-12">
-        {/* The card is full-bleed and square-edged on mobile - that is the
-            design, not an oversight - so it carries the gutter itself rather
-            than sitting inside one. Its content therefore lands on the same
-            20px as the heading above it. */}
-        <div className="w-full bg-[#f7f8fa] py-4 sm:rounded-2xl sm:border sm:border-black/10 sm:bg-white/80 sm:px-5 sm:py-5">
+        {/* Card container: rounded corners, subtle border, and 20px padding on mobile. */}
+        <div className="w-full rounded-2xl border border-black/10 bg-[#f7f8fa] px-5 py-4 sm:bg-white/80 sm:px-5 sm:py-5">
           {/* Properties first, at the top of the block. */}
           {listStatus === "loading" ? (
             <p className="inline-flex items-center gap-2 text-sm text-[#5b6270]">

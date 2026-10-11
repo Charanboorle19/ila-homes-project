@@ -291,6 +291,8 @@ At or below this breakpoint:
 - The detailed lists are collapsed behind a **View about this** button.
 - The button changes to **Hide details** when expanded.
 - The detail panel content is not clipped by a fixed desktop height.
+- The timeline is rendered as a two-line card (`.bj-m__time-card`) with "Typical timeline" label and wrapping value to preserve multi-phase details (e.g. execution + mutation).
+- Navigation controls (`.bj-m__nav`) use elevated z-index and safe-area padding to prevent overlap by browser chrome or floating indicators.
 
 At widths of `640px` or less:
 

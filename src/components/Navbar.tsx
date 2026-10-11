@@ -91,19 +91,7 @@ export default function Navbar() {
             width={1086}
             height={362}
             priority
-            /*
-             * The supplied file is an opaque near-black rectangle with the mark
-             * in light grey, not a transparent PNG. Against the black header
-             * that box reads as a grey patch, and over a white page it shows a
-             * hard seam.
-             *
-             * `screen` is the conventional way to drop a black field without a
-             * new asset: screen(base, black) === base, so the rectangle
-             * disappears and the mark survives with a slight lift. This is a
-             * workaround, not a fix — a PNG with a real alpha channel would
-             * also let the logo sit on a light surface later.
-             */
-            className="mix-blend-screen h-12 w-auto sm:h-14 lg:h-16"
+            className="h-12 w-auto object-contain sm:h-14 lg:h-16"
           />
         </Link>
 

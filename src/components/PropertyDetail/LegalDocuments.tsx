@@ -204,165 +204,157 @@ export default function LegalDocuments({
         </p>
 
         {hasRows ? (
-          <ul className="pd-legal__list">
-            {documentsState === "loading" ? (
-              <li>
-                <div className="pd-legal__card">
-                  <DocumentIcon kind="file" />
-                  <div className="pd-legal__body">
-                    <h3 className="inline-flex items-center gap-2">
-                      <span className="ila-loader ila-loader--sm ila-loader--light" aria-hidden />
-                      Loading documents
-                    </h3>
-                    <p className="pd-legal__meta">
-                      Fetching the verification files for this property…
-                    </p>
-                  </div>
-                </div>
-              </li>
-            ) : (
-              visibleDocuments.map((doc) => {
-                const kind = docKind(doc.href);
-                const name = sentenceCase(doc.label);
-                const meta = documentMeta(doc);
-                const failed = openErrorId === doc.id;
-
-                return (
-                  <li key={doc.id}>
-                    {/*
-                      The card is the link, so the whole row is the tap target
-                      and the "View" cue inside it can never be a small thing to
-                      miss. A row without an `href` is a stated fact rather than
-                      a file, so it stays inert and renders no cue at all.
-                    */}
-                    {doc.href ? (
-                      <a
-                        className="pd-legal__card"
-                        href={doc.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        /* Names the document and its type. Without this a screen
-                           reader hears "link, View" once per card. */
-                        aria-label={`View ${name}, ${DOC_KIND_LABELS[kind]}`}
-                        onClick={(event) => {
-                          if (!isDeadFragment(doc.href ?? "")) return;
-                          event.preventDefault();
-                          setOpenErrorId(failed ? null : doc.id);
-                        }}
-                      >
-                        <DocumentIcon kind={kind} />
-                        <span className="pd-legal__body">
-                          <span className="pd-legal__name">{name}</span>
-                          <span className="pd-legal__meta">{meta}</span>
-                        </span>
-
-                        {failed ? (
-                          <span className="pd-legal__error" role="alert">
-                            Couldn&rsquo;t open file. Try again
-                          </span>
-                        ) : (
-                          /* Visual cue only — the link's own label is what a
-                             screen reader gets. */
-                          <span className="pd-legal__view" aria-hidden="true">
-                            View
-                            <svg viewBox="0 0 24 24" focusable="false">
-                              <path d="M15 3h6v6" />
-                              <path d="M10 14 21 3" />
-                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                            </svg>
-                          </span>
-                        )}
-                      </a>
-                    ) : (
-                      <div className="pd-legal__card">
-                        <DocumentIcon kind={kind} />
-                        <span className="pd-legal__body">
-                          <span className="pd-legal__name">{name}</span>
-                          <span className="pd-legal__meta">{meta}</span>
-                        </span>
+          <div className="pd-legal__content">
+            {/* Left column: document list, show-all, rules link */}
+            <div className="pd-legal__main">
+              <ul className={`pd-legal__list ${documents.length > 4 ? "pd-legal__list--dense" : ""}`}>
+                {documentsState === "loading" ? (
+                  <li>
+                    <div className="pd-legal__card">
+                      <DocumentIcon kind="file" />
+                      <div className="pd-legal__body">
+                        <h3 className="inline-flex items-center gap-2">
+                          <span className="ila-loader ila-loader--sm ila-loader--light" aria-hidden />
+                          Loading documents
+                        </h3>
+                        <p className="pd-legal__meta">
+                          Fetching the verification files for this property…
+                        </p>
                       </div>
-                    )}
+                    </div>
                   </li>
-                );
-              })
-            )}
-          </ul>
-        ) : null}
+                ) : (
+                  visibleDocuments.map((doc) => {
+                    const kind = docKind(doc.href);
+                    const name = sentenceCase(doc.label);
+                    const meta = documentMeta(doc);
+                    // Extract type (first part before " · ") for the tag.
+                    const metaParts = meta.split(" · ");
+                    const typeTag = metaParts[0] ?? "";
+                    const metaRest = metaParts.slice(1).join(" · ") ?? meta;
+                    const failed = openErrorId === doc.id;
 
-        {collapsible ? (
-          <button
-            type="button"
-            className="pd-legal__show-all"
-            aria-expanded={showAllDocuments}
-            onClick={() => setShowAllDocuments((value) => !value)}
-          >
-            {showAllDocuments
-              ? "Show less"
-              : `Show all ${documents.length}`}
-            <svg
-              className={`pd-legal__chevron${
-                showAllDocuments ? " pd-legal__chevron--up" : ""
-              }`}
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
-        ) : null}
+                    return (
+                      <li key={doc.id}>
+                        {/*
+                          The card is the link, so the whole row is the tap target
+                          and the "View" cue inside it can never be a small thing to
+                          miss. A row without an `href` is a stated fact rather than
+                          a file, so it stays inert and renders no cue at all.
+                        */}
+                        {doc.href ? (
+                          <a
+                            className="pd-legal__card"
+                            href={doc.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            /* Accessible name distinguishes each "View" action. */
+                            aria-label={`View ${name}, ${DOC_KIND_LABELS[kind]}, opens in a new tab`}
+                            onClick={(event) => {
+                              if (!isDeadFragment(doc.href ?? "")) return;
+                              event.preventDefault();
+                              setOpenErrorId(failed ? null : doc.id);
+                            }}
+                          >
+                            <DocumentIcon kind={kind} />
+                            <span className="pd-legal__body">
+                              <span className="pd-legal__name">{name}</span>
+                              <span className="pd-legal__meta">
+                                {metaRest && <span>{metaRest}</span>}
+                                <span className="pd-legal__meta-tag">{typeTag}</span>
+                              </span>
+                            </span>
 
-        {documentsState === "ready" && documents.length === 0 ? (
-          <div className="pd-legal__request">
-            <p className="pd-legal__request-text">
-              Documents available on request
-            </p>
-            <a
-              className="pd-legal__request-btn"
-              href={requestHref}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-              </svg>
-              Request on WhatsApp
-            </a>
+                            {failed ? (
+                              <span className="pd-legal__error" role="alert">
+                                Couldn&rsquo;t open file. Try again
+                              </span>
+                            ) : (
+                              /* Visual cue only — the link's own label is what a
+                                 screen reader gets. */
+                              <span className="pd-legal__view" aria-hidden="true">
+                                View
+                                <svg viewBox="0 0 24 24" focusable="false">
+                                  <path d="M15 3h6v6" />
+                                  <path d="M10 14 21 3" />
+                                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                </svg>
+                              </span>
+                            )}
+                          </a>
+                        ) : (
+                          <div className="pd-legal__card">
+                            <DocumentIcon kind={kind} />
+                            <span className="pd-legal__body">
+                              <span className="pd-legal__name">{name}</span>
+                              <span className="pd-legal__meta">
+                                {metaRest && <span>{metaRest}</span>}
+                                <span className="pd-legal__meta-tag">{typeTag}</span>
+                              </span>
+                            </span>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })
+                )}
+              </ul>
+
+              {collapsible ? (
+                <button
+                  type="button"
+                  className="pd-legal__show-all"
+                  aria-expanded={showAllDocuments}
+                  onClick={() => setShowAllDocuments((value) => !value)}
+                >
+                  {showAllDocuments
+                    ? "Show less"
+                    : `Show all ${documents.length}`}
+                  <svg
+                    className={`pd-legal__chevron${
+                      showAllDocuments ? " pd-legal__chevron--up" : ""
+                    }`}
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+              ) : null}
+
+              {/*
+                A link, not a document, and it says so: the label names what it is
+                and where it applies, which "View build rules" never did.
+              */}
+              <a className="pd-legal__rules" href="#document-build-rules">
+                Read build rules for this layout
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              </a>
+            </div>
+
+            {/* Right column: advocate note (disclaimer) */}
+            <aside className="pd-legal__sidebar" aria-label="Disclaimer">
+              <div className="pd-legal__note">
+                <div className="pd-legal__note-row">
+                  <span className="pd-legal__note-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" focusable="false">
+                      <path d="M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20" />
+                      <path d="M12 16v-4" />
+                      <path d="M12 8h.01" />
+                    </svg>
+                  </span>
+                  <p className="pd-legal__note-text">
+                    Independent advocate review is encouraged.
+                  </p>
+                </div>
+              </div>
+            </aside>
           </div>
         ) : null}
-
-        <div className="pd-legal__extras">
-          {/*
-            A link, not a document, and it says so: the label names what it is
-            and where it applies, which "View build rules" never did.
-          */}
-          <a className="pd-legal__rules" href="#document-build-rules">
-            Read build rules for this layout
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M5 12h14" />
-              <path d="m12 5 7 7-7 7" />
-            </svg>
-          </a>
-
-          {/*
-            The advocate note stands on its own — it is advice about this
-            property's paperwork, not a fact about it. Possession and status are
-            no longer repeated here: the hero already shows possession as a
-            badge, and status is the single word the whole page implies.
-          */}
-          <div className="pd-legal__note">
-            <span className="pd-legal__note-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false">
-                <path d="M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20" />
-                <path d="M12 16v-4" />
-                <path d="M12 8h.01" />
-              </svg>
-            </span>
-            <p className="pd-legal__note-text">
-              Independent advocate review is encouraged.
-            </p>
-          </div>
-        </div>
       </div>
     </section>
   );

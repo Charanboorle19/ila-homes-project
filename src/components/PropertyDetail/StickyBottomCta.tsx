@@ -21,6 +21,7 @@ type StickyBottomCtaProps = {
   /** The enquiry form this bar duplicates. */
   formRef: RefObject<HTMLElement | null>;
   siteVisitHref: string;
+  onScheduleVisit?: (e: React.MouseEvent) => void;
 };
 
 export default function StickyBottomCta({
@@ -28,6 +29,7 @@ export default function StickyBottomCta({
   heroRef,
   formRef,
   siteVisitHref,
+  onScheduleVisit,
 }: StickyBottomCtaProps) {
   const [visible, setVisible] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -192,9 +194,10 @@ export default function StickyBottomCta({
           <a
             className="pd-btn pd-btn--ghost"
             href={siteVisitHref}
+            onClick={onScheduleVisit}
             data-track="ENQUIRY_CLICK"
             data-track-property={property.id}
-            data-track-meta='{"button_location":"sticky_bottom_cta","channel":"email"}'
+            data-track-meta='{"button_location":"sticky_bottom_cta","channel":"form"}'
           >
             Schedule site visit
           </a>

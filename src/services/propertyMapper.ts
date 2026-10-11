@@ -1,4 +1,5 @@
 import type {
+  GalleryItem,
   LifeStageKey,
   LifeStageMatchEntry,
   LifestyleItem,
@@ -10,6 +11,7 @@ import type {
 import {
   type ApiLifeStageFit,
   type ApiPropertyDocument,
+  type ApiPropertyMediaItem,
   type ApiProperty,
 } from "@/services/propertiesService";
 
@@ -319,6 +321,20 @@ function metaText(
   return undefined;
 }
 
+function formatAmenityLabel(raw: string): string {
+  if (!raw || typeof raw !== "string") return "";
+  return raw
+    .trim()
+    .replace(/_+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      if (word.toLowerCase() === "24/7" || word === "24" || word === "7") return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
 /**
  * The development's amenities become the Lifestyle section's points.
  *
@@ -334,7 +350,7 @@ function amenitiesToLifestyle(amenities: string[]): LifestyleItem[] {
   const items: LifestyleItem[] = [];
 
   amenities.forEach((raw, index) => {
-    const caption = typeof raw === "string" ? raw.trim() : "";
+    const caption = formatAmenityLabel(raw);
     if (!caption) return;
     // Case-insensitive dedupe: "Black Top Roads" and "black top roads" are one.
     const key = caption.toLowerCase();
@@ -409,11 +425,228 @@ function verificationRows(
   return rows;
 }
 
+/**
+ * Extracts all property imagery from the API payload (cover_url, images, photos,
+ * gallery, media, and any metadata image arrays) into the GalleryItem[] shape.
+ */
+function extractApiGallery(
+  property: ApiProperty,
+  documents?: PropertyDocument[],
+  mediaItems?: ApiPropertyMediaItem[],
+): GalleryItem[] {
+  const seenPaths = new Set<string>();
+  const items: GalleryItem[] = [];
+
+  const addUrl = (urlCandidate: unknown, label?: string, id?: string) => {
+    if (typeof urlCandidate !== "string") return;
+    const url = urlCandidate.trim();
+    if (!url) return;
+    if (
+      !url.startsWith("http://") &&
+      !url.startsWith("https://") &&
+      !url.startsWith("/")
+    ) {
+      return;
+    }
+    const cleanUrl = url.split("?")[0].toLowerCase();
+    if (
+      cleanUrl.endsWith(".pdf") ||
+      cleanUrl.endsWith(".mp4") ||
+      cleanUrl.endsWith(".webm") ||
+      cleanUrl.endsWith(".mov")
+    ) {
+      return;
+    }
+
+    if (seenPaths.has(cleanUrl)) return;
+    seenPaths.add(cleanUrl);
+
+    const index = items.length + 1;
+    items.push({
+      id: id || `api-img-${index}`,
+      src: url,
+      alt: label?.trim() || `${property.name} photo ${index}`,
+    });
+  };
+
+  const processCandidate = (candidate: unknown, defaultLabel?: string) => {
+    if (!candidate) return;
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((item) => processCandidate(item, defaultLabel));
+            return;
+          }
+        } catch {
+          // not JSON
+        }
+      }
+      if (
+        trimmed.includes(",") &&
+        !trimmed.includes(" ") &&
+        (trimmed.startsWith("http") || trimmed.startsWith("/"))
+      ) {
+        trimmed.split(",").forEach((u) => addUrl(u, defaultLabel));
+        return;
+      }
+      addUrl(trimmed, defaultLabel);
+      return;
+    }
+
+    if (Array.isArray(candidate)) {
+      candidate.forEach((item) => {
+        if (typeof item === "string") {
+          addUrl(item, defaultLabel);
+        } else if (typeof item === "object" && item !== null) {
+          const obj = item as Record<string, unknown>;
+          const url =
+            obj.file_url ??
+            obj.url ??
+            obj.image_url ??
+            obj.imageUrl ??
+            obj.src ??
+            obj.fileUrl ??
+            obj.storage_reference ??
+            obj.storageReference ??
+            obj.path ??
+            obj.link;
+          const alt =
+            typeof obj.name === "string"
+              ? obj.name
+              : typeof obj.alt === "string"
+                ? obj.alt
+                : typeof obj.title === "string"
+                  ? obj.title
+                  : typeof obj.caption === "string"
+                    ? obj.caption
+                    : defaultLabel;
+          addUrl(url, alt as string | undefined, typeof obj.id === "string" ? obj.id : undefined);
+        }
+      });
+      return;
+    }
+
+    if (typeof candidate === "object" && candidate !== null) {
+      const obj = candidate as Record<string, unknown>;
+      const url =
+        obj.file_url ??
+        obj.url ??
+        obj.image_url ??
+        obj.imageUrl ??
+        obj.src ??
+        obj.fileUrl ??
+        obj.storage_reference ??
+        obj.storageReference ??
+        obj.path ??
+        obj.link;
+      const alt =
+        typeof obj.name === "string"
+          ? obj.name
+          : typeof obj.alt === "string"
+            ? obj.alt
+            : typeof obj.title === "string"
+              ? obj.title
+              : typeof obj.caption === "string"
+                ? obj.caption
+                : defaultLabel;
+      addUrl(url, alt as string | undefined, typeof obj.id === "string" ? obj.id : undefined);
+    }
+  };
+
+  // 1. Media items from /media endpoint (primary image source)
+  if (mediaItems && Array.isArray(mediaItems) && mediaItems.length > 0) {
+    const sortedMedia = [...mediaItems].sort((a, b) => {
+      if (a.is_cover && !b.is_cover) return -1;
+      if (!a.is_cover && b.is_cover) return 1;
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
+    for (const m of sortedMedia) {
+      if (m.file_url) {
+        const isVideo =
+          m.file_type?.toLowerCase().startsWith("video/") ||
+          m.file_url.split("?")[0].toLowerCase().endsWith(".mp4") ||
+          m.file_url.split("?")[0].toLowerCase().endsWith(".webm");
+        if (!isVideo) {
+          addUrl(m.file_url, m.name || property.name, m.id);
+        }
+      }
+    }
+  }
+
+  // 2. Cover URL is fallback/secondary
+  if (property.cover_url) {
+    addUrl(property.cover_url, property.name, "cover");
+  }
+
+  // 3. Direct property payload properties
+  const raw = property as Record<string, unknown>;
+  const imageKeys = [
+    "images",
+    "gallery",
+    "photos",
+    "image_urls",
+    "imageUrls",
+    "media",
+    "media_items",
+    "property_images",
+    "project_images",
+    "layout_images",
+    "site_images",
+    "gallery_images",
+    "brochure_images",
+    "banner_images",
+    "hero_images",
+    "elevation_images",
+  ];
+
+  for (const key of imageKeys) {
+    if (raw[key]) {
+      processCandidate(raw[key]);
+    }
+  }
+
+  // 4. Metadata image properties
+  const meta = (property.metadata ?? {}) as Record<string, unknown>;
+  for (const key of imageKeys) {
+    if (meta[key]) {
+      processCandidate(meta[key]);
+    }
+  }
+
+  // 5. Floor plan image if available
+  if (property.floor_plan_url) {
+    const fp = property.floor_plan_url.trim();
+    const cleanFp = fp.split("?")[0].toLowerCase();
+    if (!cleanFp.endsWith(".pdf")) {
+      addUrl(fp, `${property.name} floor plan`);
+    }
+  }
+
+  // 6. Image documents if present
+  if (documents && Array.isArray(documents)) {
+    for (const doc of documents) {
+      if (doc.href) {
+        const isImgType = doc.documentType?.toLowerCase().includes("image");
+        const hasImgExt = /\.(png|jpe?g|webp|gif|avif)$/i.test(doc.href.split("?")[0]);
+        if (isImgType || hasImgExt) {
+          addUrl(doc.href, doc.label || property.name, doc.id);
+        }
+      }
+    }
+  }
+
+  return items;
+}
+
 export function apiPropertyToRecord(
   property: ApiProperty,
   /** Buyer fit from /life-stage-fit and whether it has resolved. */
   lifeStage?: LifeStageSource | null,
   documents?: PropertyDocument[],
+  mediaItems?: ApiPropertyMediaItem[],
 ): PropertyRecord {
   const meta = (property.metadata ?? {}) as Record<string, unknown>;
 
@@ -565,7 +798,7 @@ export function apiPropertyToRecord(
     reraRegistered: Boolean(property.rera_registered),
     corner: false,
     parkFacing: false,
-    features: amenities,
+    features: amenities.map(formatAmenityLabel),
     highwayKm: num(meta.highway_km) ?? 0,
     viewingCount: 0,
     enquiryCount: 0,
@@ -594,11 +827,9 @@ export function apiPropertyToRecord(
     zoom: hasCoordinates ? 13.5 : 11.35,
     timeline: PLACEHOLDER_TIMELINE,
     testimonial: { quote: "", author: "", role: "" },
-    // No cover image means no gallery at all, which falls back to the shared
-    // property photography rather than a stage rendering an empty `src`.
-    gallery: text(property.cover_url)
-      ? [{ id: "cover", src: property.cover_url as string, alt: property.name }]
-      : undefined,
+    // Maps all images published by the API (cover_url, /media items, photos,
+    // gallery, metadata image arrays, image documents) or falls back to shared gallery.
+    gallery: extractApiGallery(property, documents, mediaItems),
     // Undefined rather than an empty list, so a property with no amenities
     // published still gets the shared lifestyle moments instead of a blank
     // section.
@@ -628,7 +859,7 @@ export function apiPropertyToRecord(
         location,
         ...(property.pincode ? [`PIN ${property.pincode}`] : []),
       ],
-      amenities,
+      amenities: amenities.map(formatAmenityLabel),
     },
   };
 }

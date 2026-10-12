@@ -49,6 +49,7 @@ import {
   SATELLITE_SOURCE_ID,
   SATELLITE_TILES_URL,
 } from "@/lib/satelliteTiles";
+import { ILA_API_BASE_URL } from "@/lib/ilaApiConfig";
 
 type FilterKey = "all" | PlotStatus;
 
@@ -56,6 +57,32 @@ type FilterKey = "all" | PlotStatus;
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+
+/**
+ * Plot feature properties the layout search box matches against.
+ *
+ * Every one of these is already mapped from `GET /api/properties/{id}/units` by
+ * `fromApi.ts`, so the search adds no new field to the client contract. The
+ * richer unit fields the API also returns -- `dimensions`, `road_info`,
+ * `plot_colour`, `special_notes`, `is_corner` -- are deliberately absent: they
+ * are not mapped today, so including them here would search for values the
+ * client never receives.
+ *
+ * `plotNo` and `label` carry the plot number, `status` the raw API state and
+ * `statusNorm` the normalised one, so a visitor can type either spelling.
+ */
+const PLOT_SEARCH_FIELDS = [
+  "plotNo",
+  "label",
+  "facing",
+  "sq_yards",
+  "sq_ft",
+  "price",
+  "per_sq_yard_price",
+  "per_sq_ft_price",
+  "status",
+  "statusNorm",
+] as const;
 
 const EMPTY_FC = {
   type: "FeatureCollection" as const,
@@ -1160,9 +1187,9 @@ export default function MapSection() {
         const detail = await fetchPropertyById(propertyId, controller.signal);
         setActivePropertyDetail(detail);
 
-        // Coordinates come from the property detail, so the pin always sits
-        // where the API places the development.
-        const anchor = propertyAnchor(detail);
+        // Coordinates come from the property detail or fallback to the list row
+        const listItem = propertyList.find((item) => item.id === propertyId);
+        const anchor = propertyAnchor(detail) ?? (listItem ? propertyAnchor(listItem) : null);
         setPropertyAnchors((prev) =>
           anchor ? { ...prev, [propertyId]: anchor } : prev,
         );
@@ -1268,9 +1295,23 @@ export default function MapSection() {
   useEffect(() => {
     const controller = new AbortController();
 
+    // The searchable catalogue. Only failures were logged before, so a
+    // successful-but-wrong payload was indistinguishable from a silent one.
+    console.log(
+      `[ILA API] GET ${ILA_API_BASE_URL}/api/properties?status=ALL&page=1&per_page=100`,
+    );
+
     fetchProperties({ status: "ALL", page: 1, perPage: 100, signal: controller.signal })
       .then((result) => {
         if (controller.signal.aborted) return;
+
+        console.log("[ILA API] properties list — response", {
+          returned: result.items.length,
+          total: result.total,
+          totalPages: result.totalPages,
+          items: result.items,
+        });
+
         setPropertyList(result.items);
 
         // Seed pins from the rows that already carry coordinates. This is
@@ -1329,25 +1370,39 @@ export default function MapSection() {
     const byId = new Map<string, MapPin>();
 
     for (const item of propertyList) {
-      const anchor = propertyAnchors[item.id];
+      const anchor = propertyAnchor(item) ?? propertyAnchors[item.id];
       if (!anchor) continue;
       byId.set(item.id, {
         id: item.id,
         name: item.name,
+        location: [item.locality, item.city].filter(Boolean).join(", ") || undefined,
         center: [anchor.longitude, anchor.latitude],
       });
     }
 
     for (const project of projects) {
-      byId.set(project.id, {
-        id: project.id,
-        name: project.name,
-        location: project.location,
-        center: project.center,
-      });
+      if (!byId.has(project.id)) {
+        byId.set(project.id, {
+          id: project.id,
+          name: project.name,
+          location: project.location,
+          center: project.center,
+        });
+      }
     }
 
-    return [...byId.values()];
+    const resultPins = [...byId.values()];
+    if (resultPins.length > 0) {
+      console.info(
+        "[ILA map] Pointers placed from API coordinates:",
+        resultPins.map((p) => ({
+          name: p.name,
+          latitude: p.center[1],
+          longitude: p.center[0],
+        })),
+      );
+    }
+    return resultPins;
   }, [propertyAnchors, propertyList, projects]);
 
   /** Frames every pin, so "reset view" shows the whole portfolio. */
@@ -1494,6 +1549,39 @@ export default function MapSection() {
         .some((field) => field!.toLowerCase().includes(q)),
     );
   }, [propertyList, query]);
+
+  /**
+   * Plot numbers in the open layout that match the search box, or null when
+   * there is nothing to search.
+   *
+   * The development list is hidden while a layout is open, so until this existed
+   * the query only swapped the placeholder and matched nothing. With a layout
+   * open it now narrows the plotted polygons instead.
+   *
+   * Reads the feature properties rather than the `Plot` display records because
+   * the raw values are the searchable ones: `facing` is the API's own
+   * "East  South" before `formatFacing` tidies it, and `plotNo` is the zero
+   * padded number a visitor would actually type. Matching is the same trimmed,
+   * lowercased, substring rule as the property matcher, so the two inputs cannot
+   * disagree about what a query means.
+   */
+  const matchedPlotNumbers = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q || !activeProject) return null;
+
+    const matched = new Set<string>();
+    for (const feature of activeProject.plotsGeo.features) {
+      const properties = (feature.properties ?? {}) as Record<string, unknown>;
+      const haystack = PLOT_SEARCH_FIELDS.map((field) => properties[field])
+        .filter((value) => value != null && value !== "")
+        .join(" ")
+        .toLowerCase();
+
+      if (haystack.includes(q)) matched.add(String(properties.plotNo));
+    }
+
+    return matched;
+  }, [activeProject, query]);
 
   const selectedPlot = useMemo(
     () => activeProject?.plots.find((p) => p.id === selectedId) ?? null,
@@ -2125,7 +2213,8 @@ export default function MapSection() {
     if (!map || !mapReady || !focusId || activeProjectId) return;
 
     const project = projects.find((p) => p.id === focusId);
-    const anchor = propertyAnchors[focusId];
+    const item = propertyList.find((p) => p.id === focusId);
+    const anchor = (item ? propertyAnchor(item) : null) ?? propertyAnchors[focusId];
     const center =
       project?.center ??
       (anchor ? ([anchor.longitude, anchor.latitude] as [number, number]) : null);
@@ -2139,6 +2228,7 @@ export default function MapSection() {
     pins,
     projects,
     propertyAnchors,
+    propertyList,
   ]);
 
   // Load active project layout into shared sources
@@ -2250,26 +2340,56 @@ export default function MapSection() {
     });
   }, [selectedPlot, layoutOpen, mapReady]);
 
+  /**
+   * Narrows the plotted polygons by plot status and by the search box.
+   *
+   * Both predicates must reach all three plot layers, not just the fill:
+   * filtering the fill alone would leave outlines and plot numbers floating
+   * over nothing. They are combined into a single `all` rather than applied in
+   * turn, because a second `setFilter` would overwrite the first instead of
+   * narrowing it, and an inactive predicate is left out entirely rather than
+   * filtered to everything.
+   *
+   * The search predicate tests membership of the resolved plot numbers rather
+   * than doing its own substring test: MapLibre filter expressions have no
+   * case-insensitive matching, so the query is resolved in React where the same
+   * trim/lowercase rule as the property matcher applies.
+   */
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !map.getLayer("estate-plots-fill")) return;
 
-    if (filter === "all") {
+    const predicates: FilterSpecification[] = [];
+
+    if (filter !== "all") {
+      predicates.push(["==", ["get", "statusNorm"], filter]);
+    }
+
+    if (matchedPlotNumbers) {
+      predicates.push([
+        "in",
+        // `plotNo` is a zero padded string, but the expression is guarded so a
+        // numeric value from an older payload still compares correctly.
+        ["to-string", ["get", "plotNo"]],
+        ["literal", Array.from(matchedPlotNumbers)],
+      ]);
+    }
+
+    if (predicates.length === 0) {
       map.setFilter("estate-plots-fill", null);
       map.setFilter("estate-plots-outline", null);
       map.setFilter("estate-plots-label", null);
       return;
     }
 
-    const expression: FilterSpecification = [
-      "==",
-      ["get", "statusNorm"],
-      filter,
-    ];
+    const expression = (
+      predicates.length === 1 ? predicates[0] : ["all", ...predicates]
+    ) as FilterSpecification;
+
     map.setFilter("estate-plots-fill", expression);
     map.setFilter("estate-plots-outline", expression);
     map.setFilter("estate-plots-label", expression);
-  }, [filter, mapReady]);
+  }, [filter, matchedPlotNumbers, mapReady]);
 
   const zoomBy = (delta: number) => {
     const map = mapRef.current;
@@ -2817,6 +2937,73 @@ export default function MapSection() {
                   </div>
                 ) : null}
               </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Desktop plot read-out. The mobile bottom sheet above is md:hidden,
+            so desktop needs its own card or a selected plot has no detail. */}
+        {selectedPlot ? (
+          <div
+            className="pointer-events-auto absolute bottom-3 z-30 hidden w-80 overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_12px_36px_rgba(15,23,42,0.22)] md:block"
+            style={{ left: panelOpen ? DESKTOP_PANEL_RESERVED + 12 : 12 }}
+          >
+            <div className="relative px-3 pt-3 pb-3">
+              <button
+                type="button"
+                aria-label="Close plot details"
+                onClick={() => setSelectedId(null)}
+                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#171717] text-white transition hover:bg-[#333333]"
+              >
+                <CloseIcon className="h-3 w-3" />
+              </button>
+              <div className="pr-9">
+                <div className="flex items-center gap-2">
+                  <h3 className="truncate text-sm font-semibold text-[#171717]">
+                    {selectedPlot.title}
+                  </h3>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wide text-white uppercase ${
+                      selectedPlot.status === "sold"
+                        ? "bg-[#736b60]"
+                        : "bg-[#1f5c45]"
+                    }`}
+                  >
+                    {selectedPlot.status}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs font-medium text-[#3f3a34]">
+                  {selectedPlot.area} · {selectedPlot.price}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-[#5c5348]">
+                  {selectedPlot.location}
+                </p>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/10 pt-3 text-xs text-[#3f3a34]">
+                <div>
+                  <span className="block text-[10px] tracking-wide text-[#756c60] uppercase">
+                    Facing
+                  </span>
+                  <strong className="font-semibold text-[#171717]">
+                    {selectedPlot.facing}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] tracking-wide text-[#756c60] uppercase">
+                    Location
+                  </span>
+                  <strong className="font-semibold text-[#171717]">
+                    {selectedPlot.location}
+                  </strong>
+                </div>
+              </div>
+              <Link
+                href="#contact"
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
+              >
+                Enquire about this plot
+                <ArrowIcon className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </div>
         ) : null}

@@ -1,154 +1,158 @@
-# Property Price Over The Years Graph API
+# Public Property Search API
 
-This endpoint returns the yearly property price trend for a property, using the price_over_the_years column.
+This guide describes the public natural-language property search endpoint and the response fields the frontend can render.
 
 ## Endpoint
 
-GET /api/properties/{property_id}/price-over-the-years
-
-Alternative route aliases:
-
-- GET /api/properties/{property_id}/graph
-- GET /api/properties/{property_id}/price-graph
-
-## Purpose
-
-The API is designed to provide data for a chart that shows how the property price per square yard has changed over years.
-
-It returns:
-
-- the year
-- the price value for that year
-- the yearly change from the previous year
-- the yearly growth percentage
-
-## Example response
-
-{
-  "success": true,
-  "data": [
-    {
-      "year": 2019,
-      "price": 1200,
-      "yearly_change": null,
-      "yearly_growth": null
-    },
-    {
-      "year": 2020,
-      "price": 1450,
-      "yearly_change": 250,
-      "yearly_growth": 20.0
-    },
-    {
-      "year": 2021,
-      "price": 1680,
-      "yearly_change": 230,
-      "yearly_growth": 15.86
-    },
-    {
-      "year": 2022,
-      "price": 1850,
-      "yearly_change": 170,
-      "yearly_growth": 10.12
-    },
-    {
-      "year": 2023,
-      "price": 2100,
-      "yearly_change": 250,
-      "yearly_growth": 13.51
-    }
-  ]
-}
-
-## Meaning of fields
-
-- year: the year for the data point
-- price: price per square yard for that year
-- yearly_change: difference compared to the previous year
-- yearly_growth: percentage change from the previous year
-
-### Example
-
-For 2021:
-
-- previous value = 1450
-- current value = 1680
-- yearly_change = 1680 - 1450 = 230
-- yearly_growth = (230 / 1450) \* 100 = 15.86
-
-## Accepted input format in the database column
-
-The price_over_the_years column can store data in either of these shapes:
-
-### 1) Object map format
-
-{
-  "2019": 1200,
-  "2020": 1450,
-  "2021": 1680
-}
-
-### 2) Array of objects format
-
-[
-  { "year": 2019, "price_per_sq_yard": 1200 },
-  { "year": 2020, "price_per_sq_yard": 1450 },
-  { "year": 2021, "price_per_sq_yard": 1680 }
-]
-
-The API normalizes both into a chart-friendly output.
-
-## Frontend interpretation
-
-The frontend can treat the response as a series of chart points.
-
-### Example for plotting
-
-```js
-const years = data.map((item) => item.year);
-const prices = data.map((item) => item.price);
+```http
+GET /api/search?q={query}&limit={count}
 ```
 
-### Example chart configuration
+The endpoint searches active properties only. It does not search leads, visitors, or users. A bearer token is not required, but the request must resolve to a tenant using its host or tenant-domain header.
 
-```js
-const chartData = {
-  labels: data.map((item) => item.year),
-  datasets: [
-    {
-      label: "Price / sq yard",
-      data: data.map((item) => item.price),
-      borderColor: "#3b82f6",
-      backgroundColor: "rgba(59,130,246,0.2)",
-      tension: 0.3,
-      fill: true,
-    },
-  ],
+- `q` is required, 2-100 characters.
+- `limit` is optional, defaults to `8`, and accepts values from `1` to `20`.
+
+## Frontend Request
+
+Use `URLSearchParams` to encode spaces and other query characters. In this app, `tenantHeaders()` supplies `X-Tenant-Domain` when the API is addressed through a shared platform host.
+
+```ts
+import { API_BASE_URL, tenantHeaders } from "./tenant-api";
+
+type PropertySearchResult = {
+  type: "property";
+  id: string;
+  title: string;
+  subtitle: string;
+  href: string;
+  price: number | null;
+  bedrooms: number | null;
+  property_type: string;
+  location: string | null;
+  nearby_place: string | null;
+  distance_km: number | null;
 };
 
-## Notes
+type PropertySearchResponse = {
+  properties: PropertySearchResult[];
+  recommendations: PropertySearchResult[];
+  no_results_found: boolean;
+  message: string | null;
+};
 
-- The first entry has `null` for `yearly_change` and `yearly_growth` because there is no previous year.
-- The API sorts values by year before returning them to the chart.
-- The endpoint does not require the property to be `ACTIVE` for the graph to work.
+async function searchProperties(query: string, limit = 8) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const response = await fetch(`${API_BASE_URL}/api/search?${params}`, {
+    headers: tenantHeaders(),
+  });
+  const body = await response.json();
 
-## SQL example for testing
+  if (!response.ok) {
+    throw new Error(body?.error?.message ?? "Property search failed.");
+  }
 
-```sql
-UPDATE properties
-SET price_over_the_years = '[
-  {"year": 2019, "price_per_sq_yard": 1200},
-  {"year": 2020, "price_per_sq_yard": 1450},
-  {"year": 2021, "price_per_sq_yard": 1680},
-  {"year": 2022, "price_per_sq_yard": 1850},
-  {"year": 2023, "price_per_sq_yard": 2100}
-]'::jsonb
-WHERE id = 'your-property-id';
+  return body.data as PropertySearchResponse;
+}
+```
 
-Then test:
+Example:
 
-GET /api/properties/your-property-id/price-over-the-years
+```ts
+const results = await searchProperties("2bhk in Tukkuguda");
+```
 
-## Summary
+## Supported Query Patterns
 
-This endpoint gives the frontend everything it needs to draw a trend line or bar chart for the property's price-per-square-yard history over time.
+The parser extracts filters and combines them when possible:
+
+| Query | Interpreted filter |
+| --- | --- |
+| `2bhk in Tukkuguda` | Exactly 2 bedrooms, locality matches Tukkuguda |
+| `2-3 bhk near airport` | 2 to 3 bedrooms and an operational nearby-place match for airport |
+| `3+ bedrooms in Maheshwaram` | At least 3 bedrooms in Maheshwaram |
+| `plots in Tukkuguda` | Plot type and locality |
+| `apartments ready to move` | Apartment type and possession status |
+| `under 50 lakh` | Maximum price of 50 lakh |
+| `30 to 50 lakh` | Price range |
+| `1800 sq ft` | Approximate area range normalized to square feet |
+| `gym in Tukkuguda` | Active property feature and locality, when `gym` matches a feature name/key |
+
+Prices expressed in lakh/lac or crore/cr are normalized to rupees. Area expressed in square yards or gaj is normalized to square feet. A single area value is treated as an approximate range with 10% tolerance.
+
+For `near <place>`, only operational nearby-place records are considered. If property and place coordinates are available, `distance_km` is calculated using Haversine distance. If coordinates are unavailable, the stored nearby-place distance is converted to kilometers and used instead. Results are ordered nearest-first; there is no arbitrary maximum-distance cutoff.
+
+## Response
+
+Successful responses use the standard envelope: the search data is under `data`.
+
+```json
+{
+  "success": true,
+  "data": {
+    "properties": [
+      {
+        "type": "property",
+        "id": "property-uuid",
+        "title": "Tukkuguda Homes",
+        "subtitle": "APARTMENT · ACTIVE · Tukkuguda",
+        "href": "/properties/property-uuid",
+        "price": 6500000,
+        "bedrooms": 2,
+        "property_type": "APARTMENT",
+        "location": "Tukkuguda",
+        "nearby_place": "Rajiv Gandhi International Airport",
+        "distance_km": 8.4
+      }
+    ],
+    "recommendations": [],
+    "no_results_found": false,
+    "message": null
+  }
+}
+```
+
+Fields on each property:
+
+- `title` and `subtitle`: display text for a result row/card.
+- `href`: internal route to open when selected; use it with the frontend router.
+- `price`, `bedrooms`, `property_type`, and `location`: optional display details; render missing values as unavailable.
+- `nearby_place` and `distance_km`: populated for proximity searches; otherwise they are `null`.
+
+Render `properties` as exact matches. If `no_results_found` is true, show the message and render `recommendations` separately as alternatives. The API returns up to five active recommendations, ordered by featured status and then most recently updated.
+
+No-match example:
+
+```json
+{
+  "success": true,
+  "data": {
+    "properties": [],
+    "recommendations": [
+      {
+        "type": "property",
+        "id": "another-property-uuid",
+        "title": "Nearby Active Property",
+        "subtitle": "PLOT · ACTIVE · Tukkuguda",
+        "href": "/properties/another-property-uuid",
+        "price": 4200000,
+        "bedrooms": null,
+        "property_type": "PLOT",
+        "location": "Tukkuguda",
+        "nearby_place": null,
+        "distance_km": null
+      }
+    ],
+    "no_results_found": true,
+    "message": "No exact matches found. Here are 5 other properties you might be interested in."
+  }
+}
+```
+
+`recommendations` contains up to five results; fewer may be returned if fewer active properties exist.
+
+## Errors
+
+- `422`: query is missing, too short/long, or contains an invalid numeric filter.
+- `400` or tenant-resolution errors: tenant host/domain is missing or unknown.
+- `500`: a required search table or column is missing from the selected tenant schema.

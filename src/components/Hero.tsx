@@ -1,8 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SubmitEvent, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { trackEvent } from "@/services/analytics/tracker";
+import {
+  fetchProperties,
+  formatPrice,
+  searchProperties,
+  type PropertySearchResult,
+} from "@/services/propertiesService";
+import { ILA_API_BASE_URL } from "@/lib/ilaApiConfig";
 
 const SEARCH_WORDS = ["location", "area", "properties"] as const;
 
@@ -76,6 +85,39 @@ export default function Hero() {
   const [wordVisible, setWordVisible] = useState(true);
   const [inputFocused, setInputFocused] = useState(false);
 
+  /**
+   * Results popup.
+   *
+   * The hero used to fire an analytics event and scroll to the map, which left
+   * the typed query with nowhere to go — `MapSection` holds its own `query`
+   * state and nothing handed it over. Submitting now reads the catalogue and
+   * shows the response here instead, so the search answers on the page it was
+   * typed on.
+   */
+  const [results, setResults] = useState<PropertySearchResult[] | null>(null);
+  const [recommendations, setRecommendations] = useState<
+    PropertySearchResult[]
+  >([]);
+  const [searchMessage, setSearchMessage] = useState<string | null>(null);
+  const [resultMeta, setResultMeta] = useState<{
+    total: number;
+    searched: string;
+  } | null>(null);
+  const [searchStatus, setSearchStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  /** Guards against a slow response landing after the popup was closed. */
+  const searchAbortRef = useRef<AbortController | null>(null);
+
+  // The hero section is `overflow-hidden`, which would clip an in-tree dialog.
+  // Portalling to <body> makes it a true page-level overlay. A portal needs a
+  // real DOM, so hold off until after the client mount.
+  const [portalReady, setPortalReady] = useState(false);
+
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
   // Lock hero height once on mobile so browser chrome show/hide
   // doesn't reflow object-cover and make the image appear to "jump".
   useEffect(() => {
@@ -147,13 +189,26 @@ export default function Hero() {
     router.push(`/#${PROJECTS_ANCHOR_ID}`);
   };
 
+  const closeResults = () => {
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = null;
+    setResults(null);
+    setRecommendations([]);
+    setSearchMessage(null);
+    setResultMeta(null);
+    setSearchStatus("idle");
+  };
+
+  /**
+   * Submitting a search queries the natural language property search endpoint
+   * `GET /api/search?q={query}&limit=20` and falls back gracefully to client-side
+   * filtered catalogue if the search endpoint is unreachable or query is short.
+   */
   const onSearch = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const trimmed = query.trim();
 
-    // Only a real typed query counts as a search; the animated placeholder
-    // cycles through words and must not register as user intent.
     if (trimmed.length > 0) {
       trackEvent({
         event_type: "PROPERTY_SEARCH",
@@ -166,9 +221,192 @@ export default function Hero() {
       });
     }
 
-    if (scrollToProjects()) return;
-    router.push(`/#${PROJECTS_ANCHOR_ID}`);
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+
+    setSearchStatus("loading");
+    setSearchMessage(null);
+
+    if (trimmed.length >= 2) {
+      console.log(
+        `[hero search] GET ${ILA_API_BASE_URL}/api/search?q=${encodeURIComponent(trimmed)}&limit=20`,
+        { searched: trimmed },
+      );
+
+      searchProperties({
+        query: trimmed,
+        limit: 20,
+        signal: controller.signal,
+      })
+        .then((resp) => {
+          if (controller.signal.aborted) return;
+          console.log("[hero search] search response", resp);
+
+          const matches = resp.properties ?? [];
+          const recs = resp.recommendations ?? [];
+          setResults(matches);
+          setRecommendations(recs);
+          setSearchMessage(resp.message ?? null);
+          setResultMeta({
+            total: matches.length + recs.length,
+            searched: trimmed,
+          });
+          setSearchStatus("ready");
+        })
+        .catch(async (error: unknown) => {
+          if (controller.signal.aborted) return;
+          console.warn(
+            "[hero search] /api/search failed, falling back to catalogue",
+            error,
+          );
+
+          try {
+            const result = await fetchProperties({
+              status: "ALL",
+              page: 1,
+              perPage: 100,
+              signal: controller.signal,
+            });
+            if (controller.signal.aborted) return;
+
+            const q = trimmed.toLowerCase();
+            const matched = result.items.filter((item) =>
+              [
+                item.name,
+                item.property_type,
+                item.slug,
+                item.description,
+                item.locality,
+                item.city,
+              ]
+                .filter(Boolean)
+                .some((field) => field!.toLowerCase().includes(q)),
+            );
+
+            const toSearchResult = (
+              item: (typeof result.items)[number],
+            ): PropertySearchResult => ({
+              type: "property",
+              id: item.id,
+              title: item.name,
+              subtitle:
+                [item.property_type, item.locality, item.city]
+                  .filter(Boolean)
+                  .join(" · ") || "Development",
+              href: `/properties/${item.id}`,
+              price: item.price,
+              bedrooms: null,
+              property_type: item.property_type ?? "Development",
+              location:
+                [item.locality, item.city].filter(Boolean).join(", ") ||
+                item.address ||
+                null,
+              nearby_place: null,
+              distance_km: null,
+            });
+
+            if (matched.length > 0) {
+              setResults(matched.map(toSearchResult));
+              setRecommendations([]);
+              setSearchMessage(null);
+              setResultMeta({
+                total: matched.length,
+                searched: trimmed,
+              });
+            } else {
+              const recs = result.items.slice(0, 5).map(toSearchResult);
+              setResults([]);
+              setRecommendations(recs);
+              setSearchMessage(
+                `No exact matches found for “${trimmed}”. Here are ${recs.length} other developments you might be interested in.`,
+              );
+              setResultMeta({
+                total: recs.length,
+                searched: trimmed,
+              });
+            }
+            setSearchStatus("ready");
+          } catch (fallbackError) {
+            if (controller.signal.aborted) return;
+            console.warn("[hero search] fallback failed", fallbackError);
+            setResults([]);
+            setRecommendations([]);
+            setSearchMessage(null);
+            setResultMeta(null);
+            setSearchStatus("error");
+          }
+        });
+    } else {
+      // Query is empty or 1 character: load all published developments
+      fetchProperties({
+        status: "ALL",
+        page: 1,
+        perPage: 100,
+        signal: controller.signal,
+      })
+        .then((result) => {
+          if (controller.signal.aborted) return;
+          const mapped: PropertySearchResult[] = result.items.map((item) => ({
+            type: "property",
+            id: item.id,
+            title: item.name,
+            subtitle:
+              [item.property_type, item.locality, item.city]
+                .filter(Boolean)
+                .join(" · ") || "Development",
+            href: `/properties/${item.id}`,
+            price: item.price,
+            bedrooms: null,
+            property_type: item.property_type ?? "Development",
+            location:
+              [item.locality, item.city].filter(Boolean).join(", ") ||
+              item.address ||
+              null,
+            nearby_place: null,
+            distance_km: null,
+          }));
+
+          setResults(mapped);
+          setRecommendations([]);
+          setSearchMessage(null);
+          setResultMeta({
+            total: result.total,
+            searched: trimmed,
+          });
+          setSearchStatus("ready");
+        })
+        .catch((err) => {
+          if (controller.signal.aborted) return;
+          console.warn("[hero search] properties list failed", err);
+          setResults([]);
+          setRecommendations([]);
+          setSearchMessage(null);
+          setResultMeta(null);
+          setSearchStatus("error");
+        });
+    }
   };
+
+  // The popup is an overlay over a full-height hero, so the page behind it must
+  // stop scrolling, and Escape has to close it — otherwise a keyboard visitor
+  // can land in a dialog with no way out.
+  useEffect(() => {
+    if (searchStatus === "idle") return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeResults();
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [searchStatus]);
 
   const showAnimatedPlaceholder = !query && !inputFocused;
 
@@ -319,6 +557,293 @@ export default function Hero() {
               </div>
             </div>
       </div>
+
+      {/* Search results dialog.
+          Portalled to <body> so the hero's own `overflow-hidden` cannot clip it.
+          The backdrop is a click target that closes, and Escape closes from the
+          effect above, so the dialog is never a dead end. Results come straight
+          from the API response — the query is not sent to the server, so this
+          is the whole catalogue the endpoint returned, not a filtered subset. */}
+      {portalReady && searchStatus !== "idle"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[300] flex items-start justify-center overflow-y-auto bg-black/65 p-4 backdrop-blur-sm sm:p-6"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Search results"
+              onClick={(event) => {
+                // Only a click on the backdrop itself closes; clicks that start
+                // inside the panel must not bubble out and dismiss it.
+                if (event.target === event.currentTarget) closeResults();
+              }}
+            >
+              <div className="my-4 w-full max-w-2xl overflow-hidden rounded-2xl bg-[#ebe6de] shadow-[0_24px_64px_rgba(0,0,0,0.45)] sm:my-8">
+                <div className="flex items-start justify-between gap-4 border-b border-black/10 bg-white/60 px-5 py-4">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold tracking-[0.22em] text-[#8a6d2f] uppercase">
+                      Search results
+                    </p>
+                    <h2 className="mt-1 truncate text-lg font-bold tracking-tight text-[#0f1114] sm:text-xl">
+                      {resultMeta?.searched
+                        ? `Results for “${resultMeta.searched}”`
+                        : "All developments"}
+                    </h2>
+                    {resultMeta ? (
+                      <p className="mt-0.5 text-xs font-medium text-[#3d434b]">
+                        {resultMeta.total} {resultMeta.total === 1 ? "result" : "results"} found
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={closeResults}
+                    aria-label="Close search results"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/6 text-[#0f1114] transition hover:bg-black/12 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8a6d2f]"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden
+                    >
+                      <path
+                        d="M6 6l12 12M18 6 6 18"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="max-h-[60vh] overflow-y-auto overscroll-contain">
+                  {searchStatus === "loading" ? (
+                    <p className="flex items-center justify-center gap-2 px-5 py-14 text-sm font-medium text-[#3d434b]">
+                      <span className="ila-loader ila-loader--sm" aria-hidden />
+                      Searching developments&hellip;
+                    </p>
+                  ) : null}
+
+                  {searchStatus === "error" ? (
+                    <p className="px-5 py-14 text-center text-sm font-medium text-[#8a5a2b]">
+                      Developments could not be loaded. Please try again shortly.
+                    </p>
+                  ) : null}
+
+                  {searchStatus === "ready" ? (
+                    <>
+                      {/* Highlighted message before the list of data */}
+                      {searchMessage ? (
+                        <div className="border-b border-black/8 bg-gradient-to-r from-[#faf7f2] via-[#f5eee3] to-[#faf7f2] px-5 py-3.5">
+                          <div className="flex items-start gap-3 rounded-xl border border-[#8a6d2f]/35 bg-white/80 p-3.5 shadow-xs ring-1 ring-[#8a6d2f]/20">
+                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#8a6d2f] text-white">
+                              <svg
+                                className="h-3 w-3"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                                aria-hidden
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] font-bold tracking-[0.16em] uppercase text-[#8a6d2f]">
+                                Notice
+                              </p>
+                              <p className="mt-0.5 text-xs font-semibold leading-relaxed text-[#1e2229] sm:text-sm">
+                                {searchMessage}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* No results at all */}
+                      {(results?.length ?? 0) === 0 &&
+                      recommendations.length === 0 ? (
+                        <p className="px-5 py-14 text-center text-sm font-medium text-[#3d434b]">
+                          No developments match your search.
+                        </p>
+                      ) : null}
+
+                      {/* Exact matches list */}
+                      {results && results.length > 0 ? (
+                        <div>
+                          {recommendations.length > 0 ? (
+                            <div className="border-b border-black/6 bg-black/[0.02] px-5 py-2 text-[10px] font-bold tracking-[0.18em] uppercase text-[#8a6d2f]">
+                              Exact Matches ({results.length})
+                            </div>
+                          ) : null}
+                          <ul>
+                            {results.map((item) => {
+                              const priceDisplay = formatPrice(item.price);
+                              return (
+                                <li
+                                  key={item.id}
+                                  className="border-b border-black/8 transition last:border-b-0 hover:bg-black/[0.02]"
+                                >
+                                  <Link
+                                    href={item.href || `/properties/${item.id}`}
+                                    onClick={closeResults}
+                                    className="block px-5 py-4"
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="text-[10px] font-bold tracking-[0.16em] uppercase text-[#8a6d2f]">
+                                          {item.property_type ?? "Development"}
+                                        </p>
+                                        <h3 className="mt-1 text-[15px] font-bold leading-snug wrap-break-word text-[#0f1114]">
+                                          {item.title}
+                                        </h3>
+                                        {item.subtitle &&
+                                        item.subtitle !== item.title ? (
+                                          <p className="mt-0.5 line-clamp-1 text-xs text-[#5c6470]">
+                                            {item.subtitle}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                      {priceDisplay !== "Price on request" ? (
+                                        <span className="shrink-0 rounded-full bg-black/6 px-2.5 py-1 text-xs font-bold whitespace-nowrap text-[#0f1114]">
+                                          {priceDisplay}
+                                        </span>
+                                      ) : null}
+                                    </div>
+
+                                    {item.location ? (
+                                      <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-[#3d434b]">
+                                        <PinIcon className="mt-[0.15em] h-3.5 w-3.5 shrink-0 text-[#8a6d2f]" />
+                                        <span className="min-w-0 wrap-break-word">
+                                          {item.location}
+                                        </span>
+                                      </p>
+                                    ) : null}
+
+                                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                                      {item.bedrooms != null ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-[#e8f2ec] px-2.5 py-1 text-[11px] font-bold text-[#1f5c45]">
+                                          {item.bedrooms} BHK
+                                        </span>
+                                      ) : null}
+                                      {item.nearby_place ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-black/6 px-2.5 py-1 text-[11px] font-semibold text-[#3d434b]">
+                                          <PinIcon className="h-3 w-3 text-[#8a6d2f]" />
+                                          {item.distance_km != null
+                                            ? `${item.distance_km} km from `
+                                            : "Near "}
+                                          {item.nearby_place}
+                                        </span>
+                                      ) : null}
+                                      <span className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-[#8a6d2f]">
+                                        View property
+                                        <ArrowIcon className="h-3 w-3" />
+                                      </span>
+                                    </div>
+                                  </Link>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      {/* Recommendations list */}
+                      {recommendations.length > 0 ? (
+                        <div>
+                          <div className="border-b border-black/6 bg-black/[0.02] px-5 py-2 text-[10px] font-bold tracking-[0.18em] uppercase text-[#8a6d2f]">
+                            {results && results.length > 0
+                              ? `Alternative Recommendations (${recommendations.length})`
+                              : `Recommended Properties (${recommendations.length})`}
+                          </div>
+                          <ul>
+                            {recommendations.map((item) => {
+                              const priceDisplay = formatPrice(item.price);
+                              return (
+                                <li
+                                  key={item.id}
+                                  className="border-b border-black/8 transition last:border-b-0 hover:bg-black/[0.02]"
+                                >
+                                  <Link
+                                    href={item.href || `/properties/${item.id}`}
+                                    onClick={closeResults}
+                                    className="block px-5 py-4"
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <span className="text-[10px] font-bold tracking-[0.16em] uppercase text-[#8a6d2f]">
+                                            {item.property_type ??
+                                              "Development"}
+                                          </span>
+                                          <span className="rounded-full bg-[#8a6d2f]/10 px-2 py-0.5 text-[9px] font-bold tracking-wider uppercase text-[#8a6d2f]">
+                                            Recommended
+                                          </span>
+                                        </div>
+                                        <h3 className="mt-1 text-[15px] font-bold leading-snug wrap-break-word text-[#0f1114]">
+                                          {item.title}
+                                        </h3>
+                                        {item.subtitle &&
+                                        item.subtitle !== item.title ? (
+                                          <p className="mt-0.5 line-clamp-1 text-xs text-[#5c6470]">
+                                            {item.subtitle}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                      {priceDisplay !== "Price on request" ? (
+                                        <span className="shrink-0 rounded-full bg-black/6 px-2.5 py-1 text-xs font-bold whitespace-nowrap text-[#0f1114]">
+                                          {priceDisplay}
+                                        </span>
+                                      ) : null}
+                                    </div>
+
+                                    {item.location ? (
+                                      <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-[#3d434b]">
+                                        <PinIcon className="mt-[0.15em] h-3.5 w-3.5 shrink-0 text-[#8a6d2f]" />
+                                        <span className="min-w-0 wrap-break-word">
+                                          {item.location}
+                                        </span>
+                                      </p>
+                                    ) : null}
+
+                                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                                      {item.bedrooms != null ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-[#e8f2ec] px-2.5 py-1 text-[11px] font-bold text-[#1f5c45]">
+                                          {item.bedrooms} BHK
+                                        </span>
+                                      ) : null}
+                                      {item.nearby_place ? (
+                                        <span className="inline-flex items-center gap-1 rounded-full bg-black/6 px-2.5 py-1 text-[11px] font-semibold text-[#3d434b]">
+                                          <PinIcon className="h-3 w-3 text-[#8a6d2f]" />
+                                          {item.distance_km != null
+                                            ? `${item.distance_km} km from `
+                                            : "Near "}
+                                          {item.nearby_place}
+                                        </span>
+                                      ) : null}
+                                      <span className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-[#8a6d2f]">
+                                        View property
+                                        <ArrowIcon className="h-3 w-3" />
+                                      </span>
+                                    </div>
+                                  </Link>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </section>
   );
 }

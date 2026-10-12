@@ -376,7 +376,7 @@ export function estateFromUnitsApi(options: {
   // The pin follows the property's own coordinates rather than the geometry
   // centroid, so it always sits where the API says the development is.
   const anchor = options.anchor ?? null;
-  if (anchor && anchorIsPlausible(anchor, estate.center)) {
+  if (anchor) {
     return { ...base, center: [anchor.longitude, anchor.latitude] };
   }
 

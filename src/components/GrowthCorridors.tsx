@@ -8,19 +8,46 @@ import {
   Map as MapLibreMap,
   Marker,
   setWorkerUrl,
+  type FilterSpecification,
+  type MapMouseEvent,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import {
-  fetchLocations,
-  hasCoordinates,
-  type LocationRecord,
-} from "@/services/locationsService";
+import type { PlotStatus } from "@/data/plots";
 import {
   fetchProperties,
-  fetchPropertiesByLocation,
+  fetchPropertyTeaserUnits,
+  fetchPropertyUnits,
   formatPrice,
-  type PropertySummary,
+  propertyAnchor,
+  type PropertyListItem,
 } from "@/services/propertiesService";
+import {
+  formatSizeRange,
+  summariseAvailablePlots,
+  type PropertyPlotFacts,
+} from "@/lib/propertySummary";
+import {
+  estateFromUnitsApi,
+  estatePlaceholderFromProperty,
+} from "@/data/projects/fromApi";
+import type { EstateProject } from "@/data/projects";
+import {
+  addEstateLayers,
+  highlightPlot,
+  LAYOUT_LAYER_IDS,
+  LAYOUT_MAX_ZOOM,
+  setLayoutData,
+  SHOW_ESTATE_GEOJSON,
+  syncLayoutRaster,
+} from "@/lib/estateLayers";
+import { loadLayoutPreviewRaster } from "@/lib/layoutPreview";
+import { loadLayoutRaster } from "@/lib/layoutTiff";
+import {
+  SATELLITE_ATTRIBUTION,
+  SATELLITE_LAYER_ID,
+  SATELLITE_SOURCE_ID,
+  SATELLITE_TILES_URL,
+} from "@/lib/satelliteTiles";
 import { trackEvent } from "@/services/analytics/tracker";
 
 /**
@@ -28,8 +55,49 @@ import { trackEvent } from "@/services/analytics/tracker";
  * locality has 1-2 properties, so with per_page=10 there is only one page and
  * page=2 would always come back empty.
  */
-const PROPERTIES_PAGE = 1;
-const PROPERTIES_PER_PAGE = 10;
+const PROPERTIES_PER_PAGE = 100;
+
+/** Plot states the layout filter can show. Mirrors `MapSection`. */
+type FilterKey = "all" | PlotStatus;
+
+/**
+ * Simultaneous teaser requests.
+ *
+ * Held at two rather than higher: each call walks every page of a large units
+ * payload, and this project talks to its API through a free tunnel that drops
+ * connections under parallel load. Two keeps the cards filling in steadily
+ * without crowding out the section's own requests.
+ */
+const TEASER_CONCURRENCY = 2;
+
+/** Loading phase of a single card's teaser request. */
+type PlotFactsState = "loading" | "ready" | "error";
+
+/**
+ * A property without a usable coordinate pair cannot be pinned or framed.
+ *
+ * `PropertyListItem` types both fields as optional numbers, so this guard also
+ * narrows the row for the map, which is then free to read them as numbers.
+ */
+function hasCoordinates(
+  item: PropertyListItem,
+): item is PropertyListItem & { latitude: number; longitude: number } {
+  const anchor = propertyAnchor(item);
+  if (!anchor) return false;
+  item.latitude = anchor.latitude;
+  item.longitude = anchor.longitude;
+  return true;
+}
+
+/**
+ * The locality a property is filed under, for the card subtitle.
+ *
+ * `GET /api/properties` carries `locality` and `city`, but either can be null,
+ * and a property with neither still needs a place on the card and the map.
+ */
+function localityOf(item: PropertyListItem): string {
+  return (item.locality || item.city || "Hyderabad").trim();
+}
 
 /**
  * The worker URL is set inside the map effect rather than at module scope.
@@ -59,7 +127,7 @@ const GOLD = "#c9a84c";
 const SECTION_EYEBROW = "South Hyderabad \u00b7 Growth corridors";
 
 /**
- * Fallback viewport, used only until the API locations arrive so the map has
+ * Fallback viewport, used only until the API properties arrive so the map has
  * somewhere sensible to open. Not displayed as content.
  */
 const DEFAULT_VIEW = { longitude: 78.44, latitude: 17.17, zoom: 11.35 };
@@ -112,6 +180,20 @@ function ExpandIcon({ className = "" }: { className?: string }) {
   );
 }
 
+/** Close glyph, identical to `MapSection`'s `CloseIcon`. */
+function CloseIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M6 6l12 12M18 6L6 18"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function PinIcon({ className = "" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -127,30 +209,6 @@ function PinIcon({ className = "" }: { className?: string }) {
 }
 
 /**
- * The address with the locality name removed from the front.
- *
- * The card already shows the name as its heading, and the API address tends to
- * open with that same name -- so the unedited address showed it twice on one
- * card. Only a leading occurrence is dropped; a name appearing later in the
- * string is part of the address and is kept. Falls back to the original address
- * if stripping would leave nothing behind.
- */
-function addressWithoutName(location: LocationRecord): string | null {
-  const address = location.address?.trim();
-  if (!address) return null;
-
-  const name = location.name?.trim();
-  if (!name) return address;
-
-  const stripped = address.toLowerCase().startsWith(name.toLowerCase())
-    ? address.slice(name.length)
-    : address;
-
-  const cleaned = stripped.replace(/^[\s,\u00b7\u2022|/\\-\u2013\u2014]+/, "").trim();
-  return cleaned || address;
-}
-
-/**
  * The description, unless it merely restates the address.
  *
  * The API writes descriptions such as "Locality in Maheshwaram Mandal,
@@ -159,15 +217,15 @@ function addressWithoutName(location: LocationRecord): string | null {
  * either string contains the other, compared on letters and digits only so
  * punctuation and casing differences cannot hide a duplicate.
  */
-function descriptionIfDistinct(location: LocationRecord): string | null {
-  const description = location.description?.trim();
+function descriptionIfDistinct(property: PropertyListItem): string | null {
+  const description = property.description?.trim();
   if (!description) return null;
 
   const normalise = (value: string) =>
     value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
   const fromDescription = normalise(description);
-  const fromAddress = normalise(location.address ?? "");
+  const fromAddress = normalise(property.address ?? "");
   if (!fromAddress) return description;
 
   return fromDescription.includes(fromAddress) || fromAddress.includes(fromDescription)
@@ -178,6 +236,12 @@ function descriptionIfDistinct(location: LocationRecord): string | null {
 export default function GrowthCorridors() {
   const [mapMode, setMapMode] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * The element wrapped around the map, watched so map mode can scroll it into
+   * view. Not the map container itself -- that is sized to fill this frame, so
+   * it carries no margin to offset the sticky nav by.
+   */
+  const mapFrameRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   /**
    * One marker per mappable locality, keyed by location id.
@@ -195,7 +259,7 @@ export default function GrowthCorridors() {
    *
    * The selection can change from three places -- the strip itself, a map
    * marker, or opening the map from a card -- so the follow behaviour is keyed
-   * on `activeLocationId` rather than on any one control.
+   * on `activePropertyId` rather than on any one control.
    */
   const sidebarListRef = useRef<HTMLUListElement | null>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -223,35 +287,33 @@ export default function GrowthCorridors() {
    */
   const applyInteractionsRef = useRef<(() => void) | null>(null);
 
-  // Every visible value comes from GET /api/locations. No local demo data.
-  const [locations, setLocations] = useState<LocationRecord[]>([]);
-  const [locationsState, setLocationsState] = useState<
+  // Every visible value comes from GET /api/properties. No local demo data.
+  const [items, setItems] = useState<PropertyListItem[]>([]);
+  const [listState, setListState] = useState<
     "loading" | "ready" | "error"
   >("loading");
   const [page, setPage] = useState(1);
-  const [perPage] = useState(20);
+  const [perPage] = useState(PROPERTIES_PER_PAGE);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [hasNextPage, setHasNextPage] = useState(false);
-  const [hasPreviousPage, setHasPreviousPage] = useState(false);
-  const [activeLocationId, setActiveLocationId] = useState<string | null>(null);
+  const [activePropertyId, setActivePropertyId] = useState<string | null>(null);
 
-  /** Property count per locality id, keyed off the real properties response. */
-  const [propertyCounts, setPropertyCounts] = useState<Record<string, number>>(
+  const [plotFacts, setPlotFacts] = useState<Record<string, PropertyPlotFacts>>(
     {},
   );
+  const [plotFactsState, setPlotFactsState] = useState<
+    Record<string, PlotFactsState>
+  >({});
   /**
-   * True once the counts request has settled either way.
-   *
-   * A locality with no properties has no entry in `propertyCounts`, so the map
-   * cannot tell "zero properties" from "not loaded yet" on its own -- without
-   * this the count line was skipped on some cards and not others, leaving an
-   * empty gap above those cards' buttons.
+   * Results are cached by property id so a re-render never refetches, and the
+   * in-flight set keeps the worker pool from queueing the same id twice when a
+   * dependency changes mid-request.
    */
-  const [countsLoaded, setCountsLoaded] = useState(false);
+  const plotFactsCacheRef = useRef<Map<string, PropertyPlotFacts>>(new Map());
+  const plotFactsPendingRef = useRef<Set<string>>(new Set());
 
   /**
-   * Zero-based index of the locality card currently in view.
+   * Zero-based index of the property card currently in view.
    *
    * The card row is a horizontal carousel below `lg`, so this is derived from
    * its scroll offset rather than set by a click -- the visitor moves between
@@ -259,121 +321,165 @@ export default function GrowthCorridors() {
    */
   const [activeCardIndex, setActiveCardIndex] = useState(0);
 
-  // Properties for the locality opened via the card's Explore action.
-  const [properties, setProperties] = useState<PropertySummary[]>([]);
-  const [propertiesTotal, setPropertiesTotal] = useState(0);
-  const [propertiesState, setPropertiesState] = useState<
+  /**
+   * Which end of the card row is in view, so each arrow disables itself at the
+   * end it would move past rather than scrolling into empty space.
+   */
+  const [cardScroll, setCardScroll] = useState({ atStart: true, atEnd: false });
+
+  /**
+   * The estate whose master plan is open on the map.
+   *
+   * Selection goes straight to the layout: tapping a marker, a sidebar row or a
+   * card's Map button loads that property's units and draws it, so there is no
+   * second click to reach the plots. `MapSection` presents the same layers.
+   */
+  const [activeProject, setActiveProject] = useState<EstateProject | null>(null);
+  const [layoutStatus, setLayoutStatus] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
+  /** Plot highlighted on the open layout, addressed by its estate plot id. */
+  const [selectedPlotId, setSelectedPlotId] = useState<string | null>(null);
+  /** Which plot states the layout is showing, as in `MapSection`. */
+  const [plotFilter, setPlotFilter] = useState<FilterKey>("all");
+  const layoutAbortRef = useRef<AbortController | null>(null);
 
-  const [propertiesSlug, setPropertiesSlug] = useState<string | null>(null);
+  /**
+   * Latest layout opener, for the marker effect.
+   *
+   * The marker effect is declared above `openPropertyLayout`, and a marker click
+   * needs it. Routing through a ref keeps the effect off that declaration --
+   * naming it directly would be a temporal-dead-zone error -- and keeps the
+   * effect's dependency list honest, since re-running it on every render would
+   * tear down and rebuild every marker.
+   */
+  const openLayoutRef = useRef<(item: PropertyListItem) => void>(
+    () => undefined,
+  );
 
+  /**
+   * Live mirrors of the open estate and its property id.
+   *
+   * The map's click handler is registered once, on `load`, and closes over
+   * nothing -- re-registering it on every selection change would mean tearing
+   * the listener down and rebuilding it. These refs give it current values
+   * without that churn.
+   */
+  const activeProjectRef = useRef<EstateProject | null>(null);
+  const activePropertyIdRef = useRef<string | null>(null);
+
+  // No dependency list: the refs must track the current values on every render,
+  // and an effect without deps is the only way to say that. It runs after paint
+  // and before any click can reach the handler.
   useEffect(() => {
-    if (!propertiesSlug) return;
+    activeProjectRef.current = activeProject;
+    activePropertyIdRef.current = activePropertyId;
+  });
 
-    const controller = new AbortController();
+  const layoutOpen = activeProject !== null;
 
-    fetchPropertiesByLocation({
-      locationSlug: propertiesSlug,
-      page: PROPERTIES_PAGE,
-      perPage: PROPERTIES_PER_PAGE,
-      signal: controller.signal,
-    })
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        setProperties(result.items);
-        setPropertiesTotal(result.total);
-        setPropertiesState("ready");
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        setPropertiesState("error");
-        console.warn("[properties] fetch failed", error);
-      });
+  /**
+   * Plot state tallies for the open layout.
+   *
+   * Counted from the loaded estate rather than the card teaser, so the filter
+   * totals and the polygons on the map can never disagree.
+   */
+  const plotCounts = useMemo(() => {
+    const plots = activeProject?.plots ?? [];
+    return {
+      all: plots.length,
+      available: plots.filter((plot) => plot.status === "available").length,
+      sold: plots.filter((plot) => plot.status === "sold").length,
+    };
+  }, [activeProject]);
 
-    return () => controller.abort();
-  }, [propertiesSlug]);
+  const plotFilters: { key: FilterKey; label: string; count: number }[] = [
+    { key: "all", label: "All", count: plotCounts.all },
+    { key: "available", label: "Available", count: plotCounts.available },
+    { key: "sold", label: "Sold", count: plotCounts.sold },
+  ];
 
-  /** Returns from the property list to the locality list. */
-  const closeProperties = () => {
-    setPropertiesSlug(null);
-    setPropertiesState("idle");
-    setProperties([]);
-    setPropertiesTotal(0);
+  /** The tapped plot, or null when none is selected or the layout closed. */
+  const selectedPlot = useMemo(
+    () =>
+      activeProject?.plots.find((plot) => plot.id === selectedPlotId) ?? null,
+    [activeProject, selectedPlotId],
+  );
+
+  /**
+   * Moves the card row one card's width. The step is measured from the rendered
+   * row rather than recomputed from the width rules, for the same reason the
+   * counter does it: the card is `80vw` below `sm` and a fixed width above it,
+   * so a hardcoded stride would drift at the breakpoints.
+   */
+  const scrollCards = (direction: 1 | -1) => {
+    const row = cardRowRef.current;
+    if (!row) return;
+    const first = row.firstElementChild as HTMLElement | null;
+    if (!first) return;
+    const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
+    row.scrollBy({
+      left: direction * (first.offsetWidth + gap),
+      behavior: "smooth",
+    });
   };
 
   useEffect(() => {
     const controller = new AbortController();
 
-    fetchLocations({ page, perPage, signal: controller.signal })
-      .then((result) => {
-        if (controller.signal.aborted) return;
-
-        setLocations(result.items);
-        setTotal(result.total);
-        setTotalPages(result.totalPages);
-        setHasNextPage(result.hasNextPage);
-        setHasPreviousPage(result.hasPreviousPage);
-        setLocationsState("ready");
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        setLocationsState("error");
-        console.warn("[locations] fetch failed", error);
-      });
-
-    return () => controller.abort();
-  }, [page, perPage]);
-
-  // No cleanup effect needed: activeLocation is derived from the current page's
-  // items, so a selection from a previous page simply stops resolving.
-
-  /**
-   * Property counts shown under each locality's address.
-   *
-   * One request covers the whole page: every row of `GET /api/properties`
-   * carries `location_id`, so the counts are grouped here instead of issuing
-   * one request per card -- which on a free tunnel this project talks to means
-   * dropped connections rather than a slow section.
-   *
-   * `per_page` is capped at 100, so a tenant with more properties than that
-   * would show undercounts rather than a wrong-but-plausible total.
-   */
-  useEffect(() => {
-    if (locations.length === 0) return;
-
-    const controller = new AbortController();
-
     fetchProperties({
       status: "ALL",
-      page: 1,
-      perPage: 100,
+      page,
+      perPage,
       signal: controller.signal,
     })
       .then((result) => {
         if (controller.signal.aborted) return;
 
-        const counts: Record<string, number> = {};
-        for (const property of result.items) {
-          if (!property.location_id) continue;
-          counts[property.location_id] =
-            (counts[property.location_id] ?? 0) + 1;
-        }
-        setPropertyCounts(counts);
-        setCountsLoaded(true);
+        console.log(
+          `[ILA API] GET /api/properties?page=${page}&per_page=${perPage} — response`,
+          result,
+        );
+
+        setItems(result.items);
+        setTotal(result.total);
+        setTotalPages(result.totalPages);
+        setListState("ready");
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        // Counts are supporting detail, not the card's content: a failure here
-        // leaves the card exactly as it was before the line existed.
-        console.warn("[locations] property counts unavailable", error);
-        // Settled regardless -- every card still shows its fallback line rather
-        // than a hole where the count should be.
-        setCountsLoaded(true);
+        setListState("error");
+        console.warn("[properties] fetch failed", error);
       });
 
     return () => controller.abort();
-  }, [locations]);
+  }, [page, perPage]);
+
+  // No cleanup effect needed: the active property is derived from the current
+  // page's items, so a selection from a previous page simply stops resolving.
+
+  /**
+   * Properties that have plots available come first; "Coming soon" ones go
+   * last.
+   *
+   * `Array.prototype.sort` is stable, so the API's own ordering survives inside
+   * each group -- the list is partitioned, not reshuffled. The figure comes from
+   * the row's own `available_plots_count`, and a property that does not publish
+   * one counts as having plots rather than as empty, so an unpublished figure
+   * can never push a live development to the back.
+   */
+  const sortedItems = useMemo(() => {
+    const rank = (item: PropertyListItem) =>
+      (item.available_plots_count ?? 1) > 0 ? 0 : 1;
+    return [...items].sort((a, b) => rank(a) - rank(b));
+  }, [items]);
+
+  const mappableItems = useMemo(() => items.filter(hasCoordinates), [items]);
+
+  const activeItem = useMemo(
+    () => items.find((item) => item.id === activePropertyId) ?? null,
+    [items, activePropertyId],
+  );
 
   /**
    * Keeps the carousel counter in step with the scroll position.
@@ -390,14 +496,29 @@ export default function GrowthCorridors() {
 
     const syncToScroll = () => {
       const first = row.firstElementChild as HTMLElement | null;
-      if (!first || locations.length === 0) return;
+      if (!first || sortedItems.length === 0) return;
 
       const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
       const advance = first.offsetWidth + gap;
       if (advance <= 0) return;
 
       const index = Math.round(row.scrollLeft / advance);
-      setActiveCardIndex(Math.min(Math.max(index, 0), locations.length - 1));
+      setActiveCardIndex(Math.min(Math.max(index, 0), sortedItems.length - 1));
+
+      // Tolerance of 1px absorbs sub-pixel scroll offsets at fractional zoom
+      // widths, which otherwise leave the end arrow permanently enabled.
+      //
+      // This runs on every scroll event during a smooth scroll, so the previous
+      // value is returned unchanged unless an arrow actually flips -- that is
+      // what stops the arrows re-rendering the row on each frame.
+      const maxScroll = row.scrollWidth - row.clientWidth;
+      setCardScroll((previous) => {
+        const atStart = row.scrollLeft <= 1;
+        const atEnd = row.scrollLeft >= maxScroll - 1;
+        return previous.atStart === atStart && previous.atEnd === atEnd
+          ? previous
+          : { atStart, atEnd };
+      });
     };
 
     // Run once immediately: a restored scroll position or a page change can
@@ -410,7 +531,7 @@ export default function GrowthCorridors() {
       row.removeEventListener("scroll", syncToScroll);
       window.removeEventListener("resize", syncToScroll);
     };
-  }, [locations]);
+  }, [sortedItems]);
 
   /**
    * Keeps the selected locality visible in the map-mode strip.
@@ -424,7 +545,7 @@ export default function GrowthCorridors() {
    */
   useEffect(() => {
     const list = sidebarListRef.current;
-    if (!list || !mapMode || !activeLocationId) return;
+    if (!list || !mapMode || !activePropertyId) return;
 
     const selected = list.querySelector<HTMLElement>('[aria-pressed="true"]');
     selected?.scrollIntoView({
@@ -432,13 +553,21 @@ export default function GrowthCorridors() {
       block: "nearest",
       inline: "center",
     });
-  }, [activeLocationId, mapMode]);
+  }, [activePropertyId, mapMode]);
 
   /** Page changes set the loading state here so the effect stays pure. */
   const goToPage = (next: number) => {
-    setLocationsState("loading");
+    setListState("loading");
     setPage(Math.min(Math.max(1, next), Math.max(1, totalPages)));
   };
+
+  /**
+   * Derived from the page and the page count rather than stored, so they cannot
+   * drift from the two numbers they are made of -- the previous flags were set
+   * from a response that no longer reports them.
+   */
+  const hasNextPage = page < totalPages;
+  const hasPreviousPage = page > 1;
 
   const goToNextPage = () => {
     if (hasNextPage) goToPage(page + 1);
@@ -448,35 +577,98 @@ export default function GrowthCorridors() {
     if (hasPreviousPage) goToPage(page - 1);
   };
 
-  const activeLocation = useMemo(
-    () => locations.find((item) => item.id === activeLocationId) ?? null,
-    [locations, activeLocationId],
-  );
-
-  const mappableLocations = useMemo(
-    () => locations.filter(hasCoordinates),
-    [locations],
+  /**
+   * The ids of the properties the visible cards describe.
+   *
+   * A card is a property here, exactly as it is in `MapSection`, so every listed
+   * property gets its own pin, its own card and its own units read. Joined and
+   * sorted into one string because the effect below needs a dependency that
+   * does not change identity on every render.
+   */
+  const cardPropertyIdsKey = useMemo(
+    () => items.map((item) => item.id).sort().join("|"),
+    [items],
   );
 
   /**
-   * Localities that have listings come first; "Coming soon" ones go last.
+   * One teaser request per visible card, at a capped concurrency.
    *
-   * `Array.prototype.sort` is stable, so the API's own ordering survives
-   * inside each group -- the list is partitioned, not reshuffled. Until the
-   * counts request answers there is nothing to partition on, so the list is
-   * returned untouched and the cards appear in API order. When it settles the
-   * grid reorders once, which will move the carousel's scroll position; the
-   * counter effect re-reads `scrollLeft` on that same render.
+   * A card is a property, so this is one units read per property — the same set
+   * `MapSection` pins. Results are cached by property id, and the in-flight set
+   * is cleared on cleanup so a request cut short by a dependency change is
+   * retried rather than left stuck on "loading".
    */
-  const sortedLocations = useMemo(() => {
-    if (!countsLoaded) return locations;
+  useEffect(() => {
+    const ids = cardPropertyIdsKey ? cardPropertyIdsKey.split("|") : [];
+    const queue = ids.filter(
+      (id) =>
+        !plotFactsCacheRef.current.has(id) &&
+        !plotFactsPendingRef.current.has(id),
+    );
+    if (queue.length === 0) return;
 
-    return [...locations].sort((a, b) => {
-      const aComingSoon = (propertyCounts[a.id] ?? 0) > 0 ? 0 : 1;
-      const bComingSoon = (propertyCounts[b.id] ?? 0) > 0 ? 0 : 1;
-      return aComingSoon - bComingSoon;
-    });
-  }, [locations, propertyCounts, countsLoaded]);
+    const controller = new AbortController();
+
+    const worker = async () => {
+      while (queue.length > 0) {
+        const propertyId = queue.shift();
+        if (!propertyId || controller.signal.aborted) return;
+
+        plotFactsPendingRef.current.add(propertyId);
+        setPlotFactsState((previous) => ({
+          ...previous,
+          [propertyId]: "loading",
+        }));
+
+        try {
+          const units = await fetchPropertyTeaserUnits(
+            propertyId,
+            controller.signal,
+          );
+          if (controller.signal.aborted) return;
+
+          console.log(
+            `[ILA API] GET /api/properties/${propertyId}/units?limit=all&offset={n} — response`,
+            { units: units.length, items: units },
+          );
+
+          const facts = summariseAvailablePlots(units);
+          plotFactsCacheRef.current.set(propertyId, facts);
+          setPlotFacts((previous) => ({ ...previous, [propertyId]: facts }));
+          setPlotFactsState((previous) => ({
+            ...previous,
+            [propertyId]: "ready",
+          }));
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          // A failed teaser is not an empty one: the card drops its stats and
+          // keeps the locality name, so nothing claims there is nothing here.
+          console.warn("[corridors] plot summary failed", propertyId, error);
+          setPlotFactsState((previous) => ({
+            ...previous,
+            [propertyId]: "error",
+          }));
+        } finally {
+          // On abort the cleanup below has already cleared the set, and deleting
+          // here would also drop an id the next run has re-queued.
+          if (!controller.signal.aborted) {
+            plotFactsPendingRef.current.delete(propertyId);
+          }
+        }
+      }
+    };
+
+    const workers = Array.from(
+      { length: Math.min(TEASER_CONCURRENCY, queue.length) },
+      () => worker(),
+    );
+
+    return () => {
+      controller.abort();
+      plotFactsPendingRef.current.clear();
+      void Promise.all(workers);
+    };
+  }, [cardPropertyIdsKey]);
 
   /**
    * Pagination only earns its place once there is more than one page. Every
@@ -488,38 +680,16 @@ export default function GrowthCorridors() {
   const hasMultiplePages = total > perPage;
 
   /**
-   * True when every locality in the list carries the same, "active" status.
-   *
-   * The status pill repeats the word on each card, so when all of them are
-   * active it is noise that competes with the name. The pill is then dropped
-   * from every card; on a mixed list it stays and carries each card's own
-   * value, which is the only way to tell them apart.
-   */
-  const allLocationsActive = locations.every(
-    (item) => item.status?.toUpperCase() === "ACTIVE",
-  );
-
-  // Opens the map centred on the first usable location rather than a hardcoded
-  // point, so there is no demo coordinate anywhere in this section.
-  // Opens the map, defaulting to the first mappable locality so the map and
-  // marker are never empty.
-  const openMap = (location?: LocationRecord) => {
-    const next = location ?? mappableLocations[0] ?? null;
-    setActiveLocationId(next ? next.id : null);
-    setMapMode(true);
-  };
-
-  /**
    * Opens the map with nothing selected, for the header's "View all on map".
    *
-   * `openMap()` would highlight the first locality, which is wrong for an
-   * action that claims to show all of them. The map effect still falls back to
-   * the first mappable location for its centre, but with no active location
-   * there is no marker highlight and no overlay card -- the whole layout reads
-   * as available.
+   * Selecting one property would be wrong for an action that claims to show all
+   * of them, so this only clears the selection and enters map mode: no layout
+   * is loaded, and the layout effect frames the whole portfolio. With nothing
+   * highlighted there is no marker emphasis and no overlay card -- the whole
+   * layout reads as available.
    */
   const openMapAll = () => {
-    setActiveLocationId(null);
+    closePropertyLayout();
     setMapMode(true);
   };
 
@@ -570,6 +740,30 @@ export default function GrowthCorridors() {
     if (!mapMode) setMapFullscreen(false);
   }, [mapMode]);
 
+  /**
+   * Brings the map into view when map mode opens.
+   *
+   * List mode and map mode are very different heights on a phone: the heading
+   * and the card carousel are replaced by the locality strip and a 58vh map. The
+   * scroll offset the visitor was holding when they tapped a card's Map button
+   * therefore no longer points at the map, and can settle on the locality card
+   * directly below it -- the one carrying the property's cover image, which then
+   * reads as "the map is showing a photo". Desktop is a side-by-side layout
+   * where both modes are about one screen tall, so the offset survives the swap
+   * and this never surfaced there.
+   *
+   * `scroll-margin-top` on the frame keeps the sticky nav from landing on top of
+   * the map's first row. Scrolling the container instead would be wrong: it is
+   * sized to fill the frame and so offers nothing to offset against.
+   */
+  useEffect(() => {
+    if (!mapMode) return;
+    mapFrameRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, [mapMode]);
+
   useEffect(() => {
     if (!mapMode || !mapContainerRef.current || mapRef.current) return;
 
@@ -583,7 +777,7 @@ export default function GrowthCorridors() {
     ).toString();
     setWorkerUrl(workerUrl);
 
-    const focus = activeLocation ?? mappableLocations[0] ?? null;
+    const focus = activeItem ?? mappableItems[0] ?? null;
     const center =
       focus && hasCoordinates(focus)
         ? ([focus.longitude, focus.latitude] as [number, number])
@@ -597,16 +791,23 @@ export default function GrowthCorridors() {
     // ODbL-licensed and requires visible credit; `compact` keeps it to the
     // small collapsed form, sized down by `.maplibregl-ctrl-attrib` in
     // globals.css.
-    const map = new MapLibreMap({
-      container,
-      style: MAP_STYLE,
-      center,
-      zoom: focus && hasCoordinates(focus) ? LOCATION_ZOOM : DEFAULT_VIEW.zoom,
-      attributionControl: { compact: true },
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchPitch: false,
-    });
+    let map: MapLibreMap;
+    try {
+      map = new MapLibreMap({
+        container,
+        style: MAP_STYLE,
+        center,
+        zoom: focus && hasCoordinates(focus) ? LOCATION_ZOOM : DEFAULT_VIEW.zoom,
+        attributionControl: { compact: true },
+        dragRotate: false,
+        pitchWithRotate: false,
+        touchPitch: false,
+      });
+    } catch (error) {
+      console.error("[ILA map] unable to initialize growth corridors map", error);
+      setMapError(true);
+      return;
+    }
 
     mapRef.current = map;
 
@@ -733,18 +934,100 @@ export default function GrowthCorridors() {
     applyInteractions();
     mobileQuery.addEventListener("change", applyInteractions);
 
-    // A style or worker failure leaves an empty canvas with no visual signal,
-    // which is indistinguishable from "still loading". Surface it instead.
+    // Fatal style, worker or WebGL failures leave an unrecoverable canvas.
+    // Tile 404s and network hiccups are non-fatal and should not blank out the map.
     map.on("error", (event) => {
       console.error("[ILA map] growth corridors map error", event.error);
-      if (!mapReadyRef.current) setMapError(true);
+      const err = event.error;
+      const isTileError =
+        (event as { dataType?: string }).dataType === "tile" ||
+        (event as { sourceDataType?: string }).sourceDataType === "tile" ||
+        (err &&
+          typeof err === "object" &&
+          "status" in err &&
+          (err as { status?: number }).status === 404);
+      if (isTileError) return;
+
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String(err.message)
+          : "";
+      const isFatal =
+        message.includes("WebGL") ||
+        message.includes("style") ||
+        message.includes("worker") ||
+        message.includes("Failed to initialize");
+
+      if (isFatal && !mapReadyRef.current) {
+        setMapError(true);
+      }
     });
 
     map.on("load", () => {
+      // Satellite imagery, hidden until a layout is open. MapLibre paints in
+      // insertion order, so this must be added *before* the estate layers --
+      // added after, the raster covers every plot and the layout is invisible.
+      map.addSource(SATELLITE_SOURCE_ID, {
+        type: "raster",
+        tiles: [SATELLITE_TILES_URL],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: SATELLITE_ATTRIBUTION,
+      });
+      map.addLayer({
+        id: SATELLITE_LAYER_ID,
+        type: "raster",
+        source: SATELLITE_SOURCE_ID,
+        layout: { visibility: "none" },
+        paint: { "raster-fade-duration": 0 },
+      });
+
+      // Estate layers, added once and hidden, on top of the basemap.
+      addEstateLayers(map);
+
+      // A plot is only meaningful once a layout is open, so the click is read
+      // from the live layer rather than registered up front -- the layer does not
+      // exist yet at map construction.
+      map.on("click", (event: MapMouseEvent) => {
+        const feature = map.queryRenderedFeatures(event.point, {
+          layers: ["estate-plots-fill"],
+        })[0];
+        const id = feature?.properties?.id as string | undefined;
+        if (!id) return;
+
+        // The source is repointed when the layout changes, but the click can
+        // still land on geometry the map has not repainted yet. Resolving the id
+        // against the live estate rejects anything that is not currently drawn.
+        const plot = activeProjectRef.current?.plots.find(
+          (candidate) => candidate.id === id,
+        );
+        if (!plot) return;
+
+        setSelectedPlotId(plot.id);
+
+        trackEvent({
+          event_type: "MAP_MARKER_CLICK",
+          property_id: activePropertyIdRef.current ?? undefined,
+          metadata: {
+            plot_id: plot.id,
+            property_id: activePropertyIdRef.current ?? undefined,
+            section_type: "growth_corridors",
+          },
+        });
+      });
+      map.on("mouseenter", "estate-plots-fill", () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "estate-plots-fill", () => {
+        map.getCanvas().style.cursor = "";
+      });
+
       mapReadyRef.current = true;
       setMapReady(true);
       setMapError(false);
       map.resize();
+      window.requestAnimationFrame(() => map.resize());
+      window.setTimeout(() => map.resize(), 150);
     });
 
     /**
@@ -756,22 +1039,34 @@ export default function GrowthCorridors() {
      * late layout, the mobile URL bar collapsing, orientation, and the desktop
      * sidebar appearing. Mirrors the handling in `MapSection`.
      */
+    const resizeMap = () => {
+      map.resize();
+    };
+
     const resizeObserver =
       typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => map.resize())
+        ? new ResizeObserver(() => resizeMap())
         : null;
     resizeObserver?.observe(container);
 
-    const onWindowResize = () => map.resize();
+    const onWindowResize = () => resizeMap();
     const onOrientationChange = () => {
-      window.setTimeout(() => map.resize(), 120);
+      window.setTimeout(() => resizeMap(), 120);
     };
 
     window.addEventListener("resize", onWindowResize);
     window.addEventListener("orientationchange", onOrientationChange);
-    window.requestAnimationFrame(() => map.resize());
+    window.requestAnimationFrame(() => resizeMap());
+    const initialResizeTimer = window.setTimeout(() => {
+      resizeMap();
+      window.requestAnimationFrame(() => resizeMap());
+    }, 100);
 
     return () => {
+      window.clearTimeout(initialResizeTimer);
+      // A layout request outlives the map that asked for it, so it is cancelled
+      // here rather than being left to resolve against a removed map.
+      layoutAbortRef.current?.abort();
       clearTouchListeners();
       mobileQuery.removeEventListener("change", applyInteractions);
       applyInteractionsRef.current = null;
@@ -790,7 +1085,137 @@ export default function GrowthCorridors() {
   }, [mapMode]);
 
   /**
-   * Keeps a marker on the map for every mappable locality, marks the selected
+   * Draws the open estate and frames it.
+   *
+   * Mirrors `MapSection`: the polygons go into the shared sources, every estate
+   * layer flips to visible together, and the camera fits the layout rather than
+   * the portfolio. Plot geometries span a couple of hundred metres, so the
+   * `LAYOUT_MAX_ZOOM` ceiling lands on a close read of the plan.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !map.getLayer("estate-plots-fill")) return;
+
+    setLayoutData(map, activeProject);
+
+    for (const layerId of LAYOUT_LAYER_IDS) {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(
+          layerId,
+          "visibility",
+          activeProject && SHOW_ESTATE_GEOJSON ? "visible" : "none",
+        );
+      }
+    }
+
+    syncLayoutRaster(map, activeProject?.layoutRaster, Boolean(activeProject));
+
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
+    if (!activeProject) {
+      // Back to the portfolio: frame every property again.
+      const bounds = new LngLatBounds();
+      let hasAny = false;
+      for (const item of mappableItems) {
+        if (!hasCoordinates(item)) continue;
+        bounds.extend([item.longitude, item.latitude]);
+        hasAny = true;
+      }
+      if (hasAny) {
+        map.fitBounds(bounds, { padding: isMobile ? 32 : 64, maxZoom: DEFAULT_VIEW.zoom, duration: 900 });
+      }
+      return;
+    }
+
+    const { bounds } = activeProject;
+    map.fitBounds(
+      new LngLatBounds(
+        [bounds.minLng, bounds.minLat],
+        [bounds.maxLng, bounds.maxLat],
+      ),
+      { padding: isMobile ? 32 : 60, maxZoom: LAYOUT_MAX_ZOOM, duration: 900 },
+    );
+  }, [activeProject, mapReady, mappableItems]);
+
+  /**
+   * A layout is read against the ground it sits on, so the basemap switches to
+   * satellite while a plan is open and back to the vector style when it closes.
+   * Only visibility changes, so nothing is re-requested unless it is on screen.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !map.getLayer(SATELLITE_LAYER_ID)) return;
+    map.setLayoutProperty(
+      SATELLITE_LAYER_ID,
+      "visibility",
+      layoutOpen ? "visible" : "none",
+    );
+  }, [layoutOpen, mapReady]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !layoutOpen) return;
+    highlightPlot(map, selectedPlotId, Boolean(activeProject?.layoutRaster));
+  }, [selectedPlotId, layoutOpen, mapReady, activeProject?.layoutRaster]);
+
+  /**
+   * Hides plots the visitor filtered out.
+   *
+   * The filter has to reach all three plot layers, not just the fill: hiding the
+   * fill alone would leave outlines and plot numbers floating over nothing. The
+   * filter is cleared rather than left applied, because the next layout's plots
+   * carry their own statuses and would inherit the old filter.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !map.getLayer("estate-plots-fill")) return;
+
+    const layers = [
+      "estate-plots-fill",
+      "estate-plots-outline",
+      "estate-plots-label",
+    ];
+
+    if (plotFilter === "all") {
+      for (const layerId of layers) map.setFilter(layerId, null);
+      return;
+    }
+
+    const expression: FilterSpecification = [
+      "==",
+      ["get", "statusNorm"],
+      plotFilter,
+    ];
+    for (const layerId of layers) map.setFilter(layerId, expression);
+  }, [plotFilter, mapReady, layoutOpen]);
+
+  /**
+   * Brings a tapped plot into view.
+   *
+   * The estate fit frames the whole development, which on a large plan leaves
+   * plots too small to judge individually, so a selection eases in. The floor
+   * only ever zooms in -- never out -- so re-selecting a plot never pulls the
+   * visitor back off a closer view they chose themselves.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !layoutOpen || !selectedPlot) return;
+    if (
+      !Number.isFinite(selectedPlot.lng) ||
+      !Number.isFinite(selectedPlot.lat)
+    ) {
+      return;
+    }
+
+    map.easeTo({
+      center: [selectedPlot.lng, selectedPlot.lat],
+      zoom: Math.max(map.getZoom(), 16.8),
+      duration: 800,
+    });
+  }, [selectedPlot, layoutOpen, mapReady]);
+
+  /**
+   * Keeps a marker on the map for every mappable property, marks the selected
    * one, and frames or zooms depending on how the map was opened.
    *
    * Markers are created once and then only have their active class toggled, so
@@ -798,8 +1223,12 @@ export default function GrowthCorridors() {
    * than interpolating into `innerHTML`, which would parse the API's name as
    * markup.
    *
+   * The open property's own marker is dropped while its layout is up — the plan
+   * sits exactly where the marker was, so leaving it there puts a pin in the
+   * middle of the estate.
+   *
    * "View all on map" leaves nothing selected, so the view frames every
-   * locality; opening from a card selects that locality and zooms to it.
+   * property; opening from a card selects that property and opens its layout.
    */
   useEffect(() => {
     const map = mapRef.current;
@@ -807,11 +1236,14 @@ export default function GrowthCorridors() {
 
     const seen = new Set<string>();
 
-    for (const location of mappableLocations) {
-      if (!hasCoordinates(location)) continue;
-      seen.add(location.id);
+    for (const item of mappableItems) {
+      if (!hasCoordinates(item)) continue;
+      // The open layout covers its own property's marker; leaving it would put
+      // a pin in the middle of the estate.
+      if (layoutOpen && item.id === activePropertyId) continue;
+      seen.add(item.id);
 
-      let marker = markersRef.current.get(location.id);
+      let marker = markersRef.current.get(item.id);
 
       if (!marker) {
         const el = document.createElement("div");
@@ -819,89 +1251,179 @@ export default function GrowthCorridors() {
         el.innerHTML =
           '<span class="ila-corridor-marker__dot"></span><span class="ila-corridor-marker__label"></span>';
         const label = el.querySelector(".ila-corridor-marker__label");
-        if (label) label.textContent = location.name;
+        if (label) label.textContent = item.name;
 
-        el.addEventListener("click", () => setActiveLocationId(location.id));
+        // A marker opens the layout directly, exactly like the sidebar row and
+        // the card's Map button.
+        el.addEventListener("click", () => openLayoutRef.current(item));
 
         marker = new Marker({ element: el, anchor: "bottom" })
-          .setLngLat([location.longitude, location.latitude])
+          .setLngLat([item.longitude, item.latitude])
           .addTo(map);
 
-        markersRef.current.set(location.id, marker);
+        markersRef.current.set(item.id, marker);
       }
 
       marker
         .getElement()
         ?.classList.toggle(
           "ila-corridor-marker--active",
-          location.id === activeLocationId,
+          !layoutOpen && item.id === activePropertyId,
         );
     }
 
-    // Drop markers for localities no longer in the response.
+    // Drop markers for properties no longer in the response, and for the one
+    // whose layout is currently covering its position.
     for (const [id, marker] of markersRef.current) {
       if (seen.has(id)) continue;
       marker.remove();
       markersRef.current.delete(id);
     }
+  }, [
+    activeItem,
+    activePropertyId,
+    layoutOpen,
+    mapReady,
+    mapMode,
+    mappableItems,
+  ]);
 
-    if (!activeLocation) {
-      // Nothing selected: frame every locality rather than opening on one.
-      const bounds = new LngLatBounds();
-      let hasAny = false;
-      for (const location of mappableLocations) {
-        if (!hasCoordinates(location)) continue;
-        bounds.extend([location.longitude, location.latitude]);
-        hasAny = true;
-      }
+  /**
+   * Opens a property's layout and switches the section into map mode in one
+   * step, so the visitor never lands on an empty basemap first.
+   */
+  const openPropertyAndMap = (item: PropertyListItem) => {
+    setMapMode(true);
+    void openPropertyLayout(item);
+  };
 
-      if (hasAny) {
-        map.fitBounds(bounds, {
-          padding: 64,
-          maxZoom: DEFAULT_VIEW.zoom,
-          duration: 900,
-        });
-      }
-      return;
-    }
-
-    if (!hasCoordinates(activeLocation)) return;
-
-    map.easeTo({
-      center: [activeLocation.longitude, activeLocation.latitude],
-      zoom: LOCATION_ZOOM,
-      duration: 900,
-    });
-  }, [activeLocation, mapReady, mapMode, mappableLocations]);
-
-  const selectLocation = (location: LocationRecord) => {
-    setActiveLocationId(location.id);
+  const selectProperty = (item: PropertyListItem) => {
+    setActivePropertyId(item.id);
 
     trackEvent({
       event_type: "MAP_MARKER_CLICK",
+      property_id: item.id,
       metadata: {
-        location_id: location.id,
-        location_slug: location.slug,
+        location_id: item.id,
+        property_name: item.name,
         section_type: "growth_corridors",
       },
     });
-
-    // Fetch the locality's properties and show them in place of the list.
-    setPropertiesState("loading");
-    setPropertiesSlug(location.slug);
   };
 
   /**
-   * Leaves the map and shows this locality's properties.
+   * Opens a property's master plan straight onto the map.
    *
-   * The map has no listing of its own, so this reuses the card view's flow
-   * rather than building a second one: `selectLocation` loads the properties
-   * and tracks the click, and the map is closed so the result is actually
-   * visible.
+   * Reads the full units payload -- geometry, layout extent and the plan image
+   * URLs -- rather than the trimmed teaser read the cards use, because drawing
+   * the layout needs all three. Same endpoint, so the section's two-call budget
+   * is unchanged.
+   *
+   * A previous selection is aborted rather than raced, so tapping a second
+   * marker mid-load cannot leave the first layout on screen.
    */
-  const viewProperties = (location: LocationRecord) => {
-    selectLocation(location);
-    setMapMode(false);
+  const openPropertyLayout = async (item: PropertyListItem) => {
+    layoutAbortRef.current?.abort();
+    const controller = new AbortController();
+    layoutAbortRef.current = controller;
+
+    selectProperty(item);
+    setLayoutStatus("loading");
+    setSelectedPlotId(null);
+    // Each layout carries its own plot statuses, so a filter carried over from
+    // the previous one would silently hide plots on arrival.
+    setPlotFilter("all");
+    setActiveProject(null);
+
+    const anchor = hasCoordinates(item)
+      ? { latitude: item.latitude, longitude: item.longitude }
+      : null;
+    const layoutName = item.name;
+    const layoutLocation = localityOf(item);
+
+    try {
+      const { units, layoutPreviewUrl, tifUrl, layoutCords } =
+        await fetchPropertyUnits(item.id, controller.signal);
+      if (controller.signal.aborted) return;
+
+      if (units.length === 0) {
+        // No survey geometry yet. The property still gets the camera, framed on
+        // its own coordinates, so the visitor lands on the right place.
+        setActiveProject(
+          anchor
+            ? estatePlaceholderFromProperty({
+                propertyId: item.id,
+                name: layoutName,
+                location: layoutLocation,
+                anchor,
+              })
+            : null,
+        );
+        setLayoutStatus("ready");
+        return;
+      }
+
+      const estate = estateFromUnitsApi({
+        propertyId: item.id,
+        name: layoutName,
+        location: layoutLocation,
+        anchor,
+        layoutCords,
+        unitsJson: units,
+      });
+
+      setActiveProject(estate);
+      setLayoutStatus("ready");
+
+      // The plan image is attached after the polygons are on the map, so a slow
+      // or failed download never delays the layout itself.
+      if (layoutCords && (layoutPreviewUrl || tifUrl)) {
+        void (async () => {
+          const useTiff = Boolean(tifUrl);
+          const raster = await (useTiff
+            ? loadLayoutRaster({
+                propertyId: item.id,
+                tifUrl: tifUrl as string,
+                cords: layoutCords,
+                signal: controller.signal,
+              })
+            : loadLayoutPreviewRaster({
+                propertyId: item.id,
+                previewUrl: layoutPreviewUrl as string,
+                cords: layoutCords,
+                signal: controller.signal,
+              }));
+          if (controller.signal.aborted || !raster) return;
+          setActiveProject((current) =>
+            current && current.id === item.id
+              ? { ...current, layoutRaster: raster }
+              : current,
+          );
+        })();
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.warn("[corridors] layout load failed", item.id, error);
+      setLayoutStatus("error");
+      setActiveProject(null);
+    }
+  };
+
+  /** Drops the master plan and returns the map to the portfolio view. */
+  const closePropertyLayout = () => {
+    layoutAbortRef.current?.abort();
+    layoutAbortRef.current = null;
+    setActiveProject(null);
+    setLayoutStatus("idle");
+    setSelectedPlotId(null);
+    setPlotFilter("all");
+    setActivePropertyId(null);
+  };
+
+  // Bound after both exist, so the marker effect can call the current one
+  // without depending on it.
+  openLayoutRef.current = (item) => {
+    void openPropertyLayout(item);
   };
 
   /**
@@ -919,13 +1441,13 @@ export default function GrowthCorridors() {
    * Map detail card content, resolved once per render.
    *
    * `detail` drops a description that merely repeats the address.
-   * `directionsUrl` is null for a locality with no usable coordinates, which
-   * is also why the marker cannot exist for it.
+   * `directionsUrl` is null for a property with no usable coordinates, which is
+   * also why the marker cannot exist for it.
    */
-  const detail = activeLocation ? descriptionIfDistinct(activeLocation) : null;
+  const detail = activeItem ? descriptionIfDistinct(activeItem) : null;
   const directionsUrl =
-    activeLocation && hasCoordinates(activeLocation)
-      ? `https://www.google.com/maps/dir/?api=1&destination=${activeLocation.latitude},${activeLocation.longitude}`
+    activeItem && hasCoordinates(activeItem)
+      ? `https://www.google.com/maps/dir/?api=1&destination=${activeItem.latitude},${activeItem.longitude}`
       : null;
 
   return (
@@ -962,22 +1484,23 @@ export default function GrowthCorridors() {
           content. `--nav-h` keeps the bottom clear of the fixed nav.
 
           Left-aligned: the column starts from the left edge rather than floating in
-          the middle of a wide screen. The `max-w-7xl` cap (1280px) stays, so
-          the leftover space falls on the right only -- the two views share this
-          container, which is what makes the sidebar and card row line up when
-          the user switches.
+          the middle of a wide screen. It used to stop at `max-w-7xl` (1280px);
+          that cap is now gone so the card row can fill the viewport, and the
+          heading's own `max-w-xl` keeps the type block at its intended measure
+          without the cap.
 
           The nav is `sticky`, not fixed, so it stays in flow and this height is
           `100svh` minus the nav -- the section ends flush with the viewport
           bottom rather than reserving space for an overlay. List mode keeps a
-          generous top and a small bottom, handing the extra height to the grid
-          so all seven localities and the map tile fit without scrolling.
+          generous top and a small bottom, so the grid can settle rather than
+          being squeezed against the viewport edges.
 
-          Map mode drops the `max-w-7xl` cap so the map takes the full width
-          available rather than stopping at the cap and leaving a dead strip on
-          the right. The left gutter (`px-6 sm:px-10`) is unchanged, so the
-          sidebar still starts on the same line as the card view's heading and
-          grid even though the two views now end at different edges. */}
+          // The `max-w-7xl` cap is gone, so the card row can use the viewport the way
+          // the map already does. At 1280px it left six cards ~176px each --
+          // too narrow for a three-column stat row -- so they overflowed and
+          // the last one was clipped at the container edge. Full width fits
+          // them. The heading keeps its own `max-w-xl`, so it does not sprawl;
+          // only the space to its right is reclaimed. */}
       <div
         className={
           mapMode
@@ -987,7 +1510,7 @@ export default function GrowthCorridors() {
               // to fill it and let the map take what is left.
               ? "content-slot relative flex w-full flex-1 flex-col"
               : "content-slot relative w-full px-6 sm:px-10 lg:flex lg:min-h-[calc(100svh-var(--nav-h))] lg:flex-col"
-            : "content-slot relative w-full max-w-7xl px-6 py-16 sm:px-10 sm:py-24 lg:flex lg:min-h-[calc(100svh-var(--nav-h))] lg:flex-col lg:justify-center lg:pt-10 lg:pb-6 xl:pt-12"
+            : "content-slot relative w-full px-6 py-16 sm:px-10 sm:py-24 lg:flex lg:min-h-[calc(100svh-var(--nav-h))] lg:flex-col lg:justify-center lg:pt-10 lg:pb-6 xl:pt-12"
         }
       >
         {!mapMode ? (
@@ -1007,13 +1530,12 @@ export default function GrowthCorridors() {
                 </h2>
               </div>
 
-              {/* Desktop only -- on mobile the same count and the carousel
-                  counter sit above the card row instead. */}
-              {locations.length > 0 ? (
-                <div className="mt-6 hidden items-center gap-5 lg:flex lg:shrink-0">
+              {/* Visible from 560px up per spec; on small mobile each card carries its own map action */}
+              {items.length > 0 ? (
+                <div className="mt-6 hidden items-center gap-5 sm:flex lg:shrink-0">
                   <p className="text-[13px] font-medium text-[#4a5060]">
-                    {locations.length}{" "}
-                    {locations.length === 1 ? "locality" : "localities"}
+                    {items.length}{" "}
+                    {items.length === 1 ? "development" : "developments"}
                   </p>
                   <button
                     type="button"
@@ -1029,191 +1551,147 @@ export default function GrowthCorridors() {
               ) : null}
             </header>
 
-            {propertiesSlug ? (
-              <div className="mt-8" aria-live="polite">
-                <button
-                  type="button"
-                  onClick={closeProperties}
-                  className="inline-flex items-center gap-2 rounded-full bg-[#0f1114] px-4 py-2.5 text-[10px] font-semibold tracking-[0.14em] text-white uppercase transition hover:bg-[#2a2e38]"
-                >
-                  &larr; Back to localities
-                </button>
-
-                <p className="mt-5 text-[10px] font-semibold tracking-[0.18em] text-[#8A6A1F] uppercase">
-                  Properties in {locations.find((l) => l.slug === propertiesSlug)?.name ?? propertiesSlug}
-                </p>
-
-                {propertiesState === "loading" ? (
-                  <p className="mt-3 inline-flex items-center gap-2 text-sm text-[#4a5060]">
-                    <span className="ila-loader ila-loader--sm" aria-hidden />
-                    Loading properties&hellip;
-                  </p>
-                ) : null}
-
-                {propertiesState === "error" ? (
-                  <p className="mt-3 text-sm text-[#4a5060]">
-                    Properties are unavailable right now. Please try again shortly.
-                  </p>
-                ) : null}
-
-                {propertiesState === "ready" && properties.length === 0 ? (
-                  <p className="mt-3 text-sm text-[#4a5060]">
-                    No properties listed in this locality yet.
-                  </p>
-                ) : null}
-
-                {properties.length > 0 ? (
-                  <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {properties.map((property) => (
-                      <li key={property.id}>
-                        <Link
-                          href={`/properties/${property.id}`}
-                          data-track="PROPERTY_VIEW"
-                          data-track-property={property.id}
-                          data-track-meta={`{"source":"growth_corridors","location_slug":"${propertiesSlug}"}`}
-                          className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#1b1d22] p-5 transition duration-300 hover:-translate-y-0.5 hover:border-[#c9a84c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a84c]"
-                        >
-                          {/* Property cover image from the location-filtered properties
-                              response. Only rendered when the API supplies
-                              one. */}
-                          {property.cover_url ? (
-                            <div aria-hidden className="absolute inset-0 z-0">
-                              <Image
-                                src={property.cover_url}
-                                alt=""
-                                fill
-                                sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-                                unoptimized
-                                onError={(event) => {
-                                event.currentTarget.parentElement?.style.setProperty(
-                                  "display",
-                                  "none",
-                                );
-                              }}
-                                className="object-cover"
-                              />
-                              <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/62 to-black/45" />
-                            </div>
-                          ) : null}
-
-                          <div className="relative z-10 flex flex-1 flex-col">
-                            <div className="flex items-start justify-between gap-2">
-                              <h3 className="text-base font-semibold tracking-tight text-white">
-                                {property.name}
-                              </h3>
-                              {property.property_type ? (
-                                <span className="shrink-0 rounded-full bg-white/20 px-2 py-1 text-[9px] font-semibold tracking-[0.12em] text-white uppercase">
-                                  {property.property_type}
-                                </span>
-                              ) : null}
-                            </div>
-
-                            {property.description ? (
-                              <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-white/85">
-                                {property.description}
-                              </p>
-                            ) : null}
-
-                            <div className="mt-auto flex items-end justify-between gap-2 border-t border-white/20 pt-4">
-                              <span className="text-[9px] font-semibold tracking-[0.16em] text-white/70 uppercase">
-                                Price
-                              </span>
-                              <span className="shrink-0 text-base font-semibold text-[#c9a84c]">
-                                {formatPrice(property.price)}
-                              </span>
-                            </div>
-
-                            <span className="mt-3 inline-flex items-center gap-1.5 text-[9px] font-semibold tracking-[0.12em] text-white uppercase transition group-hover:gap-2.5">
-                              View details
-                              <ArrowIcon className="h-3 w-3" />
-                            </span>
-                          </div>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-
-                {propertiesState === "ready" ? (
-                  <p className="mt-4 text-[10px] font-semibold tracking-[0.18em] text-[#4a5060] uppercase">
-                    Showing {properties.length} of {propertiesTotal} properties
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {!propertiesSlug && locationsState === "loading" ? (
+            {listState === "loading" ? (
               <p className="mt-8 inline-flex items-center gap-2 text-sm text-[#4a5060]">
                 <span className="ila-loader ila-loader--sm" aria-hidden />
-                Loading localities&hellip;
+                Loading developments&hellip;
               </p>
             ) : null}
 
-            {!propertiesSlug && locationsState === "error" ? (
+            {listState === "error" ? (
               <p className="mt-8 text-sm text-[#4a5060]">
-                Localities are unavailable right now. Please try again shortly.
+                Developments are unavailable right now. Please try again shortly.
               </p>
             ) : null}
 
-            {!propertiesSlug && locationsState === "ready" && locations.length === 0 ? (
+            {listState === "ready" && items.length === 0 ? (
               <p className="mt-8 text-sm text-[#4a5060]">
-                No localities to show right now.
+                No developments to show right now.
               </p>
             ) : null}
 
-            {!propertiesSlug && locations.length > 0 ? (
+            {items.length > 0 ? (
               <>
-                {/* Count on the left, carousel position on the right. The old
+                {/* Count on the left, position and arrows on the right. The old
                     "Showing 7 of 7 localities &middot; Page 1 of 1" repeated itself
                     and asserted a page number for a carousel that does not
-                    paginate. */}
+                    paginate.
+
+                    The arrows are desktop-only because that is the breakpoint
+                    where the row holds more cards than fit: below `lg` the row
+                    is a touch carousel and swiping is the expected gesture, so
+                    buttons would be a second way of doing the same thing. */}
                 <div className="mt-4 flex items-center justify-between gap-3">
                   <p className="text-[13px] font-medium text-[#4a5060]">
-                    {locations.length}{" "}
-                    {locations.length === 1 ? "locality" : "localities"}
+                    {items.length}{" "}
+                    {items.length === 1 ? "development" : "developments"}
                   </p>
-                  <p className="text-[13px] font-medium tabular-nums text-[#4a5060] lg:hidden">
-                    {activeCardIndex + 1} / {locations.length}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <p className="text-[13px] font-medium tabular-nums text-[#4a5060]">
+                      {activeCardIndex + 1} / {items.length}
+                    </p>
+                    <div className="hidden items-center gap-2 lg:flex">
+                      <button
+                        type="button"
+                        onClick={() => scrollCards(-1)}
+                        disabled={cardScroll.atStart}
+                        aria-label="Previous developments"
+                        className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 bg-white text-[#0f1114] transition hover:border-[#8A6A1F] hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        <ArrowIcon className="h-3.5 w-3.5 rotate-180" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scrollCards(1)}
+                        disabled={cardScroll.atEnd}
+                        aria-label="Next developments"
+                        className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 bg-white text-[#0f1114] transition hover:border-[#8A6A1F] hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-35"
+                      >
+                        <ArrowIcon className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Location cards -- all fields from the API response.
-                    mt-8 matches the heading-to-meta gap above; the row used
-                    to sit at mt-3, which read as a tighter break between two
-                    blocks that belong together. */}
+                {/* Property cards -- one per property, the same set MapSection
+                    pins, on one horizontal line at every breakpoint.
+
+                    This used to become a `grid-cols-3` / `grid-cols-4` grid at
+                    `lg`, which wrapped the tail onto a second row and left a
+                    ragged half row under a full-width heading.
+
+                    Above `lg` the cards share the row rather than holding a
+                    fixed width, so they fill whatever width is available at
+                    equal size and the last one is never clipped. `min-w` is the
+                    floor: it sets how wide a card gets before the row starts
+                    scrolling, which is what makes the cards read at a
+                    comfortable size on a desktop instead of squeezing six onto
+                    one screen. Once the floors no longer fit, the row overflows
+                    and the arrows above drive it.
+
+                    `scroll-pl-6` / `scroll-pr-6` mirror the `px-6` gutter and
+                    are not optional. Snap positions are measured from the raw
+                    scrollport edge, so without them `snap-mandatory` parks the
+                    first card flush against the screen and swallows the gutter
+                    on every swipe back. The map-mode strip further down solves
+                    the same problem the same way.
+
+                    `lg:flex-none` lets the row take the height of its tallest
+                    card. As a `flex-1` item it was allowed to shrink below that,
+                    and a card with a two-line title then spilled its actions
+                    past the row while its neighbours looked fine. `items-stretch`
+                    still gives every card the same height. */}
                 <div
                   ref={cardRowRef}
-                  className="-mx-6 mt-12 flex items-stretch gap-6 overflow-x-auto px-6 pb-1 scrollbar-none sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 lg:mt-8 lg:min-h-0 lg:flex-1 lg:auto-rows-fr lg:grid-cols-3 xl:grid-cols-4"
+                  className="-mx-6 mt-12 flex snap-x snap-mandatory items-stretch gap-6 overflow-x-auto px-6 pb-1 scrollbar-none scroll-pl-6 scroll-pr-6 sm:mx-0 sm:px-0 sm:scroll-pl-0 sm:scroll-pr-0 lg:mt-8 lg:min-h-0 lg:flex-none"
                 >
-                  {sortedLocations.map((location, index) => {
-                    const isActive = location.id === activeLocationId;
-                    const mappable = hasCoordinates(location);
-                    const displayAddress = addressWithoutName(location);
-                    const propertyCount = propertyCounts[location.id];
-                    // No count yet, or none to show: the card has nothing
-                    // behind Explore, so the gold primary is withheld.
-                    const isComingSoon = !countsLoaded || !propertyCount;
+                  {sortedItems.map((item, index) => {
+                    const isActive = item.id === activePropertyId;
+                    const mappable = hasCoordinates(item);
+
+                    // This card's own teaser, read from its units.
+                    const facts = plotFacts[item.id];
+
+                    // Two states, both from the units request: not queued yet is
+                    // loading, failed is an error that must not be mistaken for
+                    // a development with nothing to sell.
+                    const factsState: PlotFactsState =
+                      plotFactsState[item.id] ?? "loading";
+                    const isSummaryLoading = factsState === "loading";
+                    const sizeLabel = formatSizeRange(
+                      facts?.minSize ?? null,
+                      facts?.maxSize ?? null,
+                    );
+
+                    // Nothing behind the button yet, so the gold primary is
+                    // withheld -- but only once that is actually known. A
+                    // request still in flight is not the same as a sold-out
+                    // development, and neither is a failed request: both would
+                    // claim there is nothing to buy rather than that we do not
+                    // know.
+                    const isComingSoon =
+                      factsState === "ready" &&
+                      (facts?.availableCount ?? 0) === 0;
 
                     return (
                       <article
-                        key={location.id}
-                        className={`group relative flex w-[80vw] min-h-64 shrink-0 flex-col overflow-hidden rounded-2xl border p-6 text-left transition duration-300 sm:w-auto lg:min-h-0 lg:h-full lg:p-5 ${
+                        key={item.id}
+                        className={`group relative flex w-[80vw] min-h-64 shrink-0 snap-start flex-col overflow-hidden rounded-2xl border p-6 text-left transition duration-300 sm:w-[46vw] lg:w-auto lg:min-w-[20rem] lg:flex-1 lg:flex-basis-0 lg:min-h-0 lg:p-5 xl:min-w-[22rem] ${
                           isActive
                             ? "border-[#c9a84c] bg-[#241f14]"
                             : "border-white/15 bg-[#1b1d22] hover:-translate-y-1 hover:border-[#c9a84c]"
                         }`}
                       >
-                        {/* Locality cover image from GET /api/locations, used as the
-                            card background. Rendered only when the API supplies
-                            one -- most localities return cover_url: null, and
-                            those cards fall back to their own dark surface
-                            rather than a stock image. The article already
-                            clips its own rounded corners, so no extra wrapper
-                            is needed. */}
-                        {location.cover_url ? (
+                        {/* Property cover image from GET /api/properties, used as the card
+                            background. Rendered only when the API supplies one --
+                            several properties return cover_url: null, and those
+                            cards fall back to their own dark surface rather than
+                            a stock image. The article already clips its own
+                            rounded corners, so no extra wrapper is needed. */}
+                        {item.cover_url ? (
                           <div aria-hidden className="absolute inset-0 z-0">
                             <Image
-                              src={location.cover_url}
+                              src={item.cover_url}
                               alt=""
                               fill
                               sizes="(min-width: 1024px) 33vw, 80vw"
@@ -1254,67 +1732,118 @@ export default function GrowthCorridors() {
                             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#c9a84c] text-[11px] font-bold tabular-nums tracking-wide text-[#c9a84c]">
                               {String(index + 1).padStart(2, "0")}
                             </span>
-                            {/* Status is not surfaced on mobile: the card already reads
-                            index, name, address and the action, and the pill
-                            competes with the enlarged heading. It is also
-                            dropped entirely when every locality shares the
-                            same active status, since a repeated word on every
-                            card is noise rather than information. */}
-                            {!allLocationsActive && location.status ? (
+                            {/* The property type holds the pill slot. Still desktop-only: the
+                            card already reads index, name, locality, stats and
+                            the action, and the pill competes with the enlarged
+                            heading. */}
+                            {item.property_type ? (
                               <span className="hidden rounded-full bg-white/20 px-2.5 py-1 text-[9px] font-semibold tracking-[0.12em] text-white uppercase sm:inline-block">
-                                {location.status}
+                                {item.property_type}
                               </span>
                             ) : null}
                           </div>
 
                           {/* Card titles are set heavier and larger than the section
                               heading -- 700 at 26px against 600 at 24px -- so the
-                              locality reads as the card's anchor. Both sizes are
+                              property reads as the card's anchor. Both sizes are
                               fixed rather than responsive: a ramp would make
                               the section heading the larger text again at `lg`. */}
                           <h3 className="mt-4 text-[26px] font-bold tracking-tight text-white">
-                            {location.name}
+                            {item.name}
                           </h3>
 
-                          {/* Address is supporting detail, so it is regular
-                              weight at 14px and held back to 70% opacity. It
-                              wraps to two lines rather than running to four,
-                              which kept the card far taller than its
-                              neighbours in the grid. The locality name is
-                              stripped from the front by `addressWithoutName`,
-                              since the heading above already states it. */}
-                          {displayAddress ? (
-                            <p className="mt-2.5 flex items-start gap-1.5 text-[14px] leading-relaxed font-normal text-white/70">
-                              <PinIcon className="mt-1 h-4 w-4 shrink-0 text-[#c9a84c]" />
-                              <span className="line-clamp-2 min-w-0">{displayAddress}</span>
-                            </p>
+                          {/* Locality only. The full address carried district and
+                              state lines that ran past two or three wrapped rows
+                              and left every card far taller than its neighbours,
+                              none of which helped a buyer decide. */}
+                          <p className="mt-2.5 flex items-start gap-1.5 text-[14px] leading-relaxed font-normal text-white/70">
+                            <PinIcon className="mt-1 h-4 w-4 shrink-0 text-[#c9a84c]" />
+                            <span className="min-w-0">{localityOf(item)}</span>
+                          </p>
+
+                          {/* Three teaser facts from the property's units, so the
+                              card answers "is there anything here, how big, how
+                              much" without a tap.
+
+                              Each value is single-line and self-describing --
+                              "128 plots", "200–1,558 sq yd", "From ₹12.3 L" --
+                              rather than a label above a number. A label row
+                              would add a second line the old count line did not
+                              have, and every card would grow by it. Loading
+                              holds the same one-line height so nothing jumps. */}
+                          {isSummaryLoading ? (
+                            <div
+                              className="mt-2.5 grid grid-cols-3 gap-2"
+                              aria-hidden
+                            >
+                              {[0, 1, 2].map((slot) => (
+                                <span
+                                  key={slot}
+                                  className="h-4 w-full max-w-20 rounded-full bg-white/20 motion-safe:animate-pulse"
+                                />
+                              ))}
+                            </div>
                           ) : null}
 
-                          {/* Real count from the properties response, not a
-                              placeholder. Always rendered so every card
-                              reserves the same line; the count itself appears
-                              once the request settles. Sentence case at 13px
-                              with no tracking: the number carries 700 gold and
-                              the word 500 white/60, so the figure reads first
-                              without the whole line shouting. */}
-                          <p className="mt-1.5 flex items-baseline gap-1.5 text-[13px]">
-                            {!isComingSoon ? (
-                              <>
-                                <span className="font-bold text-[#c9a84c]">
-                                  {propertyCount}
+                          {facts && !isSummaryLoading ? (
+                            <div className="mt-2.5 grid grid-cols-3 gap-2">
+                              <p className="min-w-0 text-[13px] leading-snug">
+                                <span className="font-bold tabular-nums text-[#c9a84c]">
+                                  {facts.availableCount}
                                 </span>
-                                <span className="font-medium text-white/60">
-                                  {propertyCount === 1
-                                    ? "property"
-                                    : "properties"}
+                                <span className="ml-1 font-medium text-white/60">
+                                  {facts.availableCount === 1 ? "plot" : "plots"}
                                 </span>
-                              </>
-                            ) : (
-                              <span className="font-medium text-white/60">
-                                Coming soon
+                              </p>
+                              <p className="min-w-0 text-[13px] font-semibold wrap-break-word text-white">
+                                {sizeLabel ?? "Size on request"}
+                              </p>
+                              <p className="min-w-0 text-[13px] font-semibold wrap-break-word text-white">
+                                {facts.priceFrom !== null
+                                  ? `From ${formatPrice(facts.priceFrom)}`
+                                  : "Price on request"}
+                              </p>
+                            </div>
+                          ) : null}
+
+                          {/* Only claims the card can back up. Both chips sit
+                              behind a non-empty check so a card with nothing to
+                              say does not render an empty row. `allEastFacing`
+                              needs the per-plot flag rather than `facings`,
+                              since one plot facing "East / South" is still
+                              East-facing but adds South to the union. */}
+                          {facts &&
+                          facts.availableCount > 0 &&
+                          (facts.allEastFacing || facts.hasCorner) ? (
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              {facts.allEastFacing ? (
+                                <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[12px] font-medium text-white/85">
+                                  East facing
+                                </span>
+                              ) : null}
+                              {facts.hasCorner ? (
+                                <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[12px] font-medium text-white/85">
+                                  Corner plot
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+
+                          {/* Total plots, from the row itself rather than the units read -- so it is
+                              present even when that request is still in flight.
+                              Held in the same spot as the old line so the action
+                              row below keeps its `mt-auto` anchor and the grid
+                              stays aligned. */}
+                          {item.total_plots != null ? (
+                            <p className="mt-1.5 flex items-baseline gap-1.5 text-[13px]">
+                              <span className="font-bold text-[#c9a84c]">
+                                {item.total_plots}
                               </span>
-                            )}
-                          </p>
+                              <span className="font-medium text-white/60">
+                                {item.total_plots === 1 ? "plot" : "plots"}
+                              </span>
+                            </p>
+                          ) : null}
 
                           {/* Actions stay compact against the 24px card title: a short gold primary plus a quieter map control beside
                               it, instead of one oversized full-width button.
@@ -1326,46 +1855,46 @@ export default function GrowthCorridors() {
                               once the card has no free space left, which is what
                               made the button collide with the address.
 
-                              Width: Explore is `flex-1` and takes whatever the
-                              row leaves over; Map is `shrink-0` and keeps to its
-                              own label plus icon. `whitespace-nowrap` on both
-                              stops the label breaking or ellipsising -- the card
-                              used to clip "Explore" because the two buttons
-                              together were wider than the card's inner width.
-                              Explore drops `min-w-0` so it can no longer be
-                              squeezed below the width its own text needs. */}
+                              Width: the primary is `shrink-0` and keeps to its
+                              own label plus icon; Map is the same. `whitespace-nowrap`
+                              on both stops the label breaking or ellipsising --
+                              the card used to clip the primary's label because
+                              the two buttons together were wider than the card's
+                              inner width. The primary drops `min-w-0` so it can
+                              never be squeezed below the width its own text
+                              needs. */}
                           <div className="mt-auto flex items-center gap-3 pt-5">
-                            <button
-                              type="button"
-                              onClick={() => selectLocation(location)}
-                              disabled={!mappable}
-                              aria-label={`View ${location.name} on map`}
-                              data-track="MAP_MARKER_CLICK"
-                              data-track-meta={`{"location_id":"${location.id}","location_slug":"${location.slug}","section_type":"growth_corridors"}`}
-                              className={`inline-flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[13px] font-bold tracking-[0.02em] uppercase transition focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] disabled:cursor-not-allowed ${
+                            {/* The card is a property now, so there is no
+                                locality list left to swap in — the plots live on
+                                the property's own page. Same destination as
+                                `MapSection`'s "Visit Property" CTA, so both maps
+                                lead to the same place. */}
+                            <Link
+                              href={`/properties/${item.id}`}
+                              aria-label={`View plots in ${item.name}`}
+                              data-track="PROPERTY_VIEW"
+                              data-track-property={item.id}
+                              data-track-meta={`{"source":"growth_corridors","surface":"card_view_plots"}`}
+                              className={`inline-flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[13px] font-bold tracking-[0.02em] uppercase transition focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98] ${
                                 isComingSoon
-                                  ? "border border-white/30 bg-transparent text-white hover:bg-white/10 focus-visible:outline-[#c9a84c] disabled:border-white/15 disabled:text-white/60"
-                                  : "bg-[#c9a84c] text-[#0f1114] hover:bg-[#d4b57e] focus-visible:outline-[#0f1114] disabled:bg-white/15 disabled:text-white/60"
+                                  ? "border border-white/30 bg-transparent text-white hover:bg-white/10 focus-visible:outline-[#c9a84c]"
+                                  : "bg-[#c9a84c] text-[#0f1114] hover:bg-[#d4b57e] focus-visible:outline-[#0f1114]"
                               }`}
                             >
-                              <span>
-                                {mappable ? "Explore" : "No map location"}
-                              </span>
-                              {mappable ? (
-                                <ArrowIcon className="h-3.5 w-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" />
-                              ) : null}
-                            </button>
+                              <span>View plots</span>
+                              <ArrowIcon className="h-3.5 w-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" />
+                            </Link>
 
-                            {/* Rendered only for mappable localities so the row
+                            {/* Rendered only for mappable properties so the row
                                 never shows a dead control, and the primary takes
                                 the full width when the map control is absent. */}
                             {mappable ? (
                               <button
                                 type="button"
-                                onClick={() => openMap(location)}
-                                aria-label={`Show ${location.name} on the map`}
+                                onClick={() => openPropertyAndMap(item)}
+                                aria-label={`Show ${item.name} layout on the map`}
                                 data-track="MAP_MARKER_CLICK"
-                                data-track-meta={`{"location_id":"${location.id}","location_slug":"${location.slug}","section_type":"growth_corridors","surface":"card_map"}`}
+                                data-track-meta={`{"property_id":"${item.id}","property_name":"${item.name}","section_type":"growth_corridors","surface":"card_map"}`}
                                 className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-white/30 bg-transparent px-4 text-[13px] font-bold tracking-[0.02em] text-white uppercase transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c9a84c] active:scale-[0.98]"
                               >
                                 <MapIcon className="h-4 w-4 shrink-0" />
@@ -1378,20 +1907,18 @@ export default function GrowthCorridors() {
                     );
                   })}
 
-                  {/* Eighth tile. At four columns a set of seven localities
-                      leaves one empty cell and a ragged half row; this fills
-                      it and doubles as a second way into map mode, next to
-                      the header's "View all on map". Always rendered rather
-                      than only when the count happens to leave a gap -- which
-                      columns the grid is using is a CSS decision, and a
-                      JS-computed fill would be wrong at every breakpoint but
-                      one. */}
+                  {/* Map tile. Always last on the line, doubling as a second way
+                      into map mode next to the header's "View all on map".
+                      It was there to fill the empty cell a seven-item grid left
+                      at four columns; the row is a single line now, so it simply
+                      closes the strip, sharing the cards' sizing so every cell
+                      on the line is the same width. */}
                   <button
                     type="button"
                     onClick={openMapAll}
                     data-track="MAP_MARKER_CLICK"
                     data-track-meta={`{"section_type":"growth_corridors","surface":"grid_cta"}`}
-                    className="group flex min-h-64 w-[80vw] shrink-0 flex-col items-center justify-center gap-4 rounded-2xl border border-[#1b1d22]/25 bg-transparent p-6 text-center transition duration-300 hover:-translate-y-1 hover:border-[#8A6A1F] hover:bg-white/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8A6A1F] active:scale-[0.98] sm:w-auto lg:min-h-0 lg:h-full lg:p-5"
+                    className="group flex min-h-64 w-[80vw] shrink-0 snap-start flex-col items-center justify-center gap-4 rounded-2xl border border-[#1b1d22]/25 bg-transparent p-6 text-center transition duration-300 hover:-translate-y-1 hover:border-[#8A6A1F] hover:bg-white/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8A6A1F] active:scale-[0.98] sm:w-[46vw] lg:w-auto lg:min-w-[20rem] lg:flex-1 lg:flex-basis-0 lg:min-h-0 lg:p-5 xl:min-w-[22rem]"
                   >
                     <span className="flex h-12 w-12 items-center justify-center rounded-full border border-[#1b1d22]/20 transition group-hover:border-[#8A6A1F]">
                       <MapIcon className="h-5 w-5 text-[#1b1d22] transition group-hover:text-[#8A6A1F]" />
@@ -1415,7 +1942,7 @@ export default function GrowthCorridors() {
                     <button
                       type="button"
                       onClick={goToPreviousPage}
-                      disabled={!hasPreviousPage || locationsState === "loading"}
+                      disabled={!hasPreviousPage || listState === "loading"}
                       aria-label="Previous page"
                       className="rounded-full border border-black/12 bg-white px-4 py-2 text-[11px] font-semibold tracking-[0.08em] text-[#0f1114] transition hover:border-[#8A6A1F] disabled:cursor-not-allowed disabled:opacity-40"
                     >
@@ -1429,7 +1956,7 @@ export default function GrowthCorridors() {
                     <button
                       type="button"
                       onClick={goToNextPage}
-                      disabled={!hasNextPage || locationsState === "loading"}
+                      disabled={!hasNextPage || listState === "loading"}
                       aria-label="Next page"
                       className="rounded-full border border-black/12 bg-white px-4 py-2 text-[11px] font-semibold tracking-[0.08em] text-[#0f1114] transition hover:border-[#8A6A1F] disabled:cursor-not-allowed disabled:opacity-40"
                     >
@@ -1498,17 +2025,17 @@ export default function GrowthCorridors() {
                   Back
                 </button>
                 <p className="text-[10px] font-semibold tracking-[0.16em] text-[#4a5060] uppercase">
-                  {mappableLocations.length} localities
+                  {mappableItems.length} developments
                 </p>
               </div>
 
               {/* Desktop header */}
               <div className="hidden items-center justify-between gap-3 border-b border-black/8 px-5 py-4 lg:flex">
                 <h3 className="text-base font-semibold tracking-tight text-[#0f1114]">
-                  Localities
+                  Developments
                 </h3>
                 <span className="shrink-0 rounded-full bg-[#0f1114]/6 px-2.5 py-1 text-[10px] font-semibold tracking-[0.12em] text-[#4a5060] uppercase">
-                  {mappableLocations.length}
+                  {mappableItems.length}
                 </span>
               </div>
 
@@ -1523,20 +2050,20 @@ export default function GrowthCorridors() {
                 ref={sidebarListRef}
                 className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-6 pb-1 scrollbar-none lg:flex-col lg:divide-y lg:divide-black/6 lg:overflow-y-auto lg:px-0 lg:pb-0 scroll-pl-6 lg:scroll-pl-0"
               >
-                {mappableLocations.map((location) => {
-                  const isActive = location.id === activeLocationId;
+                {mappableItems.map((item) => {
+                  const isActive = item.id === activePropertyId;
 
                   return (
                     <li
-                      key={location.id}
+                      key={item.id}
                       className="w-[68vw] max-w-[230px] shrink-0 snap-start sm:w-[46vw] sm:max-w-65 lg:w-auto lg:max-w-none lg:shrink"
                     >
                       <button
                         type="button"
-                        onClick={() => setActiveLocationId(location.id)}
+                        onClick={() => openPropertyAndMap(item)}
                         aria-pressed={isActive}
                         data-track="MAP_MARKER_CLICK"
-                        data-track-meta={`{"location_id":"${location.id}","location_slug":"${location.slug}","section_type":"growth_corridors","surface":"map_sidebar"}`}
+                        data-track-meta={`{"property_id":"${item.id}","property_name":"${item.name}","section_type":"growth_corridors","surface":"map_sidebar"}`}
                         className={`relative flex h-full w-full flex-col gap-1.5 overflow-hidden rounded-2xl p-3.5 text-left transition active:scale-[0.98] lg:flex-row lg:items-baseline lg:gap-3 lg:rounded-none lg:p-0 lg:px-5 lg:py-4 lg:active:scale-100 ${
                           isActive
                             ? "bg-[#0f1114] text-white shadow-[0_8px_20px_rgba(15,17,20,0.18)]"
@@ -1562,10 +2089,10 @@ export default function GrowthCorridors() {
                               isActive ? "text-white" : "text-[#0f1114]"
                             }`}
                           >
-                            {location.name}
+                            {item.name}
                           </span>
 
-                          {/* Marks the selected locality and nothing else. It
+                          {/* Marks the selected property and nothing else. It
                               previously rendered on every row in the same
                               gold, so it carried no information. */}
                           {isActive ? (
@@ -1576,23 +2103,23 @@ export default function GrowthCorridors() {
                           ) : null}
                         </span>
 
-                        {/* Property count from the real counts response,
-                            replacing the raw "17.31065, 78.53988" pair.
-                            Coordinates meant nothing to a buyer and read as
-                            low-contrast noise; the count is the same figure
-                            the card view shows, so the two views agree. */}
+                        {/* Plot count from the row itself, replacing the raw
+                            "17.31065, 78.53988" pair. Coordinates meant
+                            nothing to a buyer and read as low-contrast noise;
+                            this is the same figure the card view shows, so the
+                            two views agree. */}
                         <span
                           className={`truncate text-[10px] tracking-wide ${
                             isActive ? "text-white/60" : "text-[#4a5060]"
                           }`}
                         >
-                          {propertyCounts[location.id]
-                            ? `${propertyCounts[location.id]} ${
-                                propertyCounts[location.id] === 1
-                                  ? "property"
-                                  : "properties"
+                          {item.total_plots != null
+                            ? `${item.total_plots} ${
+                                item.total_plots === 1 ? "plot" : "plots"
                               }`
-                            : "Coming soon"}
+                            : (item.available_plots_count ?? 0) > 0
+                              ? `${item.available_plots_count} available`
+                              : "Coming soon"}
                         </span>
                       </button>
                     </li>
@@ -1610,7 +2137,7 @@ export default function GrowthCorridors() {
                   className="inline-flex min-h-11 items-center gap-1.5 text-[11px] font-semibold tracking-[0.12em] text-[#4a5060] uppercase transition hover:text-[#8A6A1F] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8A6A1F]"
                 >
                   <ArrowIcon className="h-3 w-3 rotate-180" />
-                  Back to localities
+                  Back to developments
                 </button>
               </div>
             </aside>
@@ -1633,17 +2160,21 @@ export default function GrowthCorridors() {
                 own edge. At `lg` the frame goes back to a plain block and the
                 card re-attaches as an overlay, where there is room for it. */}
             <div
+              ref={mapFrameRef}
+              // Offset for `scrollIntoView` in the map-mode effect, so the sticky
+              // nav does not cover the top of the map once it scrolls into view.
+              style={{ scrollMarginTop: "calc(var(--nav-h) + 0.5rem)" }}
               className={
                 mapFullscreen
                   ? "ila-corridor-map-frame ila-corridor-map-frame--fullscreen relative block flex-1 overflow-hidden bg-[#dfe3ea]"
-                  : "ila-corridor-map-frame relative flex flex-col overflow-hidden rounded-[18px] bg-[#dfe3ea] lg:block lg:h-auto lg:flex-1 lg:min-h-0 lg:border lg:border-black/8 lg:shadow-[0_8px_30px_rgba(15,17,20,0.06)]"
+                  : "ila-corridor-map-frame relative flex w-full flex-col overflow-hidden rounded-[18px] bg-[#dfe3ea] lg:block lg:h-auto lg:flex-1 lg:min-h-0 lg:border lg:border-black/8 lg:shadow-[0_8px_30px_rgba(15,17,20,0.06)]"
               }
             >
               <div
               className={
                 mapFullscreen
                   ? "relative h-full w-full"
-                  : "relative h-[58vh] flex-none lg:absolute lg:inset-0 lg:h-full"
+                  : "relative h-[58vh] min-h-[360px] w-full flex-none lg:absolute lg:inset-0 lg:h-full"
               }
             >
               {/* Desktop only. Below `lg` the sidebar's own top bar carries the same
@@ -1654,12 +2185,26 @@ export default function GrowthCorridors() {
                   only way out and has to show at every width. */}
               <button
                 type="button"
-                onClick={() =>
-                  mapFullscreen ? setMapFullscreen(false) : setMapMode(false)
-                }
+                onClick={() => {
+                    // A layout is open: step back to the portfolio first, rather
+                    // than dropping the visitor out of map mode entirely.
+                    if (layoutOpen) {
+                      closePropertyLayout();
+                      return;
+                    }
+                    if (mapFullscreen) {
+                      setMapFullscreen(false);
+                      return;
+                    }
+                    setMapMode(false);
+                  }}
                 className={`absolute left-3 top-3 z-20 items-center gap-1.5 rounded-full bg-white/95 px-3 py-2 text-[10px] font-semibold tracking-[0.12em] text-[#0f1114] uppercase shadow-[0_4px_16px_rgba(15,17,20,0.14)] backdrop-blur-sm transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8A6A1F] ${mapFullscreen ? "inline-flex" : "hidden lg:inline-flex"}`}
                 aria-label={
-                  mapFullscreen ? "Exit fullscreen map" : "Back to locations"
+                  mapFullscreen
+                    ? "Exit fullscreen map"
+                    : layoutOpen
+                      ? "Close layout"
+                      : "Back to developments"
                 }
               >
                 <span aria-hidden>&larr;</span>
@@ -1669,6 +2214,12 @@ export default function GrowthCorridors() {
               <div
                 ref={mapContainerRef}
                 className="absolute inset-0 h-full w-full"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                }}
               />
 
               {/* Zoom controls, styled to match `MapSection` exactly: 40px
@@ -1724,6 +2275,32 @@ export default function GrowthCorridors() {
                 </div>
               ) : null}
 
+              {/* The layout request is the heaviest this section makes, so it
+                  names what it is waiting for rather than leaving the visitor
+                  looking at a bare basemap. */}
+              {layoutStatus === "loading" ? (
+                <div
+                  className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="flex max-w-[80%] items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-semibold tracking-[0.08em] text-[#4a5060] uppercase shadow-[0_4px_16px_rgba(15,17,20,0.12)]">
+                    <span className="ila-loader ila-loader--sm" aria-hidden />
+                    <span className="truncate">
+                      Loading layout{activeItem ? ` · ${activeItem.name}` : ""}
+                    </span>
+                  </span>
+                </div>
+              ) : null}
+
+              {layoutStatus === "error" ? (
+                <div className="absolute inset-x-3 top-3 z-10 flex justify-center">
+                  <span className="rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-[#8a5a2b] shadow-[0_4px_16px_rgba(15,17,20,0.14)]">
+                    This layout could not be loaded right now
+                  </span>
+                </div>
+              ) : null}
+
               {mapError ? (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#dfe3ea] px-6 text-center">
                   <p className="max-w-sm text-sm font-medium leading-relaxed text-[#4a5060]">
@@ -1732,13 +2309,185 @@ export default function GrowthCorridors() {
                   </p>
                 </div>
               ) : null}
+
+              {/* Plot state filter, styled to match `MapSection`: a three-column
+                  strip where the active cell inverts to near-black and carries
+                  its own count. Sits below the back button rather than beside
+                  it, so neither control can cover the other at any width. */}
+              {layoutOpen ? (
+                <div className="absolute left-3 top-14 z-20 w-56 max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_8px_20px_rgba(15,23,42,0.14)]">
+                  <div className="grid grid-cols-3">
+                    {plotFilters.map((item) => {
+                      const isActive = plotFilter === item.key;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setPlotFilter(item.key)}
+                          aria-pressed={isActive}
+                          className={`border-r border-black/10 px-2 py-2 text-left transition last:border-r-0 ${
+                            isActive
+                              ? "bg-[#171717] text-white"
+                              : "bg-transparent text-[#171717] hover:bg-[#cfc3a8]"
+                          }`}
+                        >
+                          <span className="block text-[11px] font-semibold sm:text-xs">
+                            {item.label}
+                          </span>
+                          <span
+                            className={`mt-0.5 block text-[10px] font-medium ${
+                              isActive ? "text-white/70" : "text-[#5c5348]"
+                            }`}
+                          >
+                            {item.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Desktop plot read-out. The mobile bottom sheet below is
+                  md:hidden, so desktop needs its own card or a selected plot
+                  has no detail. */}
+              {selectedPlot ? (
+                <div className="pointer-events-auto absolute bottom-3 left-3 z-20 hidden w-80 overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_12px_36px_rgba(15,23,42,0.22)] md:block">
+                  <div className="relative px-3 pt-3 pb-3">
+                    <button
+                      type="button"
+                      aria-label="Close plot details"
+                      onClick={() => setSelectedPlotId(null)}
+                      className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#171717] text-white transition hover:bg-[#333333]"
+                    >
+                      <CloseIcon className="h-3 w-3" />
+                    </button>
+                    <div className="pr-9">
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate text-sm font-semibold text-[#171717]">
+                          {selectedPlot.title}
+                        </h3>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wide text-white uppercase ${
+                            selectedPlot.status === "sold"
+                              ? "bg-[#736b60]"
+                              : "bg-[#1f5c45]"
+                          }`}
+                        >
+                          {selectedPlot.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs font-medium text-[#3f3a34]">
+                        {selectedPlot.area} &middot; {selectedPlot.price}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-[#5c5348]">
+                        {selectedPlot.location}
+                      </p>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/10 pt-3 text-xs text-[#3f3a34]">
+                      <div>
+                        <span className="block text-[10px] tracking-wide text-[#756c60] uppercase">
+                          Facing
+                        </span>
+                        <strong className="font-semibold text-[#171717]">
+                          {selectedPlot.facing}
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="block text-[10px] tracking-wide text-[#756c60] uppercase">
+                          Location
+                        </span>
+                        <strong className="font-semibold text-[#171717]">
+                          {selectedPlot.location}
+                        </strong>
+                      </div>
+                    </div>
+                    <Link
+                      href="#contact"
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                    >
+                      Enquire about this plot
+                      <ArrowIcon className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
               </div>
+
+              {/* Mobile bottom sheet for a tapped plot, mirroring `MapSection`.
+                  `fixed` from the map card's position inside the section: the map
+                  frame clips its children, so this has to escape it to reach the
+                  viewport edge. */}
+              {selectedPlot ? (
+                <div className="pointer-events-none fixed inset-x-0 bottom-0 z-60 md:hidden">
+                  <div className="pointer-events-auto max-h-[42vh] overflow-y-auto rounded-t-2xl border-t border-black/10 bg-[#d9d2c7] pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(15,23,42,0.28)]">
+                    <div className="flex justify-center pt-2.5 pb-1" aria-hidden>
+                      <span className="h-1 w-10 rounded-full bg-black/20" />
+                    </div>
+                    <div className="relative px-3 pb-3">
+                      <button
+                        type="button"
+                        aria-label="Close plot details"
+                        onClick={() => setSelectedPlotId(null)}
+                        className="absolute top-1 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-[#171717] text-white transition hover:bg-[#333333]"
+                      >
+                        <CloseIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <div className="pr-10">
+                        <div className="flex items-center gap-2">
+                          <h3 className="truncate text-sm font-semibold text-[#171717]">
+                            {selectedPlot.title}
+                          </h3>
+                          <span className="shrink-0 rounded-full bg-[#1f5c45] px-2 py-0.5 text-[9px] font-semibold tracking-wide text-white uppercase">
+                            {selectedPlot.status}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs font-medium text-[#3f3a34]">
+                          {selectedPlot.area} &middot; {selectedPlot.price}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-[#5c5348]">
+                          {selectedPlot.location}
+                        </p>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/10 pt-3 text-xs text-[#3f3a34]">
+                        <div>
+                          <span className="block text-[10px] tracking-wide text-[#756c60] uppercase">
+                            Facing
+                          </span>
+                          <strong className="font-semibold text-[#171717]">
+                            {selectedPlot.facing}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] tracking-wide text-[#756c60] uppercase">
+                            Location
+                          </span>
+                          <strong className="font-semibold text-[#171717]">
+                            {selectedPlot.location}
+                          </strong>
+                        </div>
+                      </div>
+                      <Link
+                        href="#contact"
+                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                      >
+                        Enquire about this plot
+                        <ArrowIcon className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {/* Below `lg` this flows under the map; at `lg` it re-attaches as
                   an overlay in the map's bottom-right. Either way the marker
                   is no longer hidden behind it, so the map's centre needs no
-                  upward offset to keep the pin in view. */}
-              {activeLocation ? (
+                  upward offset to keep the pin in view.
+
+                  Suppressed once a plot is tapped: the plot read-out takes its
+                  place, matching `MapSection`, so the two cards never compete
+                  for the same corner. */}
+              {activeItem && !selectedPlot ? (
                 <div
                   className={
                     mapFullscreen
@@ -1752,10 +2501,10 @@ export default function GrowthCorridors() {
                   {/* Same locality cover image, with the same scrim, so the
                       map overlay matches the list card it came from.
                       Only rendered when the API supplies one. */}
-                  {activeLocation.cover_url ? (
+                  {activeItem.cover_url ? (
                     <div aria-hidden className="absolute inset-0 z-0">
                       <Image
-                        src={activeLocation.cover_url}
+                        src={activeItem.cover_url}
                         alt=""
                         fill
                         sizes="(min-width: 640px) 24rem, 100vw"
@@ -1773,24 +2522,29 @@ export default function GrowthCorridors() {
                   ) : null}
 
                   <div className="relative z-10">
-                    <p className="text-[9px] font-semibold tracking-[0.18em] text-[#c9a84c] uppercase">
-                      {activeLocation.status}
-                    </p>
+                    {/* The property type holds the slot the locality status used
+                        to occupy: `GET /api/properties` publishes no status. */}
+                    {activeItem.property_type ? (
+                      <p className="text-[9px] font-semibold tracking-[0.18em] text-[#c9a84c] uppercase">
+                        {activeItem.property_type}
+                      </p>
+                    ) : null}
 
-                    {/* Name at 18px/700 is the card's anchor. Smaller than the
-                        list card's 26px because this one sits under or over a
-                        live map rather than in a grid of peers. */}
+                    {/* The property name is the anchor, with its locality
+                        underneath -- the same pair the list card leads with.
+                        Smaller than the list card's 26px because this one sits
+                        under or over a live map rather than in a grid of peers. */}
                     <h3 className="mt-1.5 text-[18px] font-bold tracking-tight text-white">
-                      {activeLocation.name}
+                      {activeItem.name}
                     </h3>
 
                     <p className="mt-2 flex items-start gap-1.5 text-[13px] leading-relaxed font-normal text-white/70">
                       <PinIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#c9a84c]" />
-                      <span className="min-w-0">{activeLocation.address}</span>
+                      <span className="min-w-0">{localityOf(activeItem)}</span>
                     </p>
 
-                    {/* Rendered only when it says something the address has
-                        not already said. */}
+                    {/* Rendered only when it says something the locality has not
+                        already said. */}
                     {detail ? (
                       <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-white/70">
                         {detail}
@@ -1802,13 +2556,15 @@ export default function GrowthCorridors() {
                         Directions is an external map link, not an API call, so
                         it deliberately does not go through apiFetch. */}
                     <div className="mt-4 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => viewProperties(activeLocation)}
+                      <Link
+                        href={`/properties/${activeItem.id}`}
+                        data-track="PROPERTY_VIEW"
+                        data-track-property={activeItem.id}
+                        data-track-meta={`{"source":"growth_corridors","surface":"map_detail"}`}
                         className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[#c9a84c] px-4 text-[13px] font-bold tracking-[0.02em] text-[#0f1114] uppercase transition hover:bg-[#d4b57e] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0f1114] active:scale-[0.98]"
                       >
                         View properties
-                      </button>
+                      </Link>
 
                       {directionsUrl ? (
                         <a

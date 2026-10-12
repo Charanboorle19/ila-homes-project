@@ -942,4 +942,11 @@ body {
   .ila-corridor-map-frame--fullscreen .maplibregl-map {
     touch-action: none !important;
   }
+
+  .ila-corridor-map-frame .maplibregl-map {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
 }

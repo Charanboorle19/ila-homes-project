@@ -6,7 +6,7 @@ This document describes the current Search implementation only. It complements [
 
 The current Search UI provides:
 
-- A homepage hero input that accepts a query, records a property-search analytics event, and moves the visitor to the homepage developments map.
+- A homepage hero input that accepts a query, records a property-search analytics event, queries the search endpoint `GET /api/search?q={query}&limit=20` (with graceful catalogue fallback), and renders exact matches and recommendations in a dialog, displaying and highlighting any returned explanatory `message` before the data list.
 - A map-panel input that filters the currently loaded API property catalogue in memory.
 
 There is no shared search store, URL query parameter, search-results route, autocomplete result list, or standalone Search component.
@@ -20,10 +20,10 @@ The `/properties` catalogue rendered by `PropertiesList` has no search input or 
 
 ## 3. Component/file paths
 
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\Hero.tsx` — homepage search form and submit behavior.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\Hero.tsx` — homepage search form, submit behavior, highlighted message callout, and results dialog.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\MapSection.tsx` — map search input, property filtering, filter buttons, and result selection.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — renders `Hero` followed by `MapSection`.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` — supplies the API property list consumed by `MapSection`.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` — supplies `searchProperties`, `PropertySearchResult`, `PropertySearchResponse`, and the property catalogue consumed by `MapSection`.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\tracker.ts` — receives the hero `PROPERTY_SEARCH` event.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\events.ts` — declares `PROPERTY_SEARCH` and its batch-sendable status.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\globals.css` — custom animated hero-search word classes and keyframes.
@@ -95,6 +95,8 @@ return propertyList.filter((item) =>
 
 Therefore matching is trimmed, case-insensitive, and based on substring inclusion. It is an OR match across the searched fields. There is no tokenization, fuzzy matching, stemming, ranking, debounce, or server-side query parameter.
 
+`MapSection` applies the same rule a second time to the open layout's plots, via the `matchedPlotNumbers` memo. The development list is hidden while a layout is open, so the property matcher has no visible effect there; with a layout open the query instead narrows the plotted polygons. It reads `activeProject.plotsGeo` feature properties rather than the `Plot` display records, because the raw values are the searchable ones: `facing` is the API's own `East  South` before `formatFacing` tidies it, and `plotNo` is the zero-padded number a visitor would type. It returns a `Set<string>` of matching `plotNo` values, or `null` when there is no query or no open layout.
+
 The hero does not perform matching. Its typed query is only trimmed for analytics metadata and checked for non-empty submission.
 
 ## 10. Fields searched
@@ -108,13 +110,25 @@ The actual `MapSection` property search fields are exactly:
 
 Falsy values are removed before matching. Locality, city, address, location name, status, price, coordinates, plot number, facing, and unit fields are not searched by the implemented property filter.
 
-Although the active-layout placeholder says `Search plot, facing or area`, no corresponding plot/facing/area query matching is implemented in the inspected code. `UNKNOWN — needs verification` only applies if another uninspected runtime integration is expected; no such integration is present in the current source.
+The layout plot matcher reads these already-mapped `plotsGeo` feature properties, listed in the module constant `PLOT_SEARCH_FIELDS`:
+
+- `plotNo`, `label` — plot number, zero-padded (`"07"`, `"45"`)
+- `facing` — raw API direction, e.g. `East  South`
+- `sq_yards`, `sq_ft` — area
+- `price`, `per_sq_yard_price`, `per_sq_ft_price`
+- `status` (raw, e.g. `AVAILABLE`), `statusNorm` (normalized `available`/`sold`)
+
+These are exactly the fields `fromApi.ts` already maps from `GET /api/properties/{id}/units`, so plot search adds nothing to the client data contract. The richer unit fields the API also returns — `dimensions`, `road_info`, `plot_colour`, `special_notes`, `is_corner`, `additional_premium` — are **not** mapped today and are therefore **not** searchable. Extending plot search to those fields requires mapping them first; that is UNKNOWN — needs verification as a separate change.
+
+Because of this, the active-layout placeholder `Search plot, facing or area` is now accurate: plot number, facing and area are all searched.
 
 ## 11. Filtering behavior
 
 An empty or whitespace-only `MapSection.query` returns the complete `propertyList` in its current order. A non-empty query returns only items with at least one matching searched field.
 
 The property-status buttons (`All`, `Available`, `Sold`) are separate from text matching. They describe plot counts for the active layout and do not add a property-list predicate to `filteredProperties`.
+
+When a layout is open the two are independent: `query` filters `propertyList`, `filter` filters plotted plots. They are not nested — `filteredProperties` has no status predicate and the plot layers have no text predicate.
 
 The hero buttons (`All`, `Land`, `Plots`, `Villas`) only call `setFilter(item)`. They do not filter the map, catalogue, or any result collection.
 
@@ -141,6 +155,13 @@ The effective number of searchable items is whatever the API returns in that res
 - `wordIndex: number`
 - `wordVisible: boolean`
 - `inputFocused: boolean`
+- `results: PropertySearchResult[] | null`
+- `recommendations: PropertySearchResult[]`
+- `searchMessage: string | null`
+- `resultMeta: { total: number; searched: string } | null`
+- `searchStatus: "idle" | "loading" | "ready" | "error"`
+- `searchAbortRef: React.MutableRefObject<AbortController | null>`
+- `portalReady: boolean`
 
 ### `MapSection`
 
@@ -167,6 +188,7 @@ The component has additional map, plot, selection, fullscreen, and loading state
 ### `MapSection`
 
 - `filteredProperties` — the client-side text-filtered property list.
+- `matchedPlotNumbers` — `Set<string>` of `plotNo` values in the open layout matching `query`, or `null` when there is no query or no open layout. Drives the plot layer filter.
 - `activeProject` — selected estate layout, which changes the map-search placeholder and panel mode.
 - `counts` — `all`, `available`, and `sold` plot counts for the active project/layout.
 - `loading` and `loadingLabel` — selected-property/layout loading presentation.
@@ -178,6 +200,7 @@ Search-related functions and helpers are:
 - `Hero.onSearch(event: FormEvent)` — prevents default submission, tracks a non-empty typed query, and scrolls or routes to `#projects`.
 - `MapSection.SearchIcon({ className })` — renders the search icon.
 - `MapSection.filteredProperties` — `useMemo` derivation implementing matching.
+- `MapSection.matchedPlotNumbers` — `useMemo` derivation implementing layout plot matching, returning `Set<string>` or `null`.
 - `MapSection.closeLayout()` — exits the active layout and returns to the development list; its implementation also resets related map state.
 - `MapSection.openProject(projectId, plotId?)` — opens a project/layout and resets query when entering a project without a specific plot.
 - The inline clear handler — `setQuery("")`.
@@ -209,10 +232,14 @@ No arrow-key navigation, Escape handler, or keyboard result-selection handler is
 Only the hero has submit behavior. `onSearch` calls `event.preventDefault()`, trims `query`, and:
 
 1. Emits `PROPERTY_SEARCH` only when the trimmed query is non-empty.
-2. Finds `document.getElementById("projects")` and calls `scrollIntoView({ behavior: "smooth", block: "start" })` when present.
-3. Otherwise calls `router.push("/#projects")`.
+2. Aborts any in-flight request, clears previous messages/results, sets `searchStatus` to `"loading"`.
+3. If the trimmed query is at least 2 characters, calls `searchProperties({ query: trimmed, limit: 20, signal })` targeting `GET /api/search?q={query}&limit=20`.
+4. On success stores `resp.properties` in `results`, `resp.recommendations` in `recommendations`, `resp.message` in `searchMessage`, sets `resultMeta`, and sets `searchStatus` to `"ready"`.
+5. If `searchProperties` fails or is unreachable, gracefully falls back to `fetchProperties` and filters the catalogue client-side, populating matches or recommendations and an explanatory notice.
+6. If the query is empty or 1 character, fetches the full catalogue via `fetchProperties`.
+7. The dialog displays any returned `searchMessage` in a prominent, gold-accented callout card before the list of data. Exact matches and alternative recommendations are rendered as navigable cards.
 
-The hero's selected `filter` is not included in the submit event and does not affect navigation or filtering.
+The hero **no longer scrolls to `#projects` on submit.** It previously called `scrollIntoView` on the `#projects` element, falling back to `router.push("/#projects")`. That was removed because `MapSection` owns a separate `query` state that nothing ever wrote to, so scrolling could never reflect what was typed. The `View map` CTA still uses `scrollToProjects()`.
 
 The MapSection input updates results immediately on each change; it has no submit action.
 
@@ -222,11 +249,11 @@ Map property cards are rendered from `filteredProperties`. Selecting a card call
 
 Selection loads the property detail and units/layout. It does not navigate immediately. A selected property can subsequently expose a `View Project` link in `PropertySheet`.
 
-The hero has no selectable search results.
+Hero search results are selectable cards linking to `item.href` (or `/properties/{id}`), closing the dialog and navigating to the property page on click.
 
 ## 21. Navigation behavior
 
-Hero submission navigates/scrolls to the homepage section `#projects`.
+Hero submission no longer navigates. It opens a results dialog in place.
 
 Map property-card selection stays within the homepage map and opens the selected layout. `PropertySheet`'s `View Project` link navigates to `/properties/{property.id}` when a normalized property is available. The map panel's bottom link uses `#contact` and is not a Search result navigation.
 
@@ -240,13 +267,13 @@ The development-list empty-area message is `Loading developments…` while the l
 
 Both `MapSection` messages render the shared `ila-loader ila-loader--sm` animation beside the text; see `docs\features\loading.md`.
 
-The hero search has no loading state, spinner, async request, or pending submit state.
+The hero search has a loading state: `searchStatus === "loading"` renders "Searching developments…" beside the shared `ila-loader ila-loader--sm` animation. While the dialog is open (`searchStatus !== "idle"`) `document.body.style.overflow` is set to `hidden`, so the page behind cannot scroll.
 
 ## 23. Error behavior
 
 If the `fetchProperties` request fails, `MapSection` sets `remoteStatus` to `"error"`, logs `[ILA API] properties list failed`, and displays `Developments could not be loaded. Try again shortly.` when the result list is empty.
 
-The hero has no search error state. Analytics transport failures are handled by the existing tracker, not by `Hero`.
+The hero search has an error state. A failed `fetchProperties` call logs `[hero search] properties list failed` and renders "Developments could not be loaded. Please try again shortly." in the dialog. Analytics transport failures are handled by the existing tracker, not by `Hero`.
 
 ## 24. Empty-state behavior
 
@@ -257,7 +284,9 @@ For the MapSection development list:
 - Ready with a non-empty query and no matches: `No developments match your search.`
 - Ready with an empty query and no properties: `No developments published yet.`
 
-There is no separate hero empty-results state because the hero does not produce results.
+The hero results dialog renders "No developments published yet." when the API returns zero items. Because the query is not sent to the server, an empty result set reflects an empty catalogue rather than an unmatched query.
+
+The dialog is dismissible by the close button, by a backdrop click (only when the click target is the backdrop itself, not the panel), and by `Escape`. The `Escape` listener is attached by an effect keyed on `searchStatus`, and is removed on cleanup.
 
 ## 25. Missing-field/fallback behavior
 
@@ -269,13 +298,19 @@ For a selected property, display fallbacks belong to `PropertySheet` and map/pro
 
 ## 26. API usage
 
-Search is not API-backed as a query operation.
+The hero search is API-backed through:
+
+`GET /api/search?q={query}&limit={count}`
+
+implemented by `searchProperties` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` via `apiFetch`. If the search endpoint is unreachable or the query is below 2 characters, the hero falls back to `fetchProperties`:
+
+`GET /api/properties?status=ALL&page=1&per_page=100`
 
 The MapSection searchable source is API-backed through:
 
 `GET /api/properties?status=ALL&page=1&per_page=100`
 
-This request is made by `fetchProperties` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` through `apiFetch`, which attaches the tenant header. The query text is never sent as an API parameter.
+This request is made by `fetchProperties` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` through `apiFetch`, which attaches the tenant header.
 
 Selected-result behavior may subsequently call:
 
@@ -306,6 +341,8 @@ Map query typing, clearing, and filtering have no dedicated Search analytics eve
 `MapSection` is the primary implementation of client-side Search. Its property list and `filteredProperties` drive the “Our Developments” panel while map pins and layout rendering are managed separately.
 
 Filtering the text list does not filter map pins. Selecting a filtered list card loads its property detail and layout, and map interactions can then select plots.
+
+With a layout open, the same `query` additionally filters the plotted polygons on the map. The status filter and the query are combined into a single MapLibre `["all", ...]` filter applied to `estate-plots-fill`, `estate-plots-outline` and `estate-plots-label`, so both narrow the visible plots together. `query` does not filter the pins, the development list, or the satellite raster layer.
 
 The hero `#projects` target is the `id="projects"` on `MapSection`.
 
@@ -415,10 +452,11 @@ Direct Search dependencies are:
 
 ## 37. Known issues
 
-- The homepage hero search does not search or display results; it only tracks and scrolls to the map.
+- The hero and `MapSection` still hold independent `query` state. Submitting in the hero does not seed `MapSection.query`.
 - The hero filter buttons (`All`, `Land`, `Plots`, `Villas`) are visual state only and do not filter data.
 - The MapSection placeholder says `Search projects or plots` / `Search plot, facing or area`, but the implemented text matcher only searches property `name`, `property_type`, `slug`, and `description`.
 - MapSection does not filter plot rows or plot polygons using `query`; plot status filtering remains separate.
+- Plot search matches only the unit fields `fromApi.ts` already maps. `dimensions`, `road_info`, `plot_colour`, `special_notes` and `is_corner` are returned by the units API but never reach the client, so they cannot be searched without first changing that mapping.
 - Search state is not shared between the hero, map, `/properties` catalogue, or location/property views.
 - Hero analytics sends `location: null` and `result_count: null`; no result count is calculated.
 - The hero fallback route is `/#projects`; the current `MapSection` does define `id="projects"`.
@@ -428,12 +466,17 @@ Direct Search dependencies are:
 ## 38. Important constraints
 
 - Treat `Hero` navigation and `MapSection` filtering as separate implementations; do not assume they share query state.
-- Preserve the exact MapSection matching fields and rule unless the intended Search contract changes: trimmed, lowercased substring matching over `name`, `property_type`, `slug`, and `description`, with falsy fields ignored.
+- Preserve the exact MapSection property matching fields and rule unless the intended Search contract changes: trimmed, lowercased substring matching over `name`, `property_type`, `slug`, and `description`, with falsy fields ignored.
+- Keep `PLOT_SEARCH_FIELDS` limited to properties `fromApi.ts` already maps. Adding a field there that is not mapped would search for values the client never receives.
+- Plot search filters map polygons only. There is no plot result list; `MapSection` renders plots as `estate-plots-fill`, `estate-plots-outline` and `estate-plots-label`, and the text predicate is applied to all three alongside the status predicate.
 - Do not send the query text as an API parameter unless the API contract is intentionally changed; the current implementation is client-side after the initial property-list fetch.
 - Preserve the API list request shape used by MapSection: `status=ALL`, `page=1`, `per_page=100`.
 - Preserve API result order; no client-side sort or relevance ordering currently exists.
-- Do not describe plot/facing/area matching as implemented; the current code only changes the placeholder when a layout is active.
-- Preserve the hero Enter behavior: prevent default, track only non-empty trimmed input, then scroll to `#projects` or route to `/#projects`.
+- Plot/facing/area matching IS now implemented for the open layout via `matchedPlotNumbers`. It resolves in React and is applied to the map as a filter expression, because MapLibre filters cannot do case-insensitive matching; do not describe the match itself as happening in the filter expression.
+- `Hero` state now includes `results: PropertyListItem[] | null`, `resultMeta: { total, totalPages, searched } | null`, `searchStatus: "idle" | "loading" | "ready" | "error"`, a `searchAbortRef` for superseding an in-flight request, and `portalReady` for the portal gate.
+- Search still does not filter the map pins or the development list by plot attributes; only the plotted polygons are affected.
+- Preserve the hero Enter behavior: prevent default, track only non-empty trimmed input, then fetch the catalogue and open the results dialog. Do not restore the `#projects` scroll on submit — `MapSection.query` is never seeded, so the scroll could not reflect the query.
+- The hero results dialog is portalled to `document.body` via `createPortal`, because the hero section is `overflow-hidden` and would clip an in-tree dialog. It is gated on a `portalReady` flag set after mount, as `MapSection` does for its mobile sheet, because a portal cannot render during SSR.
 - Preserve the current analytics event name `PROPERTY_SEARCH` and its metadata shape when documenting or modifying the hero event.
 - Keep `MapSection.query` separate from the plot-status `filter`; they control different behaviors.
 - Preserve the `md`/`768px` desktop-mobile split, the hero `(max-width: 767px)` check, and the mobile `searchOpen`/`autoFocus` behavior.

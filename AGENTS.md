@@ -8,118 +8,22 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
-## Documentation-First Development Rule
 
-When I provide or reference a feature documentation file such as:
+## Documentation-First Development Rules
 
-`/docs/features/map.md`
+1. **Read the relevant MD files first.** Before making changes, read the documentation under `/docs/features/` and `/docs/architecture/` that applies to the requested task. For multiple affected features, read each relevant MD file.
 
-that documentation is the PRIMARY SOURCE OF TRUTH for the task.
+2. **Do not scan the entire repository.** Use the documentation to identify relevant files. Inspect only those files and their direct dependencies. Explore further only when technically necessary.
 
-### STRICT RULE
+3. **Make minimal changes.** Follow the documented architecture, preserve existing behavior, and modify only files required for the task. Do not refactor unrelated code.
 
-Before making any changes:
+4. **Keep documentation synchronized.** Whenever a change affects a feature's behavior, API, routing, or data flow, update its relevant MD file. Update architecture documentation when applicable. Documentation must reflect the current implementation.
 
-1. Read the specified `.md` file completely.
-2. Understand the feature requirements, behavior, architecture, data flow, and constraints described in that document.
-3. Use the document to determine which files are relevant.
-4. Inspect ONLY those relevant files.
-5. Make the required changes in those files.
+5. **Use terminal commands only when necessary.** Avoid unnecessary CMD/PowerShell commands, Git checks, builds, linting, tests, and package installations. Verify changes by reading the affected files whenever possible.
 
-### DO NOT SCAN THE ENTIRE PROJECT
+6. **Do not guess.** If documentation or implementation details are missing, inspect only the relevant dependencies. If something remains unclear, report `UNKNOWN — needs verification`.
 
-If a feature documentation file is provided, DO NOT:
+7. **Finish and stop.** Make the smallest necessary change, update relevant documentation, briefly verify the affected files, and report what changed. Do not perform unrelated checks or modifications.
 
-- Scan the entire repository.
-- Read unrelated components.
-- Read unrelated pages.
-- Inspect unrelated services.
-- Inspect unrelated API routes.
-- Search the entire codebase unnecessarily.
-- Review the entire project architecture.
-- Open files simply to "understand the project better."
-
-The documentation already contains the information needed for the feature.
-
-Only expand the investigation beyond the documented files when there is a concrete technical dependency that prevents the task from being completed.
-
-### FILE DISCOVERY
-
-Use this order:
-
-1. The `.md` file explicitly provided by me.
-2. Files explicitly referenced by that `.md` file.
-3. Direct dependencies of those files.
-4. Additional files ONLY when technically necessary.
-
-Do not go beyond this scope without a reason.
-
-### IMPLEMENTATION
-
-When the documentation says how a feature should work:
-
-- Follow the documented behavior.
-- Preserve the documented architecture.
-- Preserve existing naming and terminology where possible.
-- Make the smallest necessary changes.
-- Do not redesign the feature.
-- Do not introduce alternative implementations unless the documented implementation is impossible.
-
-### IF INFORMATION IS MISSING
-
-If the `.md` file does not contain enough information:
-
-DO NOT immediately scan the entire project.
-
-Instead:
-
-1. Determine exactly what information is missing.
-2. Inspect only the most likely directly related file.
-3. Continue outward only if necessary.
-
-If the required information still cannot be confirmed, state what is missing rather than making assumptions.
-
-### IMPORTANT
-
-The feature documentation is intentionally created so that you DO NOT need to understand the entire project before working on that feature.
-
-Do not treat every task as a repository-wide investigation.
-
-For example, if I say:
-
-"Fix the Map layout image. Refer to `/docs/features/map.md`."
-
-You should:
-
-- Read `map.md`.
-- Identify the Map/layout files from the documentation.
-- Inspect those files.
-- Find the issue.
-- Modify the necessary files.
-- Stop.
-
-You should NOT inspect the entire repository first.
-
-### SCOPE
-
-Only change files directly required for the requested feature.
-
-Do not modify unrelated files.
-
-Do not perform unrelated refactoring.
-
-Do not "clean up" unrelated code.
-
-Do not update documentation unless explicitly requested.
-
-Do not create additional files unless explicitly requested.
-
-### TERMINAL
-
-This rule works together with the terminal usage rules.
-
-Do not use CMD/PowerShell/terminal to scan the repository when the documentation already identifies the relevant files.
-
-Use terminal commands only when genuinely necessary.
 
 

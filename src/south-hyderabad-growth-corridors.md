@@ -228,6 +228,7 @@ Use [`src/components/GrowthCorridors.css`](../src/components/GrowthCorridors.css
 |---|---|
 | Desktop | “View on map” appears on the card image beside the corridor name. The map uses a two-column layout. |
 | Mobile | The map CTA appears in the card footer. The map disables one-finger page-blocking gestures and allows two-finger pinch zoom. |
+| Map mode | Entering map mode scrolls the map frame into view, offset below the sticky nav (`scroll-margin-top: calc(var(--nav-h) + 0.5rem)`). List mode and map mode differ greatly in height on a phone, so the scroll offset held from the card row would otherwise settle past the map, on the locality detail card below it. |
 | Up to 560px | The header map CTA is hidden; each card retains its own map action. |
 | Reduced motion | Transitions and animations are disabled. |
 

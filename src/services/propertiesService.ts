@@ -306,6 +306,82 @@ type UnitsResponse = {
 /** Guards against a server that never advances past the first page. */
 const MAX_UNIT_PAGES = 200;
 
+/**
+ * The subset of a unit row a teaser card reads. Geometry, centroids and layout
+ * data are deliberately absent: this request runs once per card and only needs
+ * counts and ranges.
+ */
+export type PropertyUnitTeaser = {
+  status?: string | null;
+  area_sq_yards?: number | null;
+  price?: number | null;
+  facing?: string | null;
+  is_corner?: boolean | null;
+};
+
+type UnitsTeaserResponse = {
+  success?: boolean;
+  data?: {
+    items?: PropertyUnitTeaser[];
+    total?: number;
+    limit?: number;
+    offset?: number;
+  };
+};
+
+/**
+ * Every unit row for a property, trimmed to the fields a teaser card reads.
+ *
+ * Pages are walked exactly as `fetchPropertyUnits` walks them, because the
+ * server silently clamps `limit` — `limit=all` alone returns a partial set, so
+ * a single request would understate the available count. Unlike that function
+ * this one keeps no geometry, carries no layout data and logs nothing, since it
+ * runs once per card rather than once per open estate.
+ */
+export async function fetchPropertyTeaserUnits(
+  propertyId: string,
+  signal?: AbortSignal,
+): Promise<PropertyUnitTeaser[]> {
+  if (!propertyId) return [];
+
+  const units: PropertyUnitTeaser[] = [];
+  let total = 0;
+  let offset = 0;
+
+  for (let page = 0; page < MAX_UNIT_PAGES; page += 1) {
+    const query = new URLSearchParams({
+      limit: "all",
+      offset: String(offset),
+    });
+
+    const response = await apiFetch<UnitsTeaserResponse>(
+      `/api/properties/${encodeURIComponent(propertyId)}/units?${query}`,
+      { signal },
+    );
+    if (signal?.aborted) break;
+
+    const items = response?.data?.items ?? [];
+    units.push(...items);
+    if (typeof response?.data?.total === "number") total = response.data.total;
+
+    const serverOffset =
+      typeof response?.data?.offset === "number" ? response.data.offset : offset;
+    const serverLimit =
+      typeof response?.data?.limit === "number" && response.data.limit > 0
+        ? response.data.limit
+        : items.length;
+    const nextOffset = serverOffset + serverLimit;
+
+    // Stop on an empty or non-advancing page, or once the total is collected.
+    if (items.length === 0) break;
+    if (nextOffset <= serverOffset) break;
+    if (total > 0 && nextOffset >= total) break;
+    offset = nextOffset;
+  }
+
+  return units;
+}
+
 function parseLayoutCords(
   value: Partial<PropertyLayoutCords> | null | undefined,
 ): PropertyLayoutCords | null {
@@ -502,27 +578,42 @@ export type PropertyListItem = {
   total_plots?: number | null;
   available_plots_count?: number | null;
   area_range?: { min: number | null; max: number | null } | null;
-  /** Present on some deployments of the list endpoint; null elsewhere. */
+  /** Coordinates from GET /api/properties list response */
   latitude?: number | null;
   longitude?: number | null;
+  address?: string | null;
+  locality?: string | null;
+  city?: string | null;
 };
 
 /** A usable latitude/longitude pair for a property. */
 export type PropertyAnchor = { latitude: number; longitude: number };
 
 /**
- * Reads a valid coordinate pair off any property-shaped object. The API uses
- * null for "not geocoded", and sometimes sends strings, so both are rejected
- * rather than coerced.
+ * Reads a valid coordinate pair off any property-shaped object.
+ * Accepts numeric or string latitude/longitude values from the API and validates them.
  */
 export function propertyAnchor(
-  property: { latitude?: number | null; longitude?: number | null } | null,
+  property: { latitude?: number | string | null; longitude?: number | string | null } | null,
 ): PropertyAnchor | null {
   if (!property) return null;
-  const { latitude, longitude } = property;
-  if (typeof latitude !== "number" || !Number.isFinite(latitude)) return null;
-  if (typeof longitude !== "number" || !Number.isFinite(longitude)) return null;
-  return { latitude, longitude };
+  const rawLat = property.latitude;
+  const rawLng = property.longitude;
+  const lat =
+    typeof rawLat === "number"
+      ? rawLat
+      : typeof rawLat === "string" && rawLat.trim() !== ""
+        ? parseFloat(rawLat)
+        : NaN;
+  const lng =
+    typeof rawLng === "number"
+      ? rawLng
+      : typeof rawLng === "string" && rawLng.trim() !== ""
+        ? parseFloat(rawLng)
+        : NaN;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { latitude: lat, longitude: lng };
 }
 
 export async function fetchProperties(options: {
@@ -688,3 +779,56 @@ export function formatPrice(price: number | null): string {
   }
   return `₹${price.toLocaleString("en-IN")}`;
 }
+
+/**
+ * Natural language property search via GET /api/search?q={query}&limit={count}.
+ * Returns exact matches under `properties`, alternative recommendations under
+ * `recommendations`, a `no_results_found` flag, and an optional explanatory `message`.
+ */
+export type PropertySearchResult = {
+  type: "property";
+  id: string;
+  title: string;
+  subtitle: string;
+  href: string;
+  price: number | null;
+  bedrooms: number | null;
+  property_type: string;
+  location: string | null;
+  nearby_place: string | null;
+  distance_km: number | null;
+};
+
+export type PropertySearchResponse = {
+  properties: PropertySearchResult[];
+  recommendations: PropertySearchResult[];
+  no_results_found: boolean;
+  message: string | null;
+};
+
+export async function searchProperties(options: {
+  query: string;
+  limit?: number;
+  signal?: AbortSignal;
+}): Promise<PropertySearchResponse> {
+  const { query, limit = 8, signal } = options;
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(limit),
+  });
+
+  const response = await apiFetch<{
+    success?: boolean;
+    data?: PropertySearchResponse;
+    message?: string;
+  }>(`/api/search?${params.toString()}`, { signal });
+
+  const data = response?.data;
+  return {
+    properties: Array.isArray(data?.properties) ? data.properties : [],
+    recommendations: Array.isArray(data?.recommendations) ? data.recommendations : [],
+    no_results_found:
+      data?.no_results_found ?? ((data?.properties?.length ?? 0) === 0),
+    message: data?.message ?? response?.message ?? null,
+  };
+}

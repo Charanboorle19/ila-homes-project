@@ -346,6 +346,7 @@
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   font-size: 26px;
   font-weight: 700;
   line-height: 1.2;
@@ -357,6 +358,7 @@
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   margin: 0.55rem 0 0;
   color: var(--pd-ink);
   font-size: 15px;
@@ -377,6 +379,7 @@
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   margin: 0;
   color: var(--pd-muted);
   font-size: 15px;

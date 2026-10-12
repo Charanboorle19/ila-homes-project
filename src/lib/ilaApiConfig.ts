@@ -14,7 +14,7 @@ function requireValue(name: string, value: string | undefined): string {
   if (!value) {
     throw new Error(
       `Missing required environment variable ${name}. ` +
-        "Set it in .env.local — do not rely on a code fallback.",
+        "Set it in .env.local for local dev, or under Environment Variables in your hosting platform (e.g. Vercel Project Settings).",
     );
   }
 

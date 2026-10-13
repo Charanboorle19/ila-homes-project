@@ -572,6 +572,7 @@ export type PropertyListItem = {
   property_type: string | null;
   price: number | null;
   cover_url: string | null;
+  status?: string | null;
   /** Some API deployments include these popup-ready fields in list rows. */
   price_label?: string | null;
   amenities?: string[] | null;

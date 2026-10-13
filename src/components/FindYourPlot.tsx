@@ -736,7 +736,6 @@ function ResultsHeader({
 function ResultsPanel({
   status,
   matches,
-  criteria,
   loadingLabel,
   error,
   savedIds,

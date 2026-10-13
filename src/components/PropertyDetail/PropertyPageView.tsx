@@ -116,6 +116,7 @@ export default function PropertyPageView({
         propertyId={property.id}
         hideDetails
         hideSearch
+        highlightAvailable
       />
 
       <LifeStageMatch property={property} />

@@ -1088,6 +1088,7 @@ export type MapSectionProps = {
   className?: string;
   hideDetails?: boolean;
   hideSearch?: boolean;
+  highlightAvailable?: boolean;
 };
 
 export default function MapSection({
@@ -1095,6 +1096,7 @@ export default function MapSection({
   className,
   hideDetails = false,
   hideSearch = false,
+  highlightAvailable = false,
 }: MapSectionProps = {}) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -2495,7 +2497,57 @@ export default function MapSection({
       3.2,
       1.15,
     ]);
-  }, [selectedId, layoutOpen, mapReady, activeProject?.layoutRaster]);
+
+    // When highlightAvailable is active and no single plot is picked,
+    // start a smooth gentle pulsing animation on available plots.
+    if (highlightAvailable && !active) {
+      let animFrameId: number;
+      const startTime = performance.now();
+      const baseFill = activeProject?.layoutRaster ? 0.35 : 0.72;
+
+      const animatePulse = (currentTime: number) => {
+        const elapsed = (currentTime - startTime) / 1000;
+        // Smooth sine wave oscillating between 0 and 1 over ~2.4 seconds
+        const t = (Math.sin(elapsed * 2.6) + 1) / 2;
+        const availableOpacity = baseFill + t * 0.28;
+        const availableLineWidth = 1.15 + t * 1.6;
+
+        if (map.getLayer("estate-plots-fill")) {
+          map.setPaintProperty("estate-plots-fill", "fill-opacity", [
+            "match",
+            ["get", "statusNorm"],
+            "available",
+            availableOpacity,
+            baseOpacity * 0.75,
+          ]);
+        }
+
+        if (map.getLayer("estate-plots-outline")) {
+          map.setPaintProperty("estate-plots-outline", "line-width", [
+            "match",
+            ["get", "statusNorm"],
+            "available",
+            availableLineWidth,
+            1.15,
+          ]);
+          map.setPaintProperty("estate-plots-outline", "line-color", [
+            "match",
+            ["get", "statusNorm"],
+            "available",
+            "#ffffff",
+            LAYOUT.plotEdge,
+          ]);
+        }
+
+        animFrameId = requestAnimationFrame(animatePulse);
+      };
+
+      animFrameId = requestAnimationFrame(animatePulse);
+      return () => {
+        cancelAnimationFrame(animFrameId);
+      };
+    }
+  }, [selectedId, layoutOpen, mapReady, activeProject?.layoutRaster, highlightAvailable]);
 
   useEffect(() => {
     const map = mapRef.current;

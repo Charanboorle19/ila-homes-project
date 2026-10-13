@@ -48,7 +48,7 @@ No nested route layout, template, loading file, error file, not-found file, or m
 **Main page:** `src/app/page.tsx`, default export `Home`
 **Layout:** Root layout from `src/app/layout.tsx`
 
-The page renders, in order, `Hero`, `MapSection`, `WhoWeAre`, `GrowthCorridors`, `FindYourPlot`, `BuyingJourney`, `ShortlistShare`, `EmiAppreciation`, `FromTheField`, `PlotsWithPulse`, and `Faq`.
+The page renders, in order, `Hero`, `MapSection`, `WhoWeAre`, `GrowthCorridors`, `FindYourPlot`, `CompareProperties`, `BuyingJourney`, `ShortlistShare`, `EmiAppreciation`, `FromTheField`, `PlotsWithPulse`, `Faq`, and `HomeReadyToVisit`.
 
 - **Dynamic parameters:** None.
 - **Query parameters:** None are read or written by the page implementation.

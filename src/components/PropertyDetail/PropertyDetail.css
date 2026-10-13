@@ -4643,3 +4643,63 @@ a.pd-legal__card:hover .pd-legal__view {
     transition: none;
   }
 }
+
+/* ==========================================================================
+   Print / PDF Export Styles for EMI Calculator Results
+   ========================================================================== */
+@media print {
+  /* Hide overall global navigation, headers, footers, floating chat / sticky bars */
+  header,
+  nav,
+  footer,
+  #nav,
+  .pd-sticky-bar,
+  .pd-afford__cta,
+  .mobile-nav,
+  body > *:not(main):not(#__next) {
+    display: none !important;
+  }
+
+  /* Reset body and wrapper margins for clean single-page PDF formatting */
+  body,
+  .property-page,
+  main {
+    background: #ffffff !important;
+    color: #171717 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide all siblings of the print container if inside property page */
+  .property-page > section:not(.pd-emi),
+  .property-page > div:not(.pd-emi) {
+    display: none !important;
+  }
+
+  .pd-emi {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+
+  .pd-emi__print-container {
+    display: block !important;
+    width: 100% !important;
+    max-width: 800px !important;
+    margin: 0 auto !important;
+  }
+
+  /* Force exact color reproduction on print / PDF generation */
+  .pd-emi-print-exact {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* Ensure page breaks don't chop through the card */
+  .pd-emi-print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+

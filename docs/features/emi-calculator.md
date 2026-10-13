@@ -1,10 +1,10 @@
 # EMI Calculator feature
 
-This document describes the EMI calculator as it now stands. There is **one** implementation, `PriceEmiFuture`, used on both the property detail page and the homepage "Plan your purchase" section.
+This document describes the EMI calculator as it now stands. There is **one** implementation, `PriceEmiFuture`, used on both the property detail page and the homepage EMI section ("Calculate Your EMI Before You Buy").
 
 ## 1. Feature purpose
 
-The calculator provides an illustrative plot-financing estimate. It derives a monthly EMI from a purchase price, down payment, interest rate and tenure; shows payment/principal/interest breakdowns and a full amortization schedule; and shows a separate illustrative future-appreciation projection. It does not submit a loan application or guarantee a return.
+The calculator provides an illustrative plot-financing estimate with the heading "Calculate Your EMI Before You Buy" and subheading "Explore your monthly EMI, down payment, and loan options for your chosen property.". It derives a monthly EMI from a purchase price, down payment, interest rate and tenure; shows payment/principal/interest breakdowns and a full amortization schedule; and shows a separate illustrative future-appreciation projection. It does not submit a loan application or guarantee a return.
 
 ## 2. One implementation, two surfaces
 
@@ -141,13 +141,13 @@ The calculator displays the effective down payment and its percentage, the net l
 
 `PriceEmiFuture` has **no loading or error state**. Values derive synchronously and invalid input is handled by clamping, not by an error message.
 
-`EmiAppreciation` does have three states for the property list: `Loading properties…` as a `role="status"`, an error line as a `role="alert"` carrying the backend message, and an empty state when the list returns nothing. The loading line carries the `ila-loader ila-loader--sm ila-loader--light` animation because the section background is `#111111` — see `docs\features\loading.md`. If any of the first two apply, the picker grid is not rendered and the locked placeholder stays.
+`EmiAppreciation` does have three states for the property list: `Loading properties…` as a `role="status"`, an error line as a `role="alert"` carrying the backend message, and an empty state when the list returns nothing. The loading line carries the `ila-loader ila-loader--sm ila-loader--light` animation because the section background is `#111111` — see `docs\features\loading.md`. On mobile viewports (<640px), the properties in the picker are displayed side-by-side with smooth horizontal scrolling (`scroll-snap-type: x mandatory`), with the image on top and details below on each card, accompanied by arrow navigation buttons below the cards block to slide through them. If any of the loading or error states apply, the picker grid is not rendered and the locked placeholder stays.
 
 ## 19. Empty-state behavior
 
 The calculator itself has no empty state, because it always receives a property; an invalid price falls back to `50_00_000`.
 
-The homepage shell has one: before a property is selected, a locked placeholder is rendered **in place of** the calculator. It is dashed, flattened and dimmed, carries `aria-disabled="true"`, and reads "Select a property to run the numbers".
+The homepage shell has one: on desktop/tablet, before a property is selected, a locked placeholder box is rendered **in place of** the calculator. It is dashed, flattened and dimmed, carries `aria-disabled="true"`, and reads "Select a property to run the numbers". On mobile, this heading ("Select a property to run the numbers") is placed directly above the property cards without subheadings or redundant placeholder boxes below.
 
 `PriceEmiFuture` was not given a `disabled` prop. Handing it a fabricated price purely to grey it out would display a real-looking EMI for a property nobody chose, which is worse than displaying nothing. Swapping the whole component out is the honest equivalent of disabling it.
 
@@ -221,7 +221,15 @@ The homepage picker is a `role="group"` labelled by `emi-picker-label`, with `ar
 9. Tab through the picker and confirm focus is visible and pressed state is announced.
 10. Confirm `EMI_PROPERTY_SELECT` fires with `property_id`.
 
-## 29. Related documentation
+## 29. Print & PDF Export behavior
+
+When "Print / Export PDF" is triggered (`window.print()`):
+- Only the **Results block** is printed. All global navigational elements, header, footer, action buttons (`Reset Defaults`, `Print / Export PDF`, `WhatsApp Budget`), left loan input controls column, and the amortization schedule are hidden via `print:hidden` and print media rules.
+- A concise summary pill bar displaying the loan inputs (Purchase Price, Down Payment with %, Interest Rate, Loan Tenure) is rendered above the primary results card exclusively in print mode so the PDF reader has full context of what inputs produced the calculation.
+- Background colors, charts, and card contrast are preserved with `print-color-adjust: exact` / `-webkit-print-color-adjust: exact`.
+- Page breaks inside cards are avoided via `break-inside: avoid`.
+
+## 30. Related documentation
 
 - `docs/architecture/api.md` — the properties API architecture.
 - `docs/features/property-details.md` — the `/properties/{propertyId}` page that renders the same calculator.

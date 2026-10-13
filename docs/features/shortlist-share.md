@@ -238,7 +238,14 @@ Above the mobile breakpoint, the section uses a two-column `.shortlist-share__fr
 
 ## 30. Mobile behavior
 
-At mobile widths, the layout becomes a single-column flow. The mobile chooser is rendered in `.shortlist-share__choose-mobile`, while the desktop chooser is hidden. Mobile option buttons use a thumbnail image, an overlaid check indicator, and compact text. The mobile panels element has touch listeners that temporarily control `overflowY` at nested-scroll bounds so page scrolling can continue. The mobile share button is full width in the mobile CSS rules.
+At mobile widths, the layout becomes a single-column flow. The mobile chooser is rendered in `.shortlist-share__choose-mobile`, while the desktop chooser is hidden. Mobile option buttons are arranged side by side in a horizontally scrolling row with `scroll-snap-type: x mandatory`, displaying the cover image on top, followed by property name, location, and meta details underneath. The mobile options container uses native horizontal scrolling (`overflow-x: auto; overflow-y: visible; touch-action: pan-y pan-x; overscroll-behavior: auto; -webkit-overflow-scrolling: touch`) so vertical swipes immediately activate page scrolling without getting trapped or locked in the horizontal container. The mobile share button is full width in the mobile CSS rules.
+
+## 30a. WhatsApp Message Preview Popup
+
+When clicking "Preview & Share on WhatsApp", instead of directly navigating to WhatsApp, a modal dialog (`ShortlistPreviewModal`) appears displaying:
+- A realistic WhatsApp chat preview bubble.
+- Each shortlisted property rendered as a distinct card with thumbnail cover image, property name, location badge, pricing/type metadata, and trackable link box.
+- Actions: "Copy Text" to clipboard, and "Continue to WhatsApp →" which opens the formatted message in `https://wa.me/` and fires analytics.
 
 ## 31. Responsive breakpoints
 

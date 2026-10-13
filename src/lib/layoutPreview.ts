@@ -166,14 +166,23 @@ async function fetchLayoutPreview(
       return { kind: "url", url: proxied };
     }
 
-    const image = await decodePreview(blob);
-    console.log(
-      `[ILA map] layout preview decoded — ${image.width}x${image.height}`,
-    );
-    return { kind: "image", image };
+    try {
+      const image = await decodePreview(blob);
+      console.log(
+        `[ILA map] layout preview decoded — ${image.width}x${image.height}`,
+      );
+      return { kind: "image", image };
+    } catch (decodeErr) {
+      if (signal?.aborted) return null;
+      console.warn(
+        "[ILA map] layout preview decode failed, falling back to direct URL",
+        decodeErr,
+      );
+      return { kind: "url", url: proxied };
+    }
   } catch (error) {
     if (signal?.aborted) return null;
-    console.warn("[ILA map] layout preview decode failed", error);
+    console.warn("[ILA map] layout preview fetch failed", error);
     return null;
   }
 }

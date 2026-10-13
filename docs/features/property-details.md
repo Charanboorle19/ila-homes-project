@@ -77,6 +77,7 @@ When ready, it calls `apiPropertyToRecord(property, lifeStage, documents.items)`
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PropertyPageView.tsx` — shared page composition.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\ApiPropertyView.tsx` — API loading/normalization boundary.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PropertyHero.tsx` — hero, summary, gallery, primary CTAs, tracked share control.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\MapSection.tsx` — interactive estate master plan / plot layout map (`<MapSection propertyId={property.id} hideDetails hideSearch />`), restricted to displaying only this property, without the redundant details sidebar/popup and search bar, and with two-finger cooperative mobile gesture interactions matching Future Neighbourhood.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\ShareButton.tsx` — POST /api/shares trigger, tracked-link field, copy and WhatsApp actions.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\shareService.ts` — `createPropertyShare`, `buildShareUrl`, and the `ShareResult`/`ShareType`/`ShareChannel`/`ShareEntityType` types.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\LifeStageMatch.tsx` — Buyer Fit.
@@ -251,16 +252,17 @@ Reset on `property.id` change is unchanged: `dismissed` resets to `false`, so th
 `PropertyPageView` renders, in this exact order:
 
 1. `PropertyHero`
-2. `LifeStageMatch`
-3. `FutureNeighbourhoodMap`
-4. `Lifestyle`
-5. `PriceEmiFuture`
-6. `LegalDocuments`
-7. `SatelliteBeforeAfter`
-8. `BuyingJourneySteps`
-9. `SimilarProperties`
-10. `PropertyFinalCta`
-11. `StickyBottomCta` (conditionally visible over the page)
+2. `MapSection` (rendered with `propertyId={property.id}` to display solely this property's plots layout)
+3. `LifeStageMatch`
+4. `FutureNeighbourhoodMap`
+5. `Lifestyle`
+6. `PriceEmiFuture`
+7. `LegalDocuments`
+8. `SatelliteBeforeAfter`
+9. `BuyingJourneySteps`
+10. `SimilarProperties`
+11. `PropertyFinalCta`
+12. `StickyBottomCta` (conditionally visible over the page)
 
 ## 23. Hero/property summary
 

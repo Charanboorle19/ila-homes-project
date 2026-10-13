@@ -10,6 +10,7 @@ import {
   whatsappUrl,
 } from "@/lib/propertyUtils";
 import PropertyHero from "@/components/PropertyDetail/PropertyHero";
+import MapSection from "@/components/MapSection";
 import LifeStageMatch from "@/components/PropertyDetail/LifeStageMatch";
 import FutureNeighbourhoodMap from "@/components/PropertyDetail/FutureNeighbourhoodMap";
 import Lifestyle from "@/components/PropertyDetail/Lifestyle";
@@ -109,6 +110,12 @@ export default function PropertyPageView({
         onScheduleVisit={scrollToNextStep}
         priceLabel={property.priceLabel ?? formatInr(property.price)}
         imagesLoading={imagesLoading}
+      />
+
+      <MapSection
+        propertyId={property.id}
+        hideDetails
+        hideSearch
       />
 
       <LifeStageMatch property={property} />

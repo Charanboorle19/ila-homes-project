@@ -100,7 +100,7 @@ Button sizing is `py-2` with a `text-[13px] font-bold` label and looser `trackin
 
 Map mode is opened only from a card's `Map` button. `openMap(location)` makes the passed locality active and sets `mapMode` to `true`.
 
-There is no longer a standalone `View on map` button in the list-view header. It was removed so that the map is reachable from the same place for every locality rather than defaulting to the first mappable one. `openMap()` still falls back to the first mappable locality when called without an argument, and map mode cannot be opened when the current page has no mappable locality.
+On mobile, entering map mode or switching active developments triggers an instant auto-scroll (`scrollToMapSection`) targeting the top of the section offset below the sticky navigation bar (`--nav-h`). This is scheduled immediately and across multiple animation frames/timers to prevent the collapsed layout from stranding the mobile scroll offset over the property detail card and its cover image below the map. It also triggers `map.resize()` so MapLibre paints its canvas without delay.
 
 ## 16. Map library and worker
 

@@ -47,6 +47,24 @@ export default function EmiAppreciation() {
   const [status, setStatus] = useState<PickerStatus>("loading");
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  const updateScrollState = useCallback(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  }, []);
+
+  const scrollGrid = useCallback((direction: -1 | 1) => {
+    const el = gridRef.current;
+    if (!el) return;
+    const first = el.firstElementChild as HTMLElement | null;
+    const stride = first ? first.offsetWidth + 12 : 240;
+    el.scrollBy({ left: direction * stride, behavior: "smooth" });
+  }, []);
 
   /** Drives whether the calculator renders inline or in the popup. */
   const [isMobile, setIsMobile] = useState(false);
@@ -192,17 +210,19 @@ export default function EmiAppreciation() {
       <div className="emi-appreciation__frame">
         <header className="emi-appreciation__intro">
           <h2 className="emi-appreciation__heading">
-            Plan your purchase — see size, cost and returns together
+            Calculate Your EMI Before You Buy
           </h2>
           <p className="emi-appreciation__lede">
-            Pick a property to model the loan, then adjust the down payment,
-            interest rate and tenure. Every figure updates as you type.
+            Explore your monthly EMI, down payment, and loan options for your chosen property.
           </p>
         </header>
 
         <div className="emi-appreciation__picker">
-          <p className="emi-appreciation__picker-label" id="emi-picker-label">
+          <p className="emi-appreciation__picker-label hidden sm:block" id="emi-picker-label">
             Select a property
+          </p>
+          <p className="emi-appreciation__picker-heading-mobile sm:hidden" id="emi-picker-label-mobile">
+            Select a property to run the numbers
           </p>
 
           {status === "loading" ? (
@@ -231,56 +251,91 @@ export default function EmiAppreciation() {
           ) : null}
 
           {items.length > 0 ? (
-            <div
-              className="emi-appreciation__grid"
-              role="group"
-              aria-labelledby="emi-picker-label"
-            >
-              {items.map((item, index) => {
-                const isOn = item.id === selectedId;
-                const fallbackImage = PROPERTY_IMAGES[index % PROPERTY_IMAGES.length];
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`emi-appreciation__option${isOn ? " is-on" : ""}`}
-                    aria-pressed={isOn}
-                    onClick={() => select(item.id)}
-                  >
-                    <span className="emi-appreciation__option-media">
-                      <Image
-                        src={item.cover_url || fallbackImage}
-                        alt=""
-                        fill
-                        sizes="(max-width: 760px) 50vw, 220px"
-                        unoptimized
-                        onError={(event) => {
-                          event.currentTarget.src = fallbackImage.src;
-                        }}
-                      />
-                      <span className="emi-appreciation__option-check" aria-hidden="true">
-                        {isOn ? "✓" : ""}
-                      </span>
-                    </span>
-                    <span className="emi-appreciation__option-body">
-                      <span className="emi-appreciation__option-copy">
-                        <span className="emi-appreciation__option-name">
-                          {item.name}
-                        </span>
-                        <span className="emi-appreciation__option-location">
-                          {item.slug || "Property details available"}
+            <>
+              <div
+                ref={gridRef}
+                onScroll={updateScrollState}
+                className="emi-appreciation__grid"
+                role="group"
+                aria-labelledby="emi-picker-label"
+              >
+                {items.map((item, index) => {
+                  const isOn = item.id === selectedId;
+                  const fallbackImage = PROPERTY_IMAGES[index % PROPERTY_IMAGES.length];
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`emi-appreciation__option${isOn ? " is-on" : ""}`}
+                      aria-pressed={isOn}
+                      onClick={() => select(item.id)}
+                    >
+                      <span className="emi-appreciation__option-media">
+                        <Image
+                          src={item.cover_url || fallbackImage}
+                          alt=""
+                          fill
+                          sizes="(max-width: 760px) 50vw, 220px"
+                          unoptimized
+                          onError={(event) => {
+                            event.currentTarget.src = fallbackImage.src;
+                          }}
+                        />
+                        <span className="emi-appreciation__option-check" aria-hidden="true">
+                          {isOn ? "✓" : ""}
                         </span>
                       </span>
-                      <span className="emi-appreciation__option-meta">
-                        {[item.property_type, formatPrice(item.price)]
-                          .filter(Boolean)
-                          .join(" · ")}
+                      <span className="emi-appreciation__option-body">
+                        <span className="emi-appreciation__option-copy">
+                          <span className="emi-appreciation__option-name">
+                            {item.name}
+                          </span>
+                          {(item.locality || item.city) ? (
+                            <span className="emi-appreciation__option-location">
+                              {item.locality || item.city}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="emi-appreciation__option-meta">
+                          {[item.property_type, formatPrice(item.price)]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Mobile arrow controls below the cards block */}
+              <div className="emi-appreciation__arrows sm:hidden" aria-label="Scroll properties">
+                <button
+                  type="button"
+                  onClick={() => scrollGrid(-1)}
+                  disabled={!canScrollLeft}
+                  className="emi-appreciation__arrow-btn"
+                  aria-label="Previous properties"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <span className="text-[11px] font-semibold tracking-wider text-[#c8c1b2]/80 uppercase">
+                  Scroll
+                </span>
+                <button
+                  type="button"
+                  onClick={() => scrollGrid(1)}
+                  disabled={!canScrollRight}
+                  className="emi-appreciation__arrow-btn"
+                  aria-label="Next properties"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            </>
           ) : null}
         </div>
 
@@ -295,12 +350,12 @@ export default function EmiAppreciation() {
           disabled affordance — dimmed, non-interactive, `aria-disabled` — and
           names what is missing.
 
-          On mobile the placeholder stays inline, but once a property is chosen
-          the calculator itself moves into the popup instead of rendering here.
+          On mobile, the heading is placed directly above the property cards,
+          so this box is only displayed on desktop/tablet.
         */}
         {!selected ? (
           <div
-            className="emi-appreciation__locked"
+            className="emi-appreciation__locked hidden sm:block"
             role="group"
             aria-disabled="true"
             aria-label="EMI calculator, awaiting a property"

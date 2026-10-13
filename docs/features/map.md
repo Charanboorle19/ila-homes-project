@@ -20,13 +20,13 @@ The home page renders them in this order: `MapSection`, then `GrowthCorridors` (
 5. A plot can be selected from the map or list. The plot selection shows its plot details and highlights the polygon.
 6. The visitor can filter plots by `all`, `available`, or `sold`, search the current property/plot list, toggle layout imagery, and close the layout/property sheet.
 
-### Location map (`GrowthCorridors`)
+### Location/Development map (`GrowthCorridors`)
 
-1. `GrowthCorridors` loads `GET /api/locations?page=1&per_page=20`.
-2. The visitor opens map mode from a locality card's `Map` button, which passes that locality to `openMap` so the map opens already centered on it. There is no separate `View on map` control in the list-view header.
-3. Locations with numeric latitude and longitude are shown as markers/list entries; locations without coordinates remain non-mappable.
-4. Selecting a location centers the map at that location and shows a location card.
-5. `Explore` loads properties for that location with `GET /api/properties?location_slug={slug}&page=1&per_page=10`; the resulting links use `/properties/{property.id}`.
+1. `GrowthCorridors` loads properties with `GET /api/properties?status=ALL&page=1&per_page=100`.
+2. The visitor opens map mode from a property card's `Map` button or the header's `View all on map`. When entering map mode, the section is presented smoothly from the start of the section (`sectionRef`) without skipping down past the section header.
+3. Properties with coordinates appear on the map and in the mobile development switcher strip.
+4. When map mode is open, clicking `Back` exits map mode and returns to the card list view. If the map is currently maximized in fullscreen mode, clicking `Back` minimizes the map first.
+5. Selecting a development or plot shows its details without obstructing the map canvas on mobile.
 
 ## 3. Map library and configuration
 
@@ -269,7 +269,11 @@ The selected location's `slug` is sent as `location_slug` to the properties endp
 
 `MapSection` contains mobile-specific plot-list and property-sheet expansion state (`mobilePlotExpanded`, `propertySheetExpanded`). `GrowthCorridors` renders the map full-bleed on mobile at a fixed `h-[46vh]`; location cards use horizontal overflow, while the desktop layout uses a sidebar/list arrangement. The active location card is positioned over the lower map area on small screens.
 
-The `GrowthCorridors` mobile map frame needs a **definite** height rather than a minimum. MapLibre's `maplibregl-map { position: relative }` is unlayered CSS and overrides the Tailwind `absolute` utility on the container, so the container depends on `h-full` resolving against its parent. In the mobile `flex-col` wrapper the frame was `flex-1` with `min-h-[46vh]`, leaving its height `auto`, so `height: 100%` resolved to `auto` and the map rendered as a blank zero-height canvas. The frame now uses `h-[46vh] flex-none` on small screens, restoring the stretched flex item at `lg` with `lg:h-auto lg:flex-1 lg:min-h-0`. `MapSection` is unaffected because its section uses a definite `h-[calc(100svh-var(--nav-h))]`.
+The `GrowthCorridors` mobile map frame needs a **definite** height rather than a minimum. MapLibre's `maplibregl-map { position: relative }` is unlayered CSS and overrides the Tailwind `absolute` utility on the container, so the container depends on `h-full` resolving against its parent. In the mobile `flex-col` wrapper the frame was `flex-1` with `min-h-[46vh]`, leaving its height `auto`, so `height: 100%` resolved to `auto` and the map rendered as a blank zero-height canvas. The frame now uses `h-[46vh] flex-none` on small screens, restoring the stretched flex item at `lg` with `lg:h-auto lg:flex-1 lg:min-h-0`. `MapSection` is unaffected because its section uses a definite `h-[calc(100svh-var(--nav-h))]`. In addition, entering map mode or switching active properties triggers an instant auto-scroll (`scrollToMapSection`) targeting the map frame (`mapFrameRef`) across animation frames, preventing touch inertia or reflow from stranding the mobile scroll position on content below the map, while invoking `map.resize()`.
+
+The selected property detail card (`activeItem`) flows **below the map** on mobile as a separate block (`relative shrink-0 overflow-hidden bg-[#1b1d22] p-4`), sitting directly beneath the map canvas inside the frame container with its own positioning context (so its background cover image does not escape to cover the map frame). At `lg` (and in fullscreen mode) the card is positioned as an absolute overlay in the bottom-right corner.
+
+On mobile, `GrowthCorridors` map interactions are completely unrestricted: full multi-directional touch pan (`dragPan`), pinch-zoom, and map interaction gestures are enabled directly on the canvas without axis-locking or touch-action overrides.
 
 Exact breakpoint behavior beyond the Tailwind classes in the components is UNKNOWN — needs verification.
 

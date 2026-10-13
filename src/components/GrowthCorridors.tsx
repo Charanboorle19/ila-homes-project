@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LngLatBounds,
   Map as MapLibreMap,
@@ -242,6 +242,7 @@ export default function GrowthCorridors() {
    * it carries no margin to offset the sticky nav by.
    */
   const mapFrameRef = useRef<HTMLDivElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   /**
    * One marker per mappable locality, keyed by location id.
@@ -741,28 +742,51 @@ export default function GrowthCorridors() {
   }, [mapMode]);
 
   /**
-   * Brings the map into view when map mode opens.
+   * Scrolls the map view into place when opening map mode or changing active property.
    *
-   * List mode and map mode are very different heights on a phone: the heading
-   * and the card carousel are replaced by the locality strip and a 58vh map. The
-   * scroll offset the visitor was holding when they tapped a card's Map button
-   * therefore no longer points at the map, and can settle on the locality card
-   * directly below it -- the one carrying the property's cover image, which then
-   * reads as "the map is showing a photo". Desktop is a side-by-side layout
-   * where both modes are about one screen tall, so the offset survives the swap
-   * and this never surfaced there.
+   * List mode and map mode have drastically different heights on a phone. When the visitor
+   * taps a card's "Map" button, the list carousel unmounts, collapsing the section height.
+   * On mobile, smooth scrolling is interrupted or cancelled by the browser's touch event lifecycle
+   * and ongoing reflow, leaving the scroll position stranded at the bottom of the section --
+   * squarely on the detail card carrying the property's cover image.
    *
-   * `scroll-margin-top` on the frame keeps the sticky nav from landing on top of
-   * the map's first row. Scrolling the container instead would be wrong: it is
-   * sized to fill the frame and so offers nothing to offset against.
+   * Using an instant auto-scroll targeted at the top of the section (accounting for `--nav-h`)
+   * across multiple animation frames ensures the mobile screen immediately aligns at the top of the
+   * map view (displaying the mobile Back button, development switcher strip, and the live interactive
+   * map). We also invoke `map.resize()` to ensure MapLibre immediately sizes and renders its canvas.
    */
-  useEffect(() => {
-    if (!mapMode) return;
-    mapFrameRef.current?.scrollIntoView({
-      behavior: "smooth",
+  /**
+   * Scrolls the Growth Corridors section into view from the start when opening map mode.
+   *
+   * Targets `sectionRef` rather than `mapFrameRef` so the entire section (including its header,
+   * mobile back button, and development switcher) is displayed from the top, without skipping down.
+   */
+  const scrollToMapSection = useCallback(() => {
+    if (mapFullscreenRef.current) return;
+
+    const section = sectionRef.current;
+    if (!section) return;
+
+    section.scrollIntoView({
+      behavior: "auto",
       block: "start",
     });
-  }, [mapMode]);
+
+    mapRef.current?.resize();
+  }, []);
+
+  useEffect(() => {
+    if (!mapMode) return;
+
+    scrollToMapSection();
+    const rafId = window.requestAnimationFrame(() => {
+      scrollToMapSection();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [mapMode, scrollToMapSection]);
 
   useEffect(() => {
     if (!mapMode || !mapContainerRef.current || mapRef.current) return;
@@ -811,128 +835,21 @@ export default function GrowthCorridors() {
 
     mapRef.current = map;
 
-    // Mobile gestures, matching `MapSection`: while the map is embedded the
-    // page keeps its native vertical scroll and the map only claims the
-    // horizontal axis. Left alone, MapLibre captures both, so a vertical swipe
-    // over the map drags the map sideways-ish instead of scrolling the page and
-    // a phone visitor cannot get past the section at all.
-    //
-    // `touch-action: pan-y` (`.ila-corridor-map-frame` in globals.css) hands
-    // vertical panning back to the browser. The listeners below then pan
-    // horizontally by hand, because enabling `dragPan` would take both axes
-    // back. Fullscreen is the one place free panning is right, so it flips the
-    // whole thing back on.
-    const mobileQuery = window.matchMedia("(max-width: 767px)");
-    let lastTouchX: number | null = null;
-    let lastTouchY: number | null = null;
-    let gestureAxis: "pending" | "horizontal" | "vertical" | "pinch" =
-      "pending";
-    const canvas = map.getCanvasContainer();
-    const glCanvas = map.getCanvas();
-
-    const setMobileTouchAction = (enabled: boolean) => {
-      const value = enabled ? "pan-y" : "";
-      canvas.style.touchAction = value;
-      glCanvas.style.touchAction = value;
-    };
-
-    const onTouchStart = (event: TouchEvent) => {
-      if (mapFullscreenRef.current) return;
-      if (event.touches.length === 1) {
-        lastTouchX = event.touches[0].clientX;
-        lastTouchY = event.touches[0].clientY;
-        gestureAxis = "pending";
-      } else {
-        lastTouchX = null;
-        lastTouchY = null;
-        gestureAxis = "pinch";
-      }
-    };
-
-    const onTouchMove = (event: TouchEvent) => {
-      if (!mobileQuery.matches || mapFullscreenRef.current) return;
-
-      if (event.touches.length !== 1) {
-        gestureAxis = "pinch";
-        lastTouchX = null;
-        lastTouchY = null;
-        return;
-      }
-
-      if (lastTouchX === null || lastTouchY === null) return;
-      if (gestureAxis === "vertical" || gestureAxis === "pinch") return;
-
-      const touch = event.touches[0];
-      const dx = touch.clientX - lastTouchX;
-      const dy = touch.clientY - lastTouchY;
-
-      // The axis is settled once, on the first move out of the 8px dead zone,
-      // and held for the rest of the gesture. The 1.15 bias keeps a near
-      // diagonal swipe from flip-flopping between the two and stuttering.
-      if (gestureAxis === "pending") {
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        gestureAxis =
-          Math.abs(dx) > Math.abs(dy) * 1.15 ? "horizontal" : "vertical";
-        if (gestureAxis === "vertical") return;
-      }
-
-      if (gestureAxis !== "horizontal") return;
-
-      lastTouchX = touch.clientX;
-      lastTouchY = touch.clientY;
-      event.preventDefault();
-      map.panBy([-dx, 0], { animate: false });
-    };
-
-    const onTouchEnd = () => {
-      lastTouchX = null;
-      lastTouchY = null;
-      gestureAxis = "pending";
-    };
-
-    const clearTouchListeners = () => {
-      canvas.removeEventListener("touchstart", onTouchStart);
-      canvas.removeEventListener("touchmove", onTouchMove);
-      canvas.removeEventListener("touchend", onTouchEnd);
-      canvas.removeEventListener("touchcancel", onTouchEnd);
-    };
-
     const applyInteractions = () => {
-      clearTouchListeners();
-      const isMobile = mobileQuery.matches;
-      const fullscreen = mapFullscreenRef.current;
-
-      if (isMobile && !fullscreen) {
-        // Embedded on a phone: the page scrolls, the map pans sideways.
-        map.dragPan.disable();
-        map.touchZoomRotate.enable();
-        map.touchZoomRotate.disableRotation();
-        map.dragRotate.disable();
-        map.touchPitch.disable();
-        setMobileTouchAction(true);
-        canvas.addEventListener("touchstart", onTouchStart, { passive: true });
-        canvas.addEventListener("touchmove", onTouchMove, { passive: false });
-        canvas.addEventListener("touchend", onTouchEnd, { passive: true });
-        canvas.addEventListener("touchcancel", onTouchEnd, { passive: true });
-        return;
-      }
-
-      // Desktop, or fullscreen on a phone: the map behaves freely again.
+      // Unrestricted map interaction on mobile and desktop
       map.dragPan.enable();
       map.touchZoomRotate.enable();
       map.dragRotate.disable();
       map.touchPitch.disable();
-      if (isMobile) {
-        map.touchZoomRotate.disableRotation();
-      } else {
-        map.touchZoomRotate.enableRotation();
-      }
-      setMobileTouchAction(false);
+
+      const canvas = map.getCanvasContainer();
+      const glCanvas = map.getCanvas();
+      canvas.style.touchAction = "";
+      glCanvas.style.touchAction = "";
     };
 
     applyInteractionsRef.current = applyInteractions;
     applyInteractions();
-    mobileQuery.addEventListener("change", applyInteractions);
 
     // Fatal style, worker or WebGL failures leave an unrecoverable canvas.
     // Tile 404s and network hiccups are non-fatal and should not blank out the map.
@@ -1067,8 +984,6 @@ export default function GrowthCorridors() {
       // A layout request outlives the map that asked for it, so it is cancelled
       // here rather than being left to resolve against a removed map.
       layoutAbortRef.current?.abort();
-      clearTouchListeners();
-      mobileQuery.removeEventListener("change", applyInteractions);
       applyInteractionsRef.current = null;
       resizeObserver?.disconnect();
       window.removeEventListener("resize", onWindowResize);
@@ -1452,6 +1367,7 @@ export default function GrowthCorridors() {
 
   return (
     <section
+      ref={sectionRef}
       data-section="growth_corridors"
       id="services"
       className={
@@ -1460,7 +1376,10 @@ export default function GrowthCorridors() {
           : "growth-corridors relative w-full overflow-hidden bg-[#eceef2]"
       }
       aria-label="Hyderabad growth corridors"
-      style={{ ["--gc-gold" as string]: GOLD }}
+      style={{
+        scrollMarginTop: "calc(var(--nav-h) + 0.5rem)",
+        ["--gc-gold" as string]: GOLD,
+      }}
     >
       {/* Decorative background grid. See `.growth-corridors-bg` in
           globals.css, where the opacity lives so it fades this layer only
@@ -2042,7 +1961,7 @@ export default function GrowthCorridors() {
               className={
                 mapFullscreen
                   ? "hidden"
-                  : "shrink-0 -mx-6 lg:mx-0 lg:flex lg:w-75 lg:flex-col lg:overflow-hidden lg:rounded-2xl lg:border lg:border-black/8 lg:bg-white lg:px-0 lg:shadow-[0_8px_30px_rgba(15,17,20,0.06)]"
+              : "shrink-0 -mx-6 overflow-y-hidden lg:mx-0 lg:flex lg:w-75 lg:flex-col lg:overflow-hidden lg:rounded-2xl lg:border lg:border-black/8 lg:bg-white lg:px-0 lg:shadow-[0_8px_30px_rgba(15,17,20,0.06)]"
               }
               aria-label="Localities"
             >
@@ -2050,7 +1969,16 @@ export default function GrowthCorridors() {
               <div className="flex items-center justify-between gap-3 px-6 pb-2 lg:hidden">
                 <button
                   type="button"
-                  onClick={() => setMapMode(false)}
+                  onClick={() => {
+                    if (mapFullscreen) {
+                      setMapFullscreen(false);
+                      return;
+                    }
+                    if (layoutOpen) {
+                      closePropertyLayout();
+                    }
+                    setMapMode(false);
+                  }}
                   className="-ml-1 inline-flex items-center gap-1.5 rounded-full bg-black/6 px-2.5 py-1.5 text-[10px] font-semibold tracking-[0.12em] text-[#0f1114] uppercase"
                 >
                   <ArrowIcon className="h-3 w-3 rotate-180" />
@@ -2218,18 +2146,15 @@ export default function GrowthCorridors() {
               <button
                 type="button"
                 onClick={() => {
-                    // A layout is open: step back to the portfolio first, rather
-                    // than dropping the visitor out of map mode entirely.
-                    if (layoutOpen) {
-                      closePropertyLayout();
-                      return;
-                    }
-                    if (mapFullscreen) {
-                      setMapFullscreen(false);
-                      return;
-                    }
-                    setMapMode(false);
-                  }}
+                  if (mapFullscreen) {
+                    setMapFullscreen(false);
+                    return;
+                  }
+                  if (layoutOpen) {
+                    closePropertyLayout();
+                  }
+                  setMapMode(false);
+                }}
                 className={`absolute left-3 top-3 z-20 items-center gap-1.5 rounded-full bg-white/95 px-3 py-2 text-[10px] font-semibold tracking-[0.12em] text-[#0f1114] uppercase shadow-[0_4px_16px_rgba(15,17,20,0.14)] backdrop-blur-sm transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8A6A1F] ${mapFullscreen ? "inline-flex" : "hidden lg:inline-flex"}`}
                 aria-label={
                   mapFullscreen
@@ -2526,7 +2451,7 @@ export default function GrowthCorridors() {
                       ? // Fullscreen has no room below the map, so the card is an
                         // overlay at every width, not just at `lg`.
                         "absolute inset-x-3 bottom-3 z-10 overflow-hidden rounded-[18px] bg-[#1b1d22] p-4 shadow-[0_8px_30px_rgba(15,17,20,0.12)] lg:inset-x-auto lg:right-3 lg:max-w-sm"
-                      : "shrink-0 overflow-hidden bg-[#1b1d22] p-4 lg:absolute lg:inset-x-auto lg:right-3 lg:bottom-3 lg:z-10 lg:max-w-sm lg:rounded-[18px] lg:shadow-[0_8px_30px_rgba(15,17,20,0.12)]"
+                      : "relative shrink-0 overflow-hidden bg-[#1b1d22] p-4 lg:absolute lg:inset-x-auto lg:right-3 lg:bottom-3 lg:z-10 lg:max-w-sm lg:rounded-[18px] lg:shadow-[0_8px_30px_rgba(15,17,20,0.12)]"
                   }
                   aria-live="polite"
                 >

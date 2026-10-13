@@ -11,6 +11,7 @@ import { trackEvent } from "@/services/analytics/tracker";
 import { fetchProperties, type PropertyListItem } from "@/services/propertiesService";
 import { buildShareUrl, createPropertyShares } from "@/services/shareService";
 import { ILA_PROPERTY_ID } from "@/lib/ilaApiConfig";
+import ShortlistPreviewModal from "./ShortlistPreviewModal";
 import "./ShortlistShare.css";
 
 const PROPERTY_IMAGES: StaticImageData[] = [
@@ -20,7 +21,7 @@ const PROPERTY_IMAGES: StaticImageData[] = [
   plannedCityscapeImg,
 ];
 
-type ShortlistPlot = {
+export type ShortlistPlot = {
   id: string;
   name: string;
   location: string;
@@ -80,15 +81,21 @@ const FEATURES = [
 ] as const;
 
 function buildShareText(plots: ShortlistPlot[], urls: string[]) {
+  const sections = plots.map((plot, index) => {
+    const url = urls[index]?.trim() || "";
+    return [
+      `*${plot.name}*`,
+      `📍 ${plot.location} · ${plot.meta}`,
+      url,
+    ].filter(Boolean).join("\n");
+  });
+
   return [
-    "My shortlisted properties via ILA Homes",
+    "🏡 *My Shortlisted Properties via ILA Homes*",
     "",
-    ...plots.map(
-      (plot, index) =>
-        `• ${plot.name} · ${plot.location}\n  ${plot.meta}\n  ${urls[index]}`,
-    ),
+    sections.join("\n\n"),
     "",
-    "Open the links to review together.",
+    "Open the links to review layouts, pricing & financing together.",
   ].join("\n");
 }
 
@@ -99,7 +106,6 @@ export default function ShortlistShare() {
   const [loading, setLoading] = useState(true);
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const mobilePanelsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -128,43 +134,8 @@ export default function ShortlistShare() {
     [properties, pinned],
   );
 
-  useEffect(() => {
-    const element = mobilePanelsRef.current;
-    if (!element) return;
-
-    let startY = 0;
-    const onTouchStart = (event: TouchEvent) => {
-      startY = event.touches[0]?.clientY ?? 0;
-    };
-    const onTouchMove = (event: TouchEvent) => {
-      if (event.touches.length !== 1) return;
-      const currentY = event.touches[0]?.clientY ?? startY;
-      const deltaY = currentY - startY;
-      const maxScroll = Math.max(0, element.scrollHeight - element.clientHeight);
-      const atTop = element.scrollTop <= 0;
-      const atBottom = element.scrollTop >= maxScroll - 1;
-      element.style.overflowY =
-        (deltaY > 0 && atTop) || (deltaY < 0 && atBottom) || maxScroll <= 0
-          ? "hidden"
-          : "auto";
-    };
-    const restoreOverflow = () => {
-      element.style.overflowY = "";
-    };
-
-    element.addEventListener("touchstart", onTouchStart, { passive: true });
-    element.addEventListener("touchmove", onTouchMove, { passive: true });
-    element.addEventListener("touchend", restoreOverflow, { passive: true });
-    element.addEventListener("touchcancel", restoreOverflow, { passive: true });
-
-    return () => {
-      element.removeEventListener("touchstart", onTouchStart);
-      element.removeEventListener("touchmove", onTouchMove);
-      element.removeEventListener("touchend", restoreOverflow);
-      element.removeEventListener("touchcancel", restoreOverflow);
-      element.style.overflowY = "";
-    };
-  }, []);
+  // Native scrolling with overscroll-behavior-y: auto allows the scroll
+  // to smoothly chain to page scroll when reaching the top or bottom boundaries.
 
   const togglePlot = (id: string) => {
     const wasPinned = pinned.includes(id);
@@ -180,7 +151,11 @@ export default function ShortlistShare() {
     });
   };
 
-  const shareOnWhatsApp = async () => {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+
+  // When visitor clicks Share, prepare the tracked links and open the preview popup
+  const handleOpenPreview = async () => {
     if (!selected.length || sharing) return;
 
     setSharing(true);
@@ -194,36 +169,48 @@ export default function ShortlistShare() {
       const urls = shares.map((share) =>
         buildShareUrl(share.tracking_token!, origin),
       );
-      const text = buildShareText(selected, urls);
-      window.open(
-        `https://wa.me/?text=${encodeURIComponent(text)}`,
-        "_blank",
-        "noopener,noreferrer",
-      );
-      setShared(true);
-      trackEvent({
-        event_type: "WHATSAPP_SHARE_CLICK",
-        property_id: selected[0].id,
-        metadata: {
-          shortlist_count: selected.length,
-          property_ids: selected.map((item) => item.id),
-          section_type: "shortlist_whatsapp",
-        },
-      });
+      setPreviewUrls(urls);
+      setPreviewOpen(true);
     } catch {
-      setError("Sharing failed. Please try again.");
+      // Fallback: construct links using origins directly if share endpoint fails
+      const fallbackUrls = selected.map(
+        (plot) => `${window.location.origin}/properties/${plot.id}`,
+      );
+      setPreviewUrls(fallbackUrls);
+      setPreviewOpen(true);
     } finally {
       setSharing(false);
     }
   };
 
+  // Called from the preview popup once confirmed
+  const confirmShareOnWhatsApp = () => {
+    if (!selected.length) return;
+
+    const text = buildShareText(selected, previewUrls);
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    setShared(true);
+    setPreviewOpen(false);
+
+    trackEvent({
+      event_type: "WHATSAPP_SHARE_CLICK",
+      property_id: selected[0].id,
+      metadata: {
+        shortlist_count: selected.length,
+        property_ids: selected.map((item) => item.id),
+        section_type: "shortlist_whatsapp",
+      },
+    });
+  };
+
   const renderChoose = (instance: "desktop" | "mobile") => (
     <div className="shortlist-share__choose">
       <p className="shortlist-share__choose-label">Choose plots to share</p>
-      <div
-        className="shortlist-share__options"
-        ref={instance === "mobile" ? mobilePanelsRef : undefined}
-      >
+      <div className="shortlist-share__options">
         {properties.map((plot) => {
           const isSelected = pinned.includes(plot.id);
           return (
@@ -295,16 +282,16 @@ export default function ShortlistShare() {
       <button
         type="button"
         className="shortlist-share__wa-btn"
-        onClick={shareOnWhatsApp}
+        onClick={handleOpenPreview}
         disabled={!selected.length || sharing}
       >
         {sharing
-          ? "Preparing links…"
+          ? "Preparing preview…"
           : shared
             ? "Shared — open again"
             : !selected.length
               ? "Select properties to share"
-              : `Share ${selected.length} ${selected.length === 1 ? "property" : "properties"} →`}
+              : `Preview & Share (${selected.length}) →`}
       </button>
     </div>
   );
@@ -372,10 +359,10 @@ export default function ShortlistShare() {
           <button
             type="button"
             className="shortlist-share__share"
-            onClick={shareOnWhatsApp}
+            onClick={handleOpenPreview}
             disabled={!selected.length || sharing}
           >
-            Share on WhatsApp <span aria-hidden="true">→</span>
+            {sharing ? "Preparing preview…" : "Preview & Share on WhatsApp"} <span aria-hidden="true">→</span>
           </button>
         </div>
         <aside className="shortlist-share__right" aria-live="polite">
@@ -398,6 +385,15 @@ export default function ShortlistShare() {
           </div>
         </aside>
       </div>
+
+      <ShortlistPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        selectedPlots={selected}
+        urls={previewUrls}
+        onConfirmShare={confirmShareOnWhatsApp}
+        sharing={sharing}
+      />
     </section>
   );
 }

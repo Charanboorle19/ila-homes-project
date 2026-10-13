@@ -10,6 +10,7 @@ import EmiAppreciation from "@/components/EmiAppreciation";
 import FromTheField from "@/components/FromTheField";
 import PlotsWithPulse from "@/components/PlotsWithPulse";
 import Faq from "@/components/Faq";
+import HomeReadyToVisit from "@/components/HomeReadyToVisit";
 
 /**
  * Homepage order.
@@ -38,6 +39,7 @@ export default function Home() {
       <FromTheField />
       <PlotsWithPulse />
       <Faq />
+      <HomeReadyToVisit />
     </>
   );
 }

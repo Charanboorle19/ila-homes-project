@@ -1083,7 +1083,19 @@ function setLayoutData(map: MapLibreMap, project: EstateProject | null) {
   set("estate-road-centers", project.roadCenterlinesGeo);
 }
 
-export default function MapSection() {
+export type MapSectionProps = {
+  propertyId?: string;
+  className?: string;
+  hideDetails?: boolean;
+  hideSearch?: boolean;
+};
+
+export default function MapSection({
+  propertyId: singlePropertyId,
+  className,
+  hideDetails = false,
+  hideSearch = false,
+}: MapSectionProps = {}) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -1105,9 +1117,8 @@ export default function MapSection() {
   const mapFullscreenRef = useRef(false);
   mapFullscreenRef.current = mapFullscreen;
   const applyInteractionsRef = useRef<() => void>(() => {});
-  const [zoomHintVisible, setZoomHintVisible] = useState(false);
-  const zoomHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const zoomHintShownRef = useRef(false);
+  const [desktopScrollHint, setDesktopScrollHint] = useState(false);
+  const desktopScrollHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapFrameRef = useRef<HTMLDivElement | null>(null);
   const fittedPinsRef = useRef("");
   /** Coalesces the auto-fit while pins stream in, so the camera moves once. */
@@ -1159,18 +1170,6 @@ export default function MapSection() {
       },
     );
   }, [projects]);
-
-  showZoomHintRef.current = () => {
-    if (zoomHintShownRef.current) return;
-    if (!window.matchMedia("(max-width: 767px)").matches) return;
-    zoomHintShownRef.current = true;
-    setZoomHintVisible(true);
-    if (zoomHintTimerRef.current) clearTimeout(zoomHintTimerRef.current);
-    zoomHintTimerRef.current = setTimeout(() => {
-      setZoomHintVisible(false);
-      zoomHintTimerRef.current = null;
-    }, 2500);
-  };
 
   // Property picker: GET /api/properties, then the selected property.
   //  1. list properties            GET /api/properties
@@ -1469,22 +1468,33 @@ export default function MapSection() {
           setPropertyAnchors((previous) => ({ ...previous, ...anchors }));
         });
 
-        // Open the first property that actually has plots, so the map is
-        // not empty on first paint. Most listings have no geometry yet.
-        // Silent: this is a convenience warm-up, not a visitor request, so it
-        // runs behind the pins rather than dimming the map with a spinner.
-        const first = result.items[0];
-        if (first) selectProperty(first.id, { silent: true });
+        // When a single property is requested (e.g. on /properties/{id}),
+        // immediately open that property's layout.
+        if (singlePropertyId) {
+          void selectProperty(singlePropertyId, { openLayout: true, openSheet: false });
+        } else {
+          // Open the first property that actually has plots, so the map is
+          // not empty on first paint. Most listings have no geometry yet.
+          // Silent: this is a convenience warm-up, not a visitor request, so it
+          // runs behind the pins rather than dimming the map with a spinner.
+          const first = result.items[0];
+          if (first) selectProperty(first.id, { silent: true });
+        }
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setRemoteStatus("error");
+        if (singlePropertyId) {
+          // In single property mode, also try selecting directly via fetchPropertyById
+          void selectProperty(singlePropertyId, { openLayout: true, openSheet: false });
+        } else {
+          setRemoteStatus("error");
+        }
         console.warn("[ILA API] properties list failed", error);
       });
 
     return () => controller.abort();
     // Runs once: the map is populated from the API on mount.
-  }, [selectProperty]);
+  }, [selectProperty, singlePropertyId]);
 
   /**
    * One pin per listed property, so the whole portfolio is on the map before
@@ -1518,18 +1528,26 @@ export default function MapSection() {
     }
 
     const resultPins = [...byId.values()];
-    if (resultPins.length > 0) {
+    const filteredPins = singlePropertyId
+      ? resultPins.filter(
+          (p) =>
+            p.id === singlePropertyId ||
+            (singlePropertyId === "sark-green-plains" && p.id === "sark-green"),
+        )
+      : resultPins;
+
+    if (filteredPins.length > 0) {
       console.info(
         "[ILA map] Pointers placed from API coordinates:",
-        resultPins.map((p) => ({
+        filteredPins.map((p) => ({
           name: p.name,
           latitude: p.center[1],
           longitude: p.center[0],
         })),
       );
     }
-    return resultPins;
-  }, [propertyAnchors, propertyList, projects]);
+    return filteredPins;
+  }, [propertyAnchors, propertyList, projects, singlePropertyId]);
 
   /** Frames every pin, so "reset view" shows the whole portfolio. */
   const pinsBounds = useMemo<Bounds>(() => {
@@ -1772,7 +1790,7 @@ export default function MapSection() {
     window.addEventListener("orientationchange", onOrient);
     return () => {
       window.removeEventListener("orientationchange", onOrient);
-      if (zoomHintTimerRef.current) clearTimeout(zoomHintTimerRef.current);
+      if (desktopScrollHintTimerRef.current) clearTimeout(desktopScrollHintTimerRef.current);
       if (fitTimerRef.current) clearTimeout(fitTimerRef.current);
     };
   }, []);
@@ -1806,6 +1824,9 @@ export default function MapSection() {
 
     let map: MapLibreMap;
     try {
+      const isMobileScreen =
+        typeof window !== "undefined" &&
+        !window.matchMedia("(min-width: 768px)").matches;
       map = new MapLibreMap({
         container: mapContainerRef.current,
         style: MAP_STYLE,
@@ -1816,6 +1837,7 @@ export default function MapSection() {
         dragRotate: false,
         pitchWithRotate: false,
         touchPitch: false,
+        cooperativeGestures: isMobileScreen,
       });
     } catch (error) {
       console.error("Unable to initialize the developments map", error);
@@ -1909,32 +1931,58 @@ export default function MapSection() {
       const fullscreen = mapFullscreenRef.current;
 
       if (isMobile && !fullscreen) {
-        // Embedded map: page scrolls vertically; map pans horizontally
-        map.dragPan.disable();
+        // Embedded map on mobile: cooperative gestures handles 2-finger panning & pinch zoom,
+        // allowing single-finger vertical page scroll through the map canvas.
+        map.cooperativeGestures?.enable();
+        map.scrollZoom.enable();
+        map.dragPan.enable();
         map.touchZoomRotate.enable();
         map.touchZoomRotate.disableRotation();
         map.dragRotate.disable();
         map.touchPitch.disable();
         setMobileTouchAction(true);
-        canvas.addEventListener("touchstart", onTouchStart, { passive: true });
-        canvas.addEventListener("touchmove", onTouchMove, { passive: false });
-        canvas.addEventListener("touchend", onTouchEnd, { passive: true });
-        canvas.addEventListener("touchcancel", onTouchEnd, { passive: true });
         return;
       }
 
-      // Desktop or fullscreen: full free map interaction
+      // Fullscreen (expanded): full free map interaction (scroll zoom + drag pan)
+      if (fullscreen) {
+        map.cooperativeGestures?.disable();
+        map.scrollZoom.enable();
+        map.dragPan.enable();
+        map.touchZoomRotate.enable();
+        map.dragRotate.disable();
+        map.touchPitch.disable();
+        if (isMobile) {
+          map.touchZoomRotate.disableRotation();
+        } else {
+          map.touchZoomRotate.enableRotation();
+        }
+        setMobileTouchAction(false);
+        return;
+      }
+
+      // Embedded on desktop: prevent scroll/touchpad from capturing page scroll,
+      // require clicking maximize / fullscreen button to interact freely.
+      map.cooperativeGestures?.disable();
+      map.scrollZoom.disable();
       map.dragPan.enable();
       map.touchZoomRotate.enable();
       map.dragRotate.disable();
       map.touchPitch.disable();
-      if (isMobile) {
-        map.touchZoomRotate.disableRotation();
-      } else {
-        map.touchZoomRotate.enableRotation();
-      }
+      map.touchZoomRotate.enableRotation();
       setMobileTouchAction(false);
     };
+
+    const onWheel = () => {
+      if (mapFullscreenRef.current || mobileQuery.matches) return;
+      setDesktopScrollHint(true);
+      if (desktopScrollHintTimerRef.current) clearTimeout(desktopScrollHintTimerRef.current);
+      desktopScrollHintTimerRef.current = setTimeout(() => {
+        setDesktopScrollHint(false);
+        desktopScrollHintTimerRef.current = null;
+      }, 2500);
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: true });
 
     applyInteractionsRef.current = applyMobileInteractions;
     applyMobileInteractions();
@@ -2524,6 +2572,14 @@ export default function MapSection() {
   };
 
   const resetView = () => {
+    if (singlePropertyId && activeProject) {
+      const map = mapRef.current;
+      if (map) {
+        fitBounds(map, activeProject.bounds, 60, LAYOUT_MAX_ZOOM, panelOpen);
+        setSelectedId(null);
+        return;
+      }
+    }
     closeLayout();
   };
 
@@ -2553,7 +2609,9 @@ export default function MapSection() {
       className={
         mapFullscreen
           ? "fixed inset-0 z-50 flex w-full flex-col overflow-hidden bg-neutral-200"
-          : "relative flex h-[calc(100svh-var(--nav-h))] w-full flex-col overflow-hidden bg-[#ebe6de] md:h-[calc(100dvh-var(--nav-h))] md:bg-neutral-200"
+          : className
+            ? `relative flex w-full flex-col overflow-hidden bg-[#ebe6de] md:bg-neutral-200 ${className}`
+            : "relative flex h-[calc(100svh-var(--nav-h))] w-full flex-col overflow-hidden bg-[#ebe6de] md:h-[calc(100dvh-var(--nav-h))] md:bg-neutral-200"
       }
       aria-label="ILA Homes developments map"
       aria-busy={remoteStatus === "loading"}
@@ -2566,16 +2624,20 @@ export default function MapSection() {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold tracking-[0.22em] text-[#7a5c28] uppercase">
-              Our Developments
+              {singlePropertyId ? "Master Plan & Layout" : "Our Developments"}
             </p>
             <h2 className="mt-1 text-lg leading-tight font-semibold tracking-tight text-[#171717]">
-              Find Your Place in Hyderabad.
+              {singlePropertyId
+                ? (activeProject?.name ?? "Plot Layout")
+                : "Find Your Place in Hyderabad."}
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-[#3f3a34]">
-              Tap a project pin to open its estate layout on the map.
+              {singlePropertyId
+                ? "Tap any plot to view dimensions, facing and availability."
+                : "Tap a project pin to open its estate layout on the map."}
             </p>
           </div>
-          {!searchOpen ? (
+          {!hideSearch && !searchOpen ? (
             <button
               type="button"
               aria-label="Open search"
@@ -2587,7 +2649,7 @@ export default function MapSection() {
           ) : null}
         </div>
 
-        {searchOpen ? (
+        {!hideSearch && searchOpen ? (
           <div className="ila-map-search-panel--open mt-2 overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
             <div className="flex items-center gap-2 border-b border-black/10 px-3">
               <SearchIcon className="h-4 w-4 shrink-0 text-[#5c5348]" />
@@ -2717,31 +2779,38 @@ export default function MapSection() {
           </button>
         ) : null}
 
-        {zoomHintVisible ? (
-          <div
-            className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-black/55 md:hidden animate-map-hint-fade"
-            aria-live="polite"
-          >
-            <div className="flex flex-col items-center gap-3 px-6 text-center text-white">
-              <div className="ila-pinch-hint" aria-hidden>
-                <span className="ila-pinch-hint__finger ila-pinch-hint__finger--a" />
-                <span className="ila-pinch-hint__finger ila-pinch-hint__finger--b" />
-                <span className="ila-pinch-hint__ring" />
-              </div>
-              <p className="text-sm font-semibold tracking-wide">
-                Pinch to zoom in &amp; out
+        {/* Desktop top-left corner: property name tag when hideDetails is true (e.g. on /properties/{id}) */}
+        {!mapFullscreen && hideDetails && (activeProject?.name || activeProperty?.name) ? (
+          <div className="pointer-events-none absolute top-3 left-3 z-20 hidden md:flex items-center gap-2 rounded-xl border border-black/15 bg-[#eae4da]/95 px-3.5 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.14)] backdrop-blur-md">
+            <div>
+              <p className="text-[9px] font-semibold tracking-[0.2em] text-[#7a5c28] uppercase">
+                Estate Layout &amp; Plots
               </p>
-              <p className="text-[11px] font-medium tracking-wide text-white/75 uppercase">
-                or use + / − · swipe sideways to pan
-              </p>
+              <h3 className="text-sm font-semibold tracking-tight text-[#171717]">
+                {activeProject?.name ?? activeProperty?.name}
+              </h3>
             </div>
           </div>
         ) : null}
 
-        {panelOpen ? (
+        {/* Desktop zoom / touchpad hint: indicates using the maximize button when scrolling while embedded */}
+        {!mapFullscreen && desktopScrollHint ? (
+          <div
+            className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-40 hidden md:flex items-center gap-2 rounded-full border border-black/15 bg-neutral-900/90 px-4 py-2 text-xs font-semibold text-white shadow-xl backdrop-blur-sm animate-map-hint-fade"
+            role="status"
+          >
+            <span>Tap the maximize button</span>
+            <span className="flex h-5 w-5 items-center justify-center rounded bg-white/20 text-[10px]">
+              ⤢
+            </span>
+            <span>to freely zoom and interact</span>
+          </div>
+        ) : null}
+
+        {!hideDetails && panelOpen ? (
           <aside className="pointer-events-none absolute inset-y-0 left-0 z-20 hidden w-88 flex-col py-3 pl-3 md:flex sm:py-4">
             <div className="pointer-events-auto relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[8px_0_28px_rgba(15,23,42,0.14)]">
-              {activeProject ? (
+              {activeProject && !singlePropertyId ? (
                 <button
                   type="button"
                   aria-label="Back to all developments"
@@ -2827,21 +2896,29 @@ export default function MapSection() {
               <div className="shrink-0 border-t border-black/10 p-3 sm:p-4">
                 {/* A selected property must reach its own detail page, so the
                     CTA switches from the contact anchor to /properties/{id}.
-                    `activePropertyId` is already set while merely listing, so
-                    the label still keys off the open layout. */}
+                    In single-property mode, the visitor is already on the page,
+                    so point to the site-visit booking section (#next-step). */}
                 <Link
-                  href={layoutOpen && activePropertyHref ? activePropertyHref : "#contact"}
+                  href={
+                    singlePropertyId
+                      ? "#next-step"
+                      : layoutOpen && activePropertyHref
+                        ? activePropertyHref
+                        : "#contact"
+                  }
                   className="flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
                 >
-                  {layoutOpen && activePropertyHref
-                    ? "Visit Property"
-                    : "View All Properties"}
+                  {singlePropertyId
+                    ? "Book Site Visit"
+                    : layoutOpen && activePropertyHref
+                      ? "Visit Property"
+                      : "View All Properties"}
                   <ArrowIcon className="h-4 w-4" />
                 </Link>
               </div>
             </div>
           </aside>
-        ) : (
+        ) : !hideDetails ? (
           <button
             type="button"
             aria-label="Open developments panel"
@@ -2851,89 +2928,71 @@ export default function MapSection() {
             Developments
             <ArrowIcon className="h-3.5 w-3.5" />
           </button>
-        )}
+        ) : null}
 
         {/* Search — desktop overlay (mobile search lives in the section header) */}
-        <div className="pointer-events-none absolute top-3 right-3 z-20 hidden flex-col items-end gap-2 md:flex sm:top-4 sm:right-4">
-          <div className="pointer-events-auto flex w-[min(20rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-black/15 bg-[#eae4da]/95 shadow-[0_12px_32px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all focus-within:border-[#8a6d2f]/60 focus-within:shadow-[0_14px_36px_rgba(15,23,42,0.22)]">
-            <div className="flex items-center gap-2 border-b border-black/10 px-3.5 py-1">
-              <SearchIcon className="h-4 w-4 shrink-0 text-[#5c5348]" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={
-                  activeProject
-                    ? "Search plot, facing or area"
-                    : "Search projects or plots"
-                }
-                className="min-w-0 flex-1 bg-transparent py-2 text-sm font-medium text-[#171717] outline-none placeholder:text-[#5c5348]/70"
-              />
-              {query ? (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => setQuery("")}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#4a453e] text-white transition hover:bg-[#171717]"
-                >
-                  <CloseIcon className="h-3 w-3" />
-                </button>
-              ) : null}
-            </div>
-
-            <div className="grid grid-cols-3 divide-x divide-black/10">
-              {filters.map((item) => {
-                const active = filter === item.key;
-                return (
+        {!hideSearch ? (
+          <div className="pointer-events-none absolute top-3 right-3 z-20 hidden flex-col items-end gap-2 md:flex sm:top-4 sm:right-4">
+            <div className="pointer-events-auto flex w-[min(20rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-black/15 bg-[#eae4da]/95 shadow-[0_12px_32px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all focus-within:border-[#8a6d2f]/60 focus-within:shadow-[0_14px_36px_rgba(15,23,42,0.22)]">
+              <div className="flex items-center gap-2 border-b border-black/10 px-3.5 py-1">
+                <SearchIcon className="h-4 w-4 shrink-0 text-[#5c5348]" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={
+                    activeProject
+                      ? "Search plot, facing or area"
+                      : "Search projects or plots"
+                  }
+                  className="min-w-0 flex-1 bg-transparent py-2 text-sm font-medium text-[#171717] outline-none placeholder:text-[#5c5348]/70"
+                />
+                {query ? (
                   <button
-                    key={item.key}
                     type="button"
-                    onClick={() => setFilter(item.key)}
-                    className={`px-2.5 py-2 text-left transition ${
-                      active
-                        ? "bg-[#171717] text-white"
-                        : "bg-transparent text-[#171717] hover:bg-[#cfc3a8]/60"
-                    }`}
+                    aria-label="Clear search"
+                    onClick={() => setQuery("")}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#4a453e] text-white transition hover:bg-[#171717]"
                   >
-                    <span className="block text-[11px] font-semibold sm:text-xs">
-                      {item.label}
-                    </span>
-                    <span
-                      className={`mt-0.5 block text-[10px] font-medium ${
-                        active ? "text-white/70" : "text-[#5c5348]"
+                    <CloseIcon className="h-3 w-3" />
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="grid grid-cols-3 divide-x divide-black/10">
+                {filters.map((item) => {
+                  const active = filter === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setFilter(item.key)}
+                      className={`px-2.5 py-2 text-left transition ${
+                        active
+                          ? "bg-[#171717] text-white"
+                          : "bg-transparent text-[#171717] hover:bg-[#cfc3a8]/60"
                       }`}
                     >
-                      {item.count}
-                    </span>
-                  </button>
-                );
-              })}
+                      <span className="block text-[11px] font-semibold sm:text-xs">
+                        {item.label}
+                      </span>
+                      <span
+                        className={`mt-0.5 block text-[10px] font-medium ${
+                          active ? "text-white/70" : "text-[#5c5348]"
+                        }`}
+                      >
+                        {item.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
+        ) : null}
 
         {/* Mobile development popup — shown when a property marker is tapped.
-            Suppressed in fullscreen, where the map is the whole point and a
-            sheet over it would cover the layout being explored.
-
-            Portalled to <body> so it is a true page-level overlay. Nested in
-            here it was bounded by the map frame's `overflow-hidden`, which
-            clipped the sheet and made it a child of a card instead of a
-            surface in its own right. `fixed` from <body> escapes every
-            clipping ancestor.
-
-            **`inset-x-0` — the sheet is full-bleed.** It was `inset-x-2`, an 8px
-            inset on each side, chosen to line the sheet up with the map card's
-            own `mx-2` gutters. That put the sheet inside a second frame the map
-            was not in, and the doubled margin read as a card floating above the
-            fold rather than as a sheet attached to the screen. At full bleed the
-            sheet spans the viewport, its only rounded corners are the two at the
-            top, and `bottom-0` docks it so the square bottom corners read as
-            deliberate.
-
-            Height uses percentages and `pb` uses the safe-area
-            inset — never `dvh`, which resizes the sheet whenever the mobile
-            browser shows or hides its URL bar. */}
-        {portalReady && selectedProject && !selectedPlot && !mapFullscreen
+            Suppressed in fullscreen or when hideDetails is true. */}
+        {portalReady && !hideDetails && selectedProject && !selectedPlot && !mapFullscreen
           ? createPortal(
               <div
                 className={`pointer-events-auto fixed inset-x-0 bottom-0 z-[200] flex flex-col overflow-hidden rounded-t-[1.5rem] border-x border-t border-white/10 bg-[#141519] pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-12px_32px_rgba(0,0,0,0.5)] transition-[height,max-height] duration-300 md:hidden ${propertySheetExpanded ? "h-[88%] max-h-[88%]" : "h-48 max-h-48"}`}
@@ -3195,6 +3254,7 @@ export default function MapSection() {
             <button
               type="button"
               aria-label="Open map fullscreen"
+              title="Maximize map to interact freely"
               onClick={() => {
                 setMapFullscreen(true);
               }}

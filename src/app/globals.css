@@ -1020,20 +1020,7 @@ body {
    * this map has no such sidebar, so sharing the class would shift its
    * attribution off to the left for no reason.
    */
-  .ila-corridor-map-frame:not(.ila-corridor-map-frame--fullscreen)
-    .maplibregl-canvas-container,
-  .ila-corridor-map-frame:not(.ila-corridor-map-frame--fullscreen)
-    .maplibregl-canvas,
-  .ila-corridor-map-frame:not(.ila-corridor-map-frame--fullscreen)
-    .maplibregl-map {
-    touch-action: pan-y !important;
-  }
 
-  .ila-corridor-map-frame--fullscreen .maplibregl-canvas-container,
-  .ila-corridor-map-frame--fullscreen .maplibregl-canvas,
-  .ila-corridor-map-frame--fullscreen .maplibregl-map {
-    touch-action: none !important;
-  }
 
   .ila-corridor-map-frame .maplibregl-map {
     position: absolute !important;

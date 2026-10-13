@@ -277,16 +277,19 @@ export default function PriceEmiFuture({
   return (
     <section className="pd-section pd-emi print:p-0 print:m-0" aria-labelledby="pd-emi-title" ref={printAreaRef}>
       <div className="pd-section__inner">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-black/10 pb-6">
+        {/* Header - on print, display as executive summary header */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-black/10 pb-6 print:border-b-2 print:border-neutral-900 print:pb-4">
           <div>
-            <p className="pd-kicker">Affordability & Financing</p>
-            <h2 id="pd-emi-title" className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[#171717]">
-              EMI Calculator for {property.name}
+            <p className="pd-kicker print:text-[#7a6134] print:font-bold">Affordability & Financing</p>
+            <h2 id="pd-emi-title" className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[#171717] print:text-2xl">
+              Calculate Your EMI Before You Buy
             </h2>
-            <p className="pd-section__lead mt-2 text-sm sm:text-base text-[#5c5852]">
-              Customize your purchase price, upfront down payment, and tenure to visualize your monthly installments and complete amortization schedule.
+            <p className="pd-section__lead mt-2 text-sm sm:text-base text-[#5c5852] print:text-xs print:mt-1">
+              Explore your monthly EMI, down payment, and loan options for your chosen property.
             </p>
+            <div className="hidden print:block mt-2 text-xs font-semibold text-neutral-800">
+              Property: <span className="font-bold text-black">{property.name}</span>
+            </div>
           </div>
           <div className="flex items-center gap-2.5 shrink-0 print:hidden">
             <button
@@ -320,9 +323,9 @@ export default function PriceEmiFuture({
         </div>
 
         {/* Main 2-Column Responsive Dashboard Layout */}
-        <div className="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* LEFT COLUMN: Input Controls (Scrollable block) */}
-          <div className="lg:col-span-7 flex flex-col rounded-2xl border border-black/10 bg-white shadow-xs overflow-hidden">
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print:mt-4 print:block">
+          {/* LEFT COLUMN: Input Controls - HIDDEN ON PRINT to print only the results block */}
+          <div className="lg:col-span-7 flex flex-col rounded-2xl border border-black/10 bg-white shadow-xs overflow-hidden print:hidden">
             <div className="p-5 sm:p-7 pb-4 border-b border-black/10 bg-white z-10 shrink-0 flex items-center justify-between">
               <h3 className="text-base font-bold text-[#171717] uppercase tracking-wider flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-[#c6a46c]"></span>
@@ -660,9 +663,29 @@ export default function PriceEmiFuture({
           </div>
 
           {/* RIGHT COLUMN: Summary Card & Interactive Doughnut Chart (Sticky like Lifestyle) */}
-          <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-[calc(var(--nav-h,5rem)+1.25rem)] lg:self-start">
+          <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-[calc(var(--nav-h,5rem)+1.25rem)] lg:self-start print:w-full print:max-w-none print:static print:space-y-4 print:p-0">
+            {/* Print-only Loan Summary Parameters Pill Bar */}
+            <div className="hidden print:grid grid-cols-4 gap-3 p-3.5 rounded-xl border border-neutral-300 bg-neutral-50 text-xs pd-emi-print-exact mb-2">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-neutral-500 block">Purchase Price</span>
+                <span className="font-bold text-neutral-900">{formatInr(purchasePrice)}</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-neutral-500 block">Down Payment</span>
+                <span className="font-bold text-neutral-900">{formatInr(effectiveDownPayment)} ({effectiveDownPaymentPct}%)</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-neutral-500 block">Interest Rate</span>
+                <span className="font-bold text-neutral-900">{annualRate}% p.a.</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-neutral-500 block">Loan Tenure</span>
+                <span className="font-bold text-neutral-900">{tenureMonths / 12} Yrs ({tenureMonths} Mo)</span>
+              </div>
+            </div>
+
             {/* Primary Result Card */}
-            <div className="rounded-2xl bg-[#0f1114] p-6 text-white shadow-xl">
+            <div className="rounded-2xl bg-[#0f1114] p-6 text-white shadow-xl pd-emi-print-exact pd-emi-print-avoid-break">
               <div className="flex items-center justify-between border-b border-white/10 pb-4">
                 <span className="text-xs uppercase tracking-widest font-semibold text-white/60">
                   Estimated Monthly EMI
@@ -800,7 +823,7 @@ export default function PriceEmiFuture({
             </div>
 
             {/* Value Growth & Land Appreciation Narrative */}
-            <div className="rounded-2xl border border-black/10 bg-[#faf8f5] p-5 sm:p-6">
+            <div className="rounded-2xl border border-black/10 bg-[#faf8f5] p-5 sm:p-6 pd-emi-print-exact pd-emi-print-avoid-break print:mt-4 print:border-neutral-300">
               <h4 className="text-sm font-bold text-[#171717] tracking-tight flex items-center gap-2">
                 <svg className="w-4 h-4 text-[#c6a46c]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -813,11 +836,11 @@ export default function PriceEmiFuture({
                 At the corridor&apos;s average growth rate of {ANNUAL_APPRECIATION * 100}%/year, your plot is projected to appreciate to:
               </p>
               <div className="mt-3.5 grid grid-cols-2 gap-3 text-xs">
-                <div className="rounded-xl border border-black/5 bg-white p-3">
+                <div className="rounded-xl border border-black/5 bg-white p-3 print:border-neutral-200">
                   <p className="text-[10px] uppercase font-bold text-neutral-400">In 2 Years ({nearYear})</p>
                   <p className="text-sm font-bold text-[#171717] mt-0.5">~{formatInr(Math.round(valueNear))}</p>
                 </div>
-                <div className="rounded-xl border border-black/5 bg-white p-3">
+                <div className="rounded-xl border border-black/5 bg-white p-3 print:border-neutral-200">
                   <p className="text-[10px] uppercase font-bold text-neutral-400">In 4 Years ({laterYear})</p>
                   <p className="text-sm font-bold text-[#c6a46c] mt-0.5">~{formatInr(Math.round(valueLater))}</p>
                 </div>
@@ -829,9 +852,9 @@ export default function PriceEmiFuture({
           </div>
         </div>
 
-        {/* Amortization Schedule Section (Below Main Calculator Cards) */}
+        {/* Amortization Schedule Section (Below Main Calculator Cards) - Hidden on Print to output only results */}
         {showAmortizationSchedule ? (
-        <div className="mt-10">
+        <div className="mt-10 print:hidden">
           {/* Collapsible Header - styled like Lifestyle "Show more" button */}
           <button
             type="button"

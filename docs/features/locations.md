@@ -90,7 +90,7 @@ Each card has a two-button action row pinned to the bottom.
 
 A locality without finite numeric coordinates renders no `Map` button, and its `Explore` button is disabled and reads `No map location`; the primary then spans the full row width.
 
-Button sizing is `py-2` with a `text-[13px] font-bold` label and looser `tracking-[0.04em]`. This was reduced from the previous `py-3` / `text-[10px]` / `tracking-[0.14em]` full-width button, where the label read as too small for the box. The row is `flex items-center gap-2` with `flex-1` on the primary and `shrink-0` on the map control; `mt-auto pt-5` is retained so the row stays bottom-aligned and never collides with the address.
+Button sizing is `py-2` with a `text-[13px] font-bold` label and looser `tracking-[0.04em]`. This was reduced from the previous `py-3` / `text-[10px]` / `tracking-[0.14em]` full-width button, where the label read as too small for the box. The row is `flex items-center gap-2` with `flex-1` on the primary and `shrink-0` on the map control; `mt-auto pt-5` is retained so the row stays bottom-aligned and never collides with the address. Card headings, metrics, and chip rows reserve consistent vertical minimum bounds and truncations so contents align horizontally across adjacent cards.
 
 ## 14. Coordinate validation and formatting
 

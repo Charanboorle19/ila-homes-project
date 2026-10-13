@@ -15,10 +15,12 @@
  */
 
 /**
- * Accepts both virtual-hosted S3 URLs (`bucket.s3.amazonaws.com`) and
- * path-style presigned URLs (`s3.<region>.amazonaws.com/bucket/...`).
+ * Accepts both virtual-hosted S3 URLs (`bucket.s3.amazonaws.com`),
+ * path-style presigned URLs (`s3.<region>.amazonaws.com/bucket/...`),
+ * CloudFront, DigitalOcean Spaces, and the API host itself.
  */
-const S3_HOST = /^(?:[a-z0-9][a-z0-9.-]*\.s3(?:[.-][a-z0-9-]+)?|s3(?:[.-][a-z0-9-]+)?)\.amazonaws\.com$/i;
+const ALLOWED_HOST =
+  /^(?:(?:[a-z0-9][a-z0-9.-]*\.)?(?:s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com|cloudfront\.net|digitaloceanspaces\.com)|realestate\.sperow\.in)$/i;
 
 /** Master plans are scans or previews of them; anything larger is not one. */
 const MAX_BYTES = 60 * 1024 * 1024;
@@ -41,8 +43,8 @@ export async function GET(request: Request) {
   }
 
   if (parsed.protocol !== "https:") return badRequest("url must be https");
-  if (!S3_HOST.test(parsed.hostname)) {
-    return badRequest("url must be an S3 object");
+  if (!ALLOWED_HOST.test(parsed.hostname)) {
+    return badRequest("url host is not permitted");
   }
 
   try {

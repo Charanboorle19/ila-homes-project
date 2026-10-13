@@ -63,8 +63,11 @@ export function futureValue(price: number, years: number, annualRate = 0.11): nu
   return price * (1 + annualRate) ** years;
 }
 
-export function whatsappUrl(text: string): string {
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+export const DEFAULT_WHATSAPP_PHONE = "917893815371";
+
+export function whatsappUrl(text: string, phone: string = DEFAULT_WHATSAPP_PHONE): string {
+  const normalizedPhone = phone.replace(/\D/g, "");
+  return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(text)}`;
 }
 
 export function siteVisitMailto(property: PropertyRecord): string {

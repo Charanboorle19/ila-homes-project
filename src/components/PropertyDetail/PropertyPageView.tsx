@@ -94,7 +94,8 @@ export default function PropertyPageView({
   const activeImage =
     gallery.find((item) => item.id === activeGalleryId) ?? gallery[0];
 
-  const waText = `Hi ILA Homes, I'm interested in ${property.name} (${property.location}). Please share availability and a site-visit slot.`;
+  const waText =
+    "Hi, I'm interested in learning more about this property. Could you please share the details?";
 
   return (
     <div className="property-page">

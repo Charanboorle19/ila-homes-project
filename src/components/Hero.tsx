@@ -113,9 +113,43 @@ export default function Hero() {
   // Portalling to <body> makes it a true page-level overlay. A portal needs a
   // real DOM, so hold off until after the client mount.
   const [portalReady, setPortalReady] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     setPortalReady(true);
+  }, []);
+
+  // Ensure video autoplays on iOS / mobile devices without showing a play button overlay
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.defaultMuted = true;
+    video.muted = true;
+    video.setAttribute("muted", "");
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+
+    const tryPlay = () => {
+      const promise = video.play();
+      if (promise !== undefined) {
+        promise.catch(() => {
+          // Retry on first user gesture anywhere on page if iOS power-saving paused it
+          const playOnGesture = () => {
+            video.play().catch(() => {});
+            window.removeEventListener("touchstart", playOnGesture);
+            window.removeEventListener("touchend", playOnGesture);
+            window.removeEventListener("click", playOnGesture);
+          };
+          window.addEventListener("touchstart", playOnGesture, { passive: true, once: true });
+          window.addEventListener("touchend", playOnGesture, { passive: true, once: true });
+          window.addEventListener("click", playOnGesture, { once: true });
+        });
+      }
+    };
+
+    tryPlay();
+    video.addEventListener("loadeddata", tryPlay, { once: true });
   }, []);
 
   // Lock hero height once on mobile so browser chrome show/hide
@@ -517,13 +551,19 @@ export default function Hero() {
           typed here (only `*.geojson` is declared), so a `public/` path is the
           supported route. Autoplay requires `muted` + `playsInline`. */}
       <video
+        ref={videoRef}
         className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-        src="/assets/presenter-video-2.mp4"
+        src="/assets/final-video.mp4"
         autoPlay
         muted
         loop
         playsInline
+        webkit-playsinline="true"
+        x5-playsinline="true"
         preload="auto"
+        disablePictureInPicture
+        disableRemotePlayback
+        controls={false}
         aria-hidden
         tabIndex={-1}
       />

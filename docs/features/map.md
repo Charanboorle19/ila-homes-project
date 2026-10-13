@@ -121,7 +121,7 @@ List responses are expected as:
 }
 ```
 
-The units response is unwrapped by `fetchPropertyUnits` and supports a payload containing an array, `units`, `plots`, or `items`, or a GeoJSON `FeatureCollection`. Unit features are normalized with fields such as `plot_no`, `status`, `facing`, `sq_yards`, `sq_ft`, `price`, `per_sq_yard_price`, `per_sq_ft_price`, and optional centroid coordinates. Exact backend response variants beyond this normalization are UNKNOWN — needs verification.
+The units response is unwrapped by `fetchPropertyUnits` and supports a payload containing an array, `units`, `plots`, or `items`, or a GeoJSON `FeatureCollection`. Unit features are normalized with fields such as `plot_no`, `status`, `facing`, `sq_yards`, `sq_ft`, `price`, `per_sq_yard_price`, `per_sq_ft_price`, and optional centroid coordinates. When `layout_preview_url` carries a `.tif` or `.tiff` URL (or `tif_url` is provided), client-side TIFF parsing is automatically utilized; if `property_layout_cords` is empty or missing, layout bounds are derived directly from unit polygon coordinates (`estate.bounds`). Exact backend response variants beyond this normalization are UNKNOWN — needs verification.
 
 ## 9. Functions and hooks used
 

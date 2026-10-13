@@ -22,8 +22,9 @@ import {
  * needs to know about so it can ask the API for a fresh one.
  */
 
-/** Accepts virtual-hosted and path-style presigned S3 URLs. */
-const S3_HOST = /^(?:[a-z0-9][a-z0-9.-]*\.s3(?:[.-][a-z0-9-]+)?|s3(?:[.-][a-z0-9-]+)?)\.amazonaws\.com$/i;
+/** Accepts virtual-hosted and path-style presigned S3 URLs, CloudFront, DigitalOcean Spaces, or API host. */
+const ALLOWED_HOST =
+  /^(?:(?:[a-z0-9][a-z0-9.-]*\.)?(?:s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com|cloudfront\.net|digitaloceanspaces\.com)|realestate\.sperow\.in)$/i;
 
 /**
  * Decoded previews are cached: re-opening a property should not re-download a
@@ -55,7 +56,7 @@ const previewCache = new Map<string, CacheEntry>();
 export function isProxyableLayoutUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && S3_HOST.test(parsed.hostname);
+    return parsed.protocol === "https:" && ALLOWED_HOST.test(parsed.hostname);
   } catch {
     return false;
   }

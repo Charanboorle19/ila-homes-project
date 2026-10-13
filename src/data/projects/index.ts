@@ -112,7 +112,16 @@ function normalizeStatus(
     .trim()
     .toUpperCase();
   if (!value) return emptyAs;
-  if (value === "AVL" || value === "AVAILABLE" || value === "OPEN") {
+  if (
+    value === "AVL" ||
+    value === "AVAILABLE" ||
+    value === "OPEN" ||
+    value === "UNSOLD" ||
+    value === "VACANT" ||
+    value === "FOR_SALE" ||
+    value === "READY" ||
+    value === "ACTIVE"
+  ) {
     return "available";
   }
   return "sold";

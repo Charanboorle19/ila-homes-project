@@ -1,158 +1,287 @@
-# Public Property Search API
+/api/leads
+API Call
+# Public Lead Creation — Frontend Integration Guide
 
-This guide describes the public natural-language property search endpoint and the response fields the frontend can render.
+This document explains how the public website should create a lead when a visitor submits a contact, enquiry, callback, or property-interest form.
 
 ## Endpoint
 
-```http
-GET /api/search?q={query}&limit={count}
+```text
+POST /api/leads
 ```
 
-The endpoint searches active properties only. It does not search leads, visitors, or users. A bearer token is not required, but the request must resolve to a tenant using its host or tenant-domain header.
+The endpoint supports two flows:
 
-- `q` is required, 2-100 characters.
-- `limit` is optional, defaults to `8`, and accepts values from `1` to `20`.
+- **Public visitor:** no login is required, but `X-Visitor-Code` is required.
+- **Staff user:** an authenticated `ADMIN`, `AGENT`, or `SUB_AGENT` can create a lead using a bearer token.
 
-## Frontend Request
+This guide covers the public visitor flow.
 
-Use `URLSearchParams` to encode spaces and other query characters. In this app, `tenantHeaders()` supplies `X-Tenant-Domain` when the API is addressed through a shared platform host.
+## What is required?
 
-```ts
-import { API_BASE_URL, tenantHeaders } from "./tenant-api";
+Only these two request-body fields are required:
 
-type PropertySearchResult = {
-  type: "property";
-  id: string;
-  title: string;
-  subtitle: string;
-  href: string;
-  price: number | null;
-  bedrooms: number | null;
-  property_type: string;
-  location: string | null;
-  nearby_place: string | null;
-  distance_km: number | null;
-};
+| Field | Type | Required | Description |
+|---|---|---:|---|
+| `name` | string | Yes | Lead's name; 1–255 characters |
+| `mobile` | string | Yes | Lead's phone number; 5–20 characters |
 
-type PropertySearchResponse = {
-  properties: PropertySearchResult[];
-  recommendations: PropertySearchResult[];
-  no_results_found: boolean;
-  message: string | null;
-};
+All other fields are optional:
 
-async function searchProperties(query: string, limit = 8) {
-  const params = new URLSearchParams({ q: query, limit: String(limit) });
-  const response = await fetch(`${API_BASE_URL}/api/search?${params}`, {
-    headers: tenantHeaders(),
-  });
-  const body = await response.json();
+| Field | Type | Required | Description |
+|---|---|---:|---|
+| `email` | string or `null` | No | Lead's email address |
+| `message` | string or `null` | No | Enquiry or message from the visitor |
+| `property_id` | UUID or `null` | No | Property being enquired about |
+| `unit_id` | UUID or `null` | No | Unit being enquired about |
+| `metadata` | object or `null` | No | Additional frontend context such as campaign or page URL |
 
-  if (!response.ok) {
-    throw new Error(body?.error?.message ?? "Property search failed.");
-  }
+The backend automatically applies these values for a public submission unless explicitly handled by the server:
 
-  return body.data as PropertySearchResponse;
-}
+```text
+source = PUBLIC_FORM
+status = NEW
+```
+
+Do not send `assigned_to` from the public frontend. Public submissions are not allowed to choose an internal assignee.
+
+## Required headers
+
+```http
+Content-Type: application/json
+X-Visitor-Code: <visitor-code>
+```
+
+The visitor code is created by the visitor-identification endpoint. It should not be generated randomly by the frontend.
+
+## Recommended visitor flow
+
+### 1. Identify the visitor
+
+Call this when the website visitor first arrives or before submitting the lead form:
+
+```http
+POST /api/visitors
 ```
 
 Example:
 
 ```ts
-const results = await searchProperties("2bhk in Tukkuguda");
+const API_BASE_URL = "https://api.example.com";
+
+async function identifyVisitor() {
+  const response = await fetch(`${API_BASE_URL}/api/visitors`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to identify visitor");
+  }
+
+  const body = await response.json();
+  return body.data as {
+    visitor_code: string;
+    is_new: boolean;
+    first_seen_at: string;
+    total_visits: number;
+  };
+}
 ```
 
-## Supported Query Patterns
+The response contains a `visitor_code`. Store it in frontend memory or application state and send it as `X-Visitor-Code` when creating the lead.
 
-The parser extracts filters and combines them when possible:
+The API also sets an HTTP-only cookie. Keep using `credentials: "include"`, but send the `X-Visitor-Code` header explicitly for `POST /api/leads`.
 
-| Query | Interpreted filter |
-| --- | --- |
-| `2bhk in Tukkuguda` | Exactly 2 bedrooms, locality matches Tukkuguda |
-| `2-3 bhk near airport` | 2 to 3 bedrooms and an operational nearby-place match for airport |
-| `3+ bedrooms in Maheshwaram` | At least 3 bedrooms in Maheshwaram |
-| `plots in Tukkuguda` | Plot type and locality |
-| `apartments ready to move` | Apartment type and possession status |
-| `under 50 lakh` | Maximum price of 50 lakh |
-| `30 to 50 lakh` | Price range |
-| `1800 sq ft` | Approximate area range normalized to square feet |
-| `gym in Tukkuguda` | Active property feature and locality, when `gym` matches a feature name/key |
+### 2. Create the public lead
 
-Prices expressed in lakh/lac or crore/cr are normalized to rupees. Area expressed in square yards or gaj is normalized to square feet. A single area value is treated as an approximate range with 10% tolerance.
+Minimal request:
 
-For `near <place>`, only operational nearby-place records are considered. If property and place coordinates are available, `distance_km` is calculated using Haversine distance. If coordinates are unavailable, the stored nearby-place distance is converted to kilometers and used instead. Results are ordered nearest-first; there is no arbitrary maximum-distance cutoff.
+```ts
+type CreatePublicLeadRequest = {
+  name: string;
+  mobile: string;
+  email?: string | null;
+  message?: string | null;
+  property_id?: string | null;
+  unit_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
 
-## Response
+async function createPublicLead(
+  visitorCode: string,
+  lead: CreatePublicLeadRequest,
+) {
+  const response = await fetch(`${API_BASE_URL}/api/leads`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Visitor-Code": visitorCode,
+    },
+    body: JSON.stringify(lead),
+  });
 
-Successful responses use the standard envelope: the search data is under `data`.
+  const body = await response.json();
+
+  if (!response.ok) {
+    throw new Error(body?.error?.message || "Unable to create lead");
+  }
+
+  return body.data;
+}
+```
+
+Minimal usage:
+
+```ts
+const visitor = await identifyVisitor();
+
+const lead = await createPublicLead(visitor.visitor_code, {
+  name: "John Doe",
+  mobile: "+919876543210",
+});
+
+console.log("Lead created", lead.id);
+```
+
+Property enquiry usage:
+
+```ts
+const lead = await createPublicLead(visitor.visitor_code, {
+  name: form.name.trim(),
+  mobile: form.mobile.trim(),
+  email: form.email?.trim() || null,
+  message: form.message?.trim() || null,
+  property_id: propertyId,
+  unit_id: unitId || null,
+  metadata: {
+    page_url: window.location.href,
+    form_name: "property_enquiry",
+    utm_source: new URLSearchParams(window.location.search).get("utm_source"),
+  },
+});
+```
+
+## Example HTTP request
+
+```bash
+curl -X POST "https://api.example.com/api/leads" \
+  -H "Content-Type: application/json" \
+  -H "X-Visitor-Code: visitor-code-from-api" \
+  -d '{
+    "name": "John Doe",
+    "mobile": "+919876543210",
+    "email": "john@example.com",
+    "message": "I am interested in this property",
+    "property_id": "22000000-0000-0000-0000-000000000001",
+    "metadata": {
+      "form_name": "property_enquiry",
+      "source_page": "/properties/example-property"
+    }
+  }'
+```
+
+## Success response
+
+The endpoint returns HTTP `201 Created`:
 
 ```json
 {
   "success": true,
   "data": {
-    "properties": [
-      {
-        "type": "property",
-        "id": "property-uuid",
-        "title": "Tukkuguda Homes",
-        "subtitle": "APARTMENT · ACTIVE · Tukkuguda",
-        "href": "/properties/property-uuid",
-        "price": 6500000,
-        "bedrooms": 2,
-        "property_type": "APARTMENT",
-        "location": "Tukkuguda",
-        "nearby_place": "Rajiv Gandhi International Airport",
-        "distance_km": 8.4
-      }
-    ],
-    "recommendations": [],
-    "no_results_found": false,
-    "message": null
+    "id": "lead-uuid",
+    "visitor_id": "visitor-uuid",
+    "property_id": "22000000-0000-0000-0000-000000000001",
+    "unit_id": null,
+    "name": "John Doe",
+    "mobile": "+919876543210",
+    "email": "john@example.com",
+    "message": "I am interested in this property",
+    "source": "PUBLIC_FORM",
+    "status": "NEW",
+    "assigned_to": null,
+    "metadata": {
+      "form_name": "property_enquiry",
+      "source_page": "/properties/example-property"
+    },
+    "created_at": "2026-10-08T12:00:00+00:00",
+    "updated_at": "2026-10-08T12:00:00+00:00"
   }
 }
 ```
 
-Fields on each property:
+The response may include additional lead fields depending on the current response schema. The frontend should primarily use `data.id`, `data.status`, and `data.name` after creation.
 
-- `title` and `subtitle`: display text for a result row/card.
-- `href`: internal route to open when selected; use it with the frontend router.
-- `price`, `bedrooms`, `property_type`, and `location`: optional display details; render missing values as unavailable.
-- `nearby_place` and `distance_km`: populated for proximity searches; otherwise they are `null`.
+## Error responses
 
-Render `properties` as exact matches. If `no_results_found` is true, show the message and render `recommendations` separately as alternatives. The API returns up to five active recommendations, ordered by featured status and then most recently updated.
-
-No-match example:
+Errors use this format:
 
 ```json
 {
-  "success": true,
-  "data": {
-    "properties": [],
-    "recommendations": [
-      {
-        "type": "property",
-        "id": "another-property-uuid",
-        "title": "Nearby Active Property",
-        "subtitle": "PLOT · ACTIVE · Tukkuguda",
-        "href": "/properties/another-property-uuid",
-        "price": 4200000,
-        "bedrooms": null,
-        "property_type": "PLOT",
-        "location": "Tukkuguda",
-        "nearby_place": null,
-        "distance_km": null
-      }
-    ],
-    "no_results_found": true,
-    "message": "No exact matches found. Here are 5 other properties you might be interested in."
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error message"
   }
 }
 ```
 
-`recommendations` contains up to five results; fewer may be returned if fewer active properties exist.
+Common cases:
 
-## Errors
+| HTTP status | Error code | Meaning |
+|---:|---|---|
+| `401` or `422` | `VISITOR_CODE_REQUIRED` | `X-Visitor-Code` was not supplied for a public request |
+| `422` | `VALIDATION_ERROR` | `name` or `mobile` is missing or invalid |
+| `422` | `INVALID_MOBILE` | The supplied mobile number could not be normalized |
+| `404` | `PROPERTY_NOT_FOUND` | `property_id` does not identify an active property |
+| `404` | `UNIT_NOT_FOUND` | `unit_id` does not identify a valid unit |
+| `422` | `VALIDATION_ERROR` | `unit_id` does not belong to `property_id` |
+| `403` | `FORBIDDEN` | A public request attempted to set `assigned_to` |
+| `429` | `RATE_LIMIT_EXCEEDED` | The request was rate-limited |
 
-- `422`: query is missing, too short/long, or contains an invalid numeric filter.
-- `400` or tenant-resolution errors: tenant host/domain is missing or unknown.
-- `500`: a required search table or column is missing from the selected tenant schema.
+Example frontend error handling:
+
+```ts
+try {
+  await createPublicLead(visitorCode, formData);
+  showSuccessMessage("Thank you. We will contact you shortly.");
+} catch (error) {
+  showErrorMessage(
+    error instanceof Error
+      ? error.message
+      : "Unable to submit your enquiry. Please try again.",
+  );
+}
+```
+
+## Frontend validation
+
+Validate before making the request:
+
+```ts
+if (!name.trim()) {
+  throw new Error("Name is required");
+}
+
+if (!mobile.trim()) {
+  throw new Error("Mobile number is required");
+}
+```
+
+The backend remains the final authority for validation. Do not assume that a frontend-only validation check is sufficient.
+
+## Important implementation notes
+
+1. Use `credentials: "include"` for visitor-related requests.
+2. Send the visitor code in `X-Visitor-Code` when creating a public lead.
+3. Only `name` and `mobile` are mandatory in the lead body.
+4. Do not send empty UUID strings. Send `null` or omit optional UUID fields.
+5. Do not send `assigned_to` from the public form.
+6. Prevent duplicate submissions by disabling the submit button while the request is in progress.
+7. Display a success message only after receiving HTTP `201`.
+8. Do not expose access tokens, visitor codes, database credentials, or server configuration in logs.

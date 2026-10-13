@@ -4,6 +4,7 @@ import React, { useId, useState } from "react";
 import Image from "next/image";
 import { createPublicLead, LEAD_ERROR_CODES } from "@/services/leadsService";
 import { ApiError } from "@/services/apiClient";
+import { whatsappUrl, DEFAULT_WHATSAPP_PHONE } from "@/lib/propertyUtils";
 import "./HomeReadyToVisit.css";
 
 const PHONE_PREFIX = "+91";
@@ -37,10 +38,13 @@ type FormFields = {
 
 type FormErrors = Partial<Record<keyof FormFields, string>>;
 
+const DEFAULT_HOME_MESSAGE =
+  "Hi, I want to know more about your available properties. Could you please share the details?";
+
 const EMPTY_FIELDS: FormFields = {
   name: "",
   phone: "",
-  description: "",
+  description: DEFAULT_HOME_MESSAGE,
 };
 
 export default function HomeReadyToVisit() {
@@ -101,7 +105,7 @@ export default function HomeReadyToVisit() {
     setStatusMessage("");
 
     try {
-      await createPublicLead({
+      const lead = await createPublicLead({
         name: fields.name.trim(),
         mobile: toStoredPhone(fields.phone),
         email: null,
@@ -116,7 +120,17 @@ export default function HomeReadyToVisit() {
       });
 
       setStatus("sent");
+      const submittedName = fields.name.trim();
+      const submittedPhone = toStoredPhone(fields.phone);
+      const submittedNotes = fields.description.trim();
       setFields(EMPTY_FIELDS);
+
+      // Redirect to WhatsApp with enquiry details
+      if (typeof window !== "undefined") {
+        const text = submittedNotes || DEFAULT_HOME_MESSAGE;
+        const targetUrl = whatsappUrl(text, DEFAULT_WHATSAPP_PHONE);
+        window.location.href = targetUrl;
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
 

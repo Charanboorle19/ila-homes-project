@@ -1292,20 +1292,39 @@ export default function GrowthCorridors() {
 
       // The plan image is attached after the polygons are on the map, so a slow
       // or failed download never delays the layout itself.
-      if (layoutCords && (layoutPreviewUrl || tifUrl)) {
+      const effectiveCords =
+        layoutCords ??
+        (estate?.bounds
+          ? {
+              west: estate.bounds.minLng,
+              east: estate.bounds.maxLng,
+              north: estate.bounds.maxLat,
+              south: estate.bounds.minLat,
+            }
+          : null);
+
+      if (effectiveCords && (layoutPreviewUrl || tifUrl)) {
         void (async () => {
-          const useTiff = Boolean(tifUrl);
+          // If layoutPreviewUrl points to a .tif/.tiff, treat it as a TIFF scan.
+          const previewIsTiff = Boolean(
+            layoutPreviewUrl &&
+              /\.tiff?(?:$|\?)/i.test(layoutPreviewUrl),
+          );
+          const effectiveTifUrl = tifUrl ?? (previewIsTiff ? layoutPreviewUrl : null);
+          const effectivePreviewUrl = previewIsTiff ? null : layoutPreviewUrl;
+
+          const useTiff = Boolean(effectiveTifUrl);
           const raster = await (useTiff
             ? loadLayoutRaster({
                 propertyId: item.id,
-                tifUrl: tifUrl as string,
-                cords: layoutCords,
+                tifUrl: effectiveTifUrl as string,
+                cords: effectiveCords,
                 signal: controller.signal,
               })
             : loadLayoutPreviewRaster({
                 propertyId: item.id,
-                previewUrl: layoutPreviewUrl as string,
-                cords: layoutCords,
+                previewUrl: effectivePreviewUrl as string,
+                cords: effectiveCords,
                 signal: controller.signal,
               }));
           if (controller.signal.aborted || !raster) return;
@@ -1699,7 +1718,7 @@ export default function GrowthCorridors() {
                               property reads as the card's anchor. Both sizes are
                               fixed rather than responsive: a ramp would make
                               the section heading the larger text again at `lg`. */}
-                          <h3 className="mt-4 text-[26px] font-bold tracking-tight text-white">
+                          <h3 className="mt-4 min-h-[4rem] text-[26px] font-bold tracking-tight text-white line-clamp-2">
                             {item.name}
                           </h3>
 
@@ -1707,9 +1726,9 @@ export default function GrowthCorridors() {
                               state lines that ran past two or three wrapped rows
                               and left every card far taller than its neighbours,
                               none of which helped a buyer decide. */}
-                          <p className="mt-2.5 flex items-start gap-1.5 text-[14px] leading-relaxed font-normal text-white/70">
-                            <PinIcon className="mt-1 h-4 w-4 shrink-0 text-[#c9a84c]" />
-                            <span className="min-w-0">{localityOf(item)}</span>
+                          <p className="mt-2.5 flex items-center gap-1.5 text-[14px] leading-relaxed font-normal text-white/70">
+                            <PinIcon className="h-4 w-4 shrink-0 text-[#c9a84c]" />
+                            <span className="truncate">{localityOf(item)}</span>
                           </p>
 
                           {/* Three teaser facts from the property's units, so the
@@ -1724,7 +1743,7 @@ export default function GrowthCorridors() {
                               holds the same one-line height so nothing jumps. */}
                           {isSummaryLoading ? (
                             <div
-                              className="mt-2.5 grid grid-cols-3 gap-2"
+                              className="mt-4 grid grid-cols-3 gap-2"
                               aria-hidden
                             >
                               {[0, 1, 2].map((slot) => (
@@ -1737,7 +1756,7 @@ export default function GrowthCorridors() {
                           ) : null}
 
                           {facts && !isSummaryLoading ? (
-                            <div className="mt-2.5 grid grid-cols-3 gap-2">
+                            <div className="mt-4 grid grid-cols-3 gap-2">
                               <p className="min-w-0 text-[13px] leading-snug">
                                 <span className="font-bold tabular-nums text-[#c9a84c]">
                                   {facts.availableCount}
@@ -1746,10 +1765,10 @@ export default function GrowthCorridors() {
                                   {facts.availableCount === 1 ? "plot" : "plots"}
                                 </span>
                               </p>
-                              <p className="min-w-0 text-[13px] font-semibold wrap-break-word text-white">
+                              <p className="min-w-0 truncate text-[13px] font-semibold text-white">
                                 {sizeLabel ?? "Size on request"}
                               </p>
-                              <p className="min-w-0 text-[13px] font-semibold wrap-break-word text-white">
+                              <p className="min-w-0 truncate text-[13px] font-semibold text-white">
                                 {facts.priceFrom !== null
                                   ? `From ${formatPrice(facts.priceFrom)}`
                                   : "Price on request"}
@@ -1763,38 +1782,42 @@ export default function GrowthCorridors() {
                               needs the per-plot flag rather than `facings`,
                               since one plot facing "East / South" is still
                               East-facing but adds South to the union. */}
-                          {facts &&
-                          facts.availableCount > 0 &&
-                          (facts.allEastFacing || facts.hasCorner) ? (
-                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                              {facts.allEastFacing ? (
-                                <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[12px] font-medium text-white/85">
-                                  East facing
-                                </span>
-                              ) : null}
-                              {facts.hasCorner ? (
-                                <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[12px] font-medium text-white/85">
-                                  Corner plot
-                                </span>
-                              ) : null}
-                            </div>
-                          ) : null}
+                          <div className="mt-3 flex min-h-[1.75rem] flex-wrap items-center gap-1.5">
+                            {facts &&
+                            facts.availableCount > 0 &&
+                            (facts.allEastFacing || facts.hasCorner) ? (
+                              <>
+                                {facts.allEastFacing ? (
+                                  <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[12px] font-medium text-white/85">
+                                    East facing
+                                  </span>
+                                ) : null}
+                                {facts.hasCorner ? (
+                                  <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[12px] font-medium text-white/85">
+                                    Corner plot
+                                  </span>
+                                ) : null}
+                              </>
+                            ) : null}
+                          </div>
 
                           {/* Total plots, from the row itself rather than the units read -- so it is
                               present even when that request is still in flight.
                               Held in the same spot as the old line so the action
                               row below keeps its `mt-auto` anchor and the grid
                               stays aligned. */}
-                          {item.total_plots != null ? (
-                            <p className="mt-1.5 flex items-baseline gap-1.5 text-[13px]">
-                              <span className="font-bold text-[#c9a84c]">
-                                {item.total_plots}
-                              </span>
-                              <span className="font-medium text-white/60">
-                                {item.total_plots === 1 ? "plot" : "plots"}
-                              </span>
-                            </p>
-                          ) : null}
+                          <div className="mt-2 min-h-[1.25rem]">
+                            {item.total_plots != null ? (
+                              <p className="flex items-baseline gap-1.5 text-[13px]">
+                                <span className="font-bold text-[#c9a84c]">
+                                  {item.total_plots}
+                                </span>
+                                <span className="font-medium text-white/60">
+                                  {item.total_plots === 1 ? "plot" : "plots"}
+                                </span>
+                              </p>
+                            ) : null}
+                          </div>
 
                           {/* Actions stay compact against the 24px card title: a short gold primary plus a quieter map control beside
                               it, instead of one oversized full-width button.

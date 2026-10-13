@@ -10,6 +10,7 @@ import {
 } from "@/services/leadsService";
 import { bookPublicSiteVisit } from "@/services/siteVisitsService";
 import { ApiError } from "@/services/apiClient";
+import { whatsappUrl, DEFAULT_WHATSAPP_PHONE } from "@/lib/propertyUtils";
 
 function storageKey(kind: "wishlist", id: string) {
   return `ila-${kind}-${id}`;
@@ -56,10 +57,13 @@ type EnquiryFields = {
 
 type EnquiryErrors = Partial<Record<keyof EnquiryFields, string>>;
 
+const DEFAULT_PROPERTY_MESSAGE =
+  "Hi, I'm interested in learning more about this property. Could you please share the details?";
+
 const EMPTY: EnquiryFields = {
   name: "",
   phone: "",
-  description: "",
+  description: DEFAULT_PROPERTY_MESSAGE,
   scheduledAt: "",
 };
 
@@ -363,12 +367,17 @@ export default function PropertyFinalCta({
     const propertyId = isPropertyUuid(property.id) ? property.id : null;
 
     try {
+      const submittedName = fields.name.trim();
+      const submittedPhone = toStoredPhone(fields.phone);
+      const submittedNotes = fields.description.trim();
+      const submittedSlot = fields.scheduledAt;
+
       await createPublicLead({
-        name: fields.name.trim(),
-        mobile: toStoredPhone(fields.phone),
+        name: submittedName,
+        mobile: submittedPhone,
         // Optional fields are sent as null rather than empty strings.
         email: null,
-        message: fields.description.trim() || null,
+        message: submittedNotes || null,
         property_id: propertyId,
         unit_id: null,
         metadata: {
@@ -380,8 +389,15 @@ export default function PropertyFinalCta({
       });
 
       setStatus("sent");
-      setConfirmedSlot(formatSlot(fields.scheduledAt, visitDays));
+      setConfirmedSlot(formatSlot(submittedSlot, visitDays));
       setFields(EMPTY);
+
+      // Redirect to WhatsApp with enquiry details
+      if (typeof window !== "undefined") {
+        const text = submittedNotes || DEFAULT_PROPERTY_MESSAGE;
+        const targetUrl = whatsappUrl(text, DEFAULT_WHATSAPP_PHONE);
+        window.location.href = targetUrl;
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
 
@@ -466,6 +482,11 @@ export default function PropertyFinalCta({
     setVisitMessage("");
 
     try {
+      const submittedName = fields.name.trim();
+      const submittedPhone = toStoredPhone(fields.phone);
+      const submittedNotes = fields.description.trim();
+      const submittedSlot = fields.scheduledAt;
+
       const booking = await bookPublicSiteVisit({
         // Required by this endpoint, so the control is only rendered when the
         // record carries a real UUID.
@@ -473,12 +494,12 @@ export default function PropertyFinalCta({
         unit_id: null,
         scheduled_at: chosen.toISOString(),
         visitor: {
-          name: fields.name.trim(),
-          mobile: toStoredPhone(fields.phone),
+          name: submittedName,
+          mobile: submittedPhone,
           email: null,
         },
         // The optional description doubles as visit instructions.
-        notes: fields.description.trim() || null,
+        notes: submittedNotes || null,
       });
 
       const when = new Date(booking.scheduled_at ?? chosen);
@@ -489,11 +510,17 @@ export default function PropertyFinalCta({
             timeStyle: "short",
           });
 
+      const slotText = formatSlot(submittedSlot, visitDays) || label || "";
       setVisitStatus("sent");
-      setConfirmedSlot(
-        formatSlot(fields.scheduledAt, visitDays) || label || "",
-      );
+      setConfirmedSlot(slotText);
       setFields(EMPTY);
+
+      // Redirect to WhatsApp with site-visit booking details
+      if (typeof window !== "undefined") {
+        const text = `Hi ILA Homes, my name is ${submittedName} (${submittedPhone}). I have booked a site visit for ${property.name} (${property.location}) on ${slotText}.${submittedNotes ? ` Note: ${submittedNotes}` : ""}`;
+        const targetUrl = whatsappUrl(text, DEFAULT_WHATSAPP_PHONE);
+        window.location.href = targetUrl;
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
 

@@ -17,6 +17,7 @@ import {
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { PlotStatus } from "@/data/plots";
 import {
+  getProjectById,
   type Bounds,
   type EstateProject,
   type LayoutRaster,
@@ -1217,15 +1218,23 @@ export default function MapSection({
 
       // Prefer the TIFF supplied by the API. It is the authoritative layout
       // image and is decoded locally before being handed to MapLibre. The
-      // preview is only a fallback for properties that do not have a TIFF.
-      let imageUrl = tifUrl ?? layoutPreviewUrl;
-      let useTiff = Boolean(tifUrl);
+      // preview is a fallback for properties without TIFF or where TIFF decode fails.
+      // If layoutPreviewUrl itself points to a .tif/.tiff, treat it as a TIFF scan.
+      const previewIsTiff = Boolean(
+        layoutPreviewUrl &&
+          /\.tiff?(?:$|\?)/i.test(layoutPreviewUrl),
+      );
+      const effectiveTifUrl = tifUrl ?? (previewIsTiff ? layoutPreviewUrl : null);
+      const effectivePreviewUrl = previewIsTiff ? null : layoutPreviewUrl;
+
+      let imageUrl = effectiveTifUrl ?? effectivePreviewUrl;
+      let useTiff = Boolean(effectiveTifUrl);
       if (!imageUrl) return;
 
       for (let attempt = 1; attempt <= 2; attempt += 1) {
         const currentImageUrl = imageUrl;
         if (!currentImageUrl) return;
-        const raster = useTiff
+        let raster = useTiff
           ? await loadLayoutRaster({
               propertyId: input.propertyId,
               tifUrl: currentImageUrl,
@@ -1238,6 +1247,20 @@ export default function MapSection({
               cords,
               signal: input.signal,
             });
+
+        // If TIFF decoding failed on the first attempt but layoutPreviewUrl is available,
+        // immediately fall back to the PNG layout preview.
+        if (!raster && useTiff && layoutPreviewUrl && layoutPreviewUrl !== currentImageUrl) {
+          console.warn("[ILA map] layout TIFF decode failed, falling back to layoutPreviewUrl");
+          useTiff = false;
+          imageUrl = layoutPreviewUrl;
+          raster = await loadLayoutPreviewRaster({
+            propertyId: input.propertyId,
+            previewUrl: layoutPreviewUrl,
+            cords,
+            signal: input.signal,
+          });
+        }
 
         if (input.signal.aborted) return;
 
@@ -1263,12 +1286,16 @@ export default function MapSection({
         const refreshed = await fetchPropertyUnits(input.propertyId, input.signal);
         if (input.signal.aborted) return;
         if (!refreshed.layoutPreviewUrl && !refreshed.tifUrl) return;
-        if (!refreshed.layoutCords) return;
-        layoutPreviewUrl = refreshed.layoutPreviewUrl;
-        tifUrl = refreshed.tifUrl;
-        cords = refreshed.layoutCords;
-        imageUrl = tifUrl ?? layoutPreviewUrl;
-        useTiff = Boolean(tifUrl);
+        layoutPreviewUrl = refreshed.layoutPreviewUrl ?? layoutPreviewUrl;
+        tifUrl = refreshed.tifUrl ?? tifUrl;
+        if (refreshed.layoutCords) cords = refreshed.layoutCords;
+        // If TIFF failed previously, prefer previewUrl in the retry
+        if (!useTiff && layoutPreviewUrl) {
+          imageUrl = layoutPreviewUrl;
+        } else {
+          imageUrl = tifUrl ?? layoutPreviewUrl;
+          useTiff = Boolean(tifUrl);
+        }
       }
     },
     [],
@@ -1311,6 +1338,34 @@ export default function MapSection({
       setUnitsCount(0);
 
       try {
+        // Check if propertyId maps to a static project (e.g. sark-green-plains, singapore-township, green-meadows)
+        const staticProjectId =
+          propertyId === "sark-green-plains" ? "sark-green" : propertyId;
+        const staticProject = getProjectById(staticProjectId) ?? getProjectById(propertyId);
+
+        if (staticProject) {
+          const propertyRecord =
+            getPropertyById(propertyId) ??
+            getPropertyById(propertyId === "sark-green" ? "sark-green-plains" : propertyId);
+          setRemoteProject(staticProject);
+          setRemoteStatus("ready");
+          setSelectedId(null);
+          setPanelOpen(true);
+          setFilter("all");
+          setMobilePlotExpanded(false);
+          setPropertySheetExpanded(false);
+          setUnitsCount(staticProject.plots.length);
+
+          if (options.openLayout) setActiveProjectId(staticProject.id);
+          if (options.openSheet) setSelectedProjectId(staticProject.id);
+
+          console.info(
+            `[ILA Static] loaded ${staticProject.plots.length} plots`,
+            staticProject.name,
+          );
+          return;
+        }
+
         const detail = await fetchPropertyById(propertyId, controller.signal);
         setActivePropertyDetail(detail);
 
@@ -1327,48 +1382,52 @@ export default function MapSection({
         );
         setUnitsCount(units.length);
 
-        if (units.length === 0) {
-          // Property exists but has no survey geometry yet. It still gets a pin
-          // at its own coordinates so the map is not left on a stale location.
-          setRemoteProject(
-            anchor
-              ? estatePlaceholderFromProperty({
-                  propertyId,
-                  name: detail.name,
-                  location:
-                    [detail.locality, detail.city].filter(Boolean).join(", ") ||
-                    "Hyderabad",
-                  anchor,
-                })
-              : null,
-          );
+        let estate: EstateProject | null = null;
+        try {
+          if (units.length > 0) {
+            estate = estateFromUnitsApi({
+              propertyId,
+              name: detail.name,
+              location:
+                [detail.locality, detail.city].filter(Boolean).join(", ") ||
+                "Hyderabad",
+              anchor,
+              layoutCords,
+              unitsJson: units,
+            });
+          }
+        } catch (geomErr) {
+          console.warn("[ILA API] could not build vector plots from units, checking layout image", geomErr);
+        }
+
+        // If no vector polygons exist (or units was empty), create a fallback estate project
+        // georeferenced to layoutCords or the property anchor so the layout raster can still render.
+        if (!estate) {
+          if (anchor) {
+            estate = estatePlaceholderFromProperty({
+              propertyId,
+              name: detail.name,
+              location:
+                [detail.locality, detail.city].filter(Boolean).join(", ") ||
+                "Hyderabad",
+              anchor,
+            });
+            if (layoutCords) {
+              estate.bounds = layoutCordsToBounds(layoutCords);
+            }
+          }
+        }
+
+        if (!estate) {
+          setRemoteProject(null);
           setRemoteStatus("ready");
           setSelectedId(null);
           setPanelOpen(true);
           setFilter("all");
-          // Nothing to draw, but the property sheet can still describe it.
           if (options.openSheet) setSelectedProjectId(propertyId);
-          // No layout to fit, so zoom straight to the property itself.
-          if (options.openLayout) {
-            setFocusRequest((prev) => ({
-              id: propertyId,
-              nonce: (prev?.nonce ?? 0) + 1,
-            }));
-          }
-          console.info("[ILA API] property has no units", detail.name);
+          console.info("[ILA API] property has no units and no coordinates", detail.name);
           return;
         }
-
-        const estate = estateFromUnitsApi({
-          propertyId,
-          name: detail.name,
-          location:
-            [detail.locality, detail.city].filter(Boolean).join(", ") ||
-            "Hyderabad",
-          anchor,
-          layoutCords,
-          unitsJson: units,
-        });
 
         setRemoteProject(estate);
         setRemoteStatus("ready");
@@ -1378,24 +1437,35 @@ export default function MapSection({
         setMobilePlotExpanded(false);
         setPropertySheetExpanded(false);
 
-        // The master plan is attached after the plots are on the map, so a
-        // slow or failed download never delays the layout itself.
-        if (layoutCords && (layoutPreviewUrl || tifUrl)) {
+        // If layoutCords is missing from the units response, derive
+        // layout coordinates from the unit bounds so the master plan image can still be drawn.
+        const effectiveCords: PropertyLayoutCords | null =
+          layoutCords ??
+          (estate?.bounds
+            ? {
+                west: estate.bounds.minLng,
+                east: estate.bounds.maxLng,
+                north: estate.bounds.maxLat,
+                south: estate.bounds.minLat,
+              }
+            : null);
+
+        // The master plan is attached after the estate is on the map, so a
+        // slow or failed download never delays the view itself.
+        if (effectiveCords && (layoutPreviewUrl || tifUrl)) {
           void attachLayoutImage({
             propertyId,
             layoutPreviewUrl,
             tifUrl,
-            cords: layoutCords,
+            cords: effectiveCords,
             signal: controller.signal,
           });
         } else {
-          // Without an extent there is nothing to georeference the image to,
-          // and without an image there is nothing to georeference.
           console.warn("[ILA map] units response had no layout image to draw", {
             propertyId,
             hasLayoutPreviewUrl: Boolean(layoutPreviewUrl),
             hasTifUrl: Boolean(tifUrl),
-            hasLayoutCords: Boolean(layoutCords),
+            hasLayoutCords: Boolean(effectiveCords),
           });
         }
 
@@ -2499,26 +2569,44 @@ export default function MapSection({
     ]);
 
     // When highlightAvailable is active and no single plot is picked,
-    // start a smooth gentle pulsing animation on available plots.
+    // run a smooth, noticeable pulsing animation on all available plots.
     if (highlightAvailable && !active) {
       let animFrameId: number;
       const startTime = performance.now();
-      const baseFill = activeProject?.layoutRaster ? 0.35 : 0.72;
+      const baseFill = activeProject?.layoutRaster ? 0.45 : 0.72;
 
+      // Pulse between emerald green and bright mint-green glow
       const animatePulse = (currentTime: number) => {
         const elapsed = (currentTime - startTime) / 1000;
-        // Smooth sine wave oscillating between 0 and 1 over ~2.4 seconds
-        const t = (Math.sin(elapsed * 2.6) + 1) / 2;
-        const availableOpacity = baseFill + t * 0.28;
-        const availableLineWidth = 1.15 + t * 1.6;
+        // Smooth sine wave oscillating between 0 and 1 over ~2.0 seconds
+        const t = (Math.sin(elapsed * 3.14) + 1) / 2;
+        const availableOpacity = baseFill + t * 0.35;
+        const availableLineWidth = 1.3 + t * 2.2;
+        // Interpolate between deep emerald (#1F8A68) and vibrant glowing green (#34D399)
+        const pulseR = Math.round(31 + t * (52 - 31));
+        const pulseG = Math.round(138 + t * (211 - 138));
+        const pulseB = Math.round(104 + t * (153 - 104));
+        const pulseColor = `rgb(${pulseR}, ${pulseG}, ${pulseB})`;
 
         if (map.getLayer("estate-plots-fill")) {
+          map.setPaintProperty("estate-plots-fill", "fill-color", [
+            "case",
+            ["==", ["get", "id"], active],
+            LAYOUT.selected,
+            [
+              "match",
+              ["get", "statusNorm"],
+              "available",
+              pulseColor,
+              LAYOUT.sold,
+            ],
+          ]);
           map.setPaintProperty("estate-plots-fill", "fill-opacity", [
             "match",
             ["get", "statusNorm"],
             "available",
-            availableOpacity,
-            baseOpacity * 0.75,
+            Math.min(availableOpacity, 0.98),
+            baseOpacity * 0.7,
           ]);
         }
 
@@ -2534,7 +2622,7 @@ export default function MapSection({
             "match",
             ["get", "statusNorm"],
             "available",
-            "#ffffff",
+            t > 0.5 ? "#E6FFFA" : "#FFFFFF",
             LAYOUT.plotEdge,
           ]);
         }
@@ -2547,7 +2635,15 @@ export default function MapSection({
         cancelAnimationFrame(animFrameId);
       };
     }
-  }, [selectedId, layoutOpen, mapReady, activeProject?.layoutRaster, highlightAvailable]);
+  }, [
+    selectedId,
+    layoutOpen,
+    mapReady,
+    activeProject?.id,
+    activeProject?.plots.length,
+    activeProject?.layoutRaster,
+    highlightAvailable,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -86,7 +86,7 @@ There is no confirmed login or user-account flow. `apiFetch` accepts an explicit
 
 ## 18. Third-party packages/services
 
-Active integration packages/services confirmed by source are Next.js/React, `maplibre-gl`, and `geotiff`. `geotiff` is used by `src/lib/layoutTiff.ts` to decode the fallback layout TIFF in the browser. Active external services are the ILA API, OpenFreeMap, Esri imagery, Amazon S3 presigned objects, WhatsApp web links, and browser mail handling. Tailwind/PostCSS/TypeScript/ESLint support the application but are not external runtime integrations. No unused package is documented as active.
+Active integration packages/services confirmed by source are Next.js/React, `maplibre-gl`, and `geotiff`. `geotiff` is used by `src/lib/layoutTiff.ts` to decode standard and multi-page layout TIFFs in the browser onto `<canvas>` elements, with support for page selection, dimensions parsing, and client-side PNG export without server uploads. Active external services are the ILA API, OpenFreeMap, Esri imagery, Amazon S3 presigned objects, WhatsApp web links, and browser mail handling. Tailwind/PostCSS/TypeScript/ESLint support the application but are not external runtime integrations. No unused package is documented as active.
 
 ## 19. Client-side integrations
 

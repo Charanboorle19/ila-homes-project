@@ -169,7 +169,8 @@ export default function StickyBottomCta({
 
   if (dismissed || !visible || fieldFocused || formOnScreen) return null;
 
-  const waText = `Hi ILA Homes, please help me schedule a site visit for ${property.name} (${property.location}).`;
+  const waText =
+    "Hi, I'm interested in learning more about this property. Could you please share the details?";
 
   return (
     <div

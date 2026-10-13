@@ -5,6 +5,7 @@ import Footer from "@/components/Footer";
 import AnalyticsInitializer from "@/components/AnalyticsInitializer";
 import SessionInitializer from "@/components/SessionInitializer";
 import VisitorInitializer from "@/components/VisitorInitializer";
+import ScrollToTop from "@/components/ScrollToTop";
 import "./globals.css";
 import "./loading.css";
 
@@ -29,6 +30,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <VisitorInitializer />
         <SessionInitializer />
         <AnalyticsInitializer />
+        {/* Keeps the window at the top of the document across route changes.
+            Mounted here, above `<main>`, because the root layout is the only
+            element that survives every navigation — see the component for why
+            Next.js's own scroll handling is not enough on this site. */}
+        <ScrollToTop />
         <Navbar />
         <main className="flex flex-1 flex-col">{children}</main>
         <Footer />

@@ -38,7 +38,11 @@ Therefore, Shortlist / WhatsApp Share appears immediately after the homepage Buy
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\ilaApiConfig.ts` — source of `ILA_PROPERTY_ID`, used only as the analytics fallback property id.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\tracker.ts` — analytics transport called by the component.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\share on what'sapp.gif` — WhatsApp-sharing visual asset.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Family Dreams Over a New Community.png`, `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Golden-Hour Family Homecoming.png`, `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Golden Hour Real Estate Growth.png`, and `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Golden-Hour View of Planned Cityscape.png` — mobile option-card images.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Family Dreams Over a New Community.png`, `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Golden-Hour Family Homecoming.png`, `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Golden Hour Real Estate Growth.png`, and `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\Golden-Hour View of Planned Cityscape.png` — **fallback-only** option-card images.
+
+### The four PNGs are fallbacks, not the option image source
+
+Option cards render the property's own `cover_url` from `GET /api/properties`. These local assets are painted *underneath* that cover and are only ever seen when there is no usable cover — see §14.
 
 ## 5. Component names
 
@@ -66,7 +70,7 @@ The section visibly contains:
 - Heading: `Select properties to shortlist`.
 - Supporting copy: `Tap any property to add or remove it from your WhatsApp shortlist.`
 - API-loaded selectable property options.
-- Each option’s name, slug-derived location, metadata, and description/highlight.
+- Each option’s name, locality-derived location, metadata, and description/highlight.
 - A selected-count message based on the number of selected properties; loading, empty, and fetch-error messages are shown when applicable.
 - A share button in the left panel labelled `Share on WhatsApp`.
 - A second share button in the choose-plots panel whose label changes between `Shared — open again`, `Select plots to share`, and `Share {n} plot(s) →`.
@@ -124,7 +128,7 @@ The component declares:
 - `loading`: indicates the initial property-list request.
 - `sharing`: indicates tracked share creation and disables sharing while links are prepared.
 - `error`: displays property-loading or sharing errors.
-- `mobilePanelsRef`: ref to the mobile `.shortlist-share__panels` element.
+- `mobilePanelsRef`: ref to the mobile `.shortlist-share__options` element.
 
 The component has no persistent storage, shortlist route, or modal state.
 
@@ -230,7 +234,7 @@ The homepage feature is not an enquiry form and does not call an enquiry API, cr
 
 ## 29. Desktop behavior
 
-Above the mobile breakpoint, the section uses a two-column `.shortlist-share__frame`: a narrower left column for heading/features/count/share and a wider right column for the chooser and WhatsApp media. Desktop property options render as text-first button cards with a check indicator, name, location, metadata, and appreciation score. The right chooser contains a scrollable `.shortlist-share__panels` region. The left panel and right panel share the same selection handlers.
+Above the mobile breakpoint, the section uses a two-column `.shortlist-share__frame`: a narrower left column for heading/features/count/share and a wider right column for the chooser and WhatsApp media. Desktop property options render as text-first button cards with a check indicator, name, location, metadata, and appreciation score. The right chooser contains a scrollable `.shortlist-share__options` region. The left panel and right panel share the same selection handlers.
 
 ## 30. Mobile behavior
 
@@ -248,7 +252,7 @@ The root and major layout classes are `.shortlist-share`, `.shortlist-share__fra
 
 Intro/content classes include `.shortlist-share__intro`, `.shortlist-share__intro-bg`, `.shortlist-share__intro-content`, `.shortlist-share__heading`, `.shortlist-share__features`, `.shortlist-share__feature-item`, `.shortlist-share__feature`, `.shortlist-share__feature-index`, `.shortlist-share__feature-body`, `.shortlist-share__feature-title`, `.shortlist-share__feature-copy`, `.shortlist-share__feature-line`, and `.shortlist-share__count`.
 
-Chooser/option/action classes include `.shortlist-share__choose`, `.shortlist-share__choose-mobile`, `.shortlist-share__choose-desktop`, `.shortlist-share__detail-head`, `.shortlist-share__detail-kicker`, `.shortlist-share__detail-title`, `.shortlist-share__detail-summary`, `.shortlist-share__panels`, `.shortlist-share__option`, `.shortlist-share__option--media`, `.shortlist-share__option-top`, `.shortlist-share__option-media`, `.shortlist-share__option-image`, `.shortlist-share__option-body`, `.shortlist-share__option-copy`, `.shortlist-share__option-name`, `.shortlist-share__option-loc`, `.shortlist-share__option-meta`, `.shortlist-share__option-score`, `.shortlist-share__option-check`, `.shortlist-share__wa-btn`, and `.shortlist-share__share`.
+Chooser/option/action classes include `.shortlist-share__choose`, `.shortlist-share__choose-mobile`, `.shortlist-share__choose-desktop`, `.shortlist-share__detail-head`, `.shortlist-share__detail-kicker`, `.shortlist-share__detail-title`, `.shortlist-share__detail-summary`, `.shortlist-share__options`, `.shortlist-share__choose-label`, `.shortlist-share__option-fallback`, `.shortlist-share__option-cover`, `.shortlist-share__option`, `.shortlist-share__option--media`, `.shortlist-share__option-top`, `.shortlist-share__option-media`, `.shortlist-share__option-image`, `.shortlist-share__option-body`, `.shortlist-share__option-copy`, `.shortlist-share__option-name`, `.shortlist-share__option-loc`, `.shortlist-share__option-meta`, `.shortlist-share__option-score`, `.shortlist-share__option-check`, `.shortlist-share__wa-btn`, and `.shortlist-share__share`.
 
 The selected modifier is `.is-selected` for mobile options and `.is-selected`/the corresponding selected styling in the desktop option rules; disabled styling is defined for `.shortlist-share__wa-btn:disabled` and `.shortlist-share__share:disabled`. Exact visual ownership of any global variables such as `--accent` and `--accent-light` is UNKNOWN — needs verification.
 

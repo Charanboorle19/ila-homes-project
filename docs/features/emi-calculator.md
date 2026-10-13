@@ -25,7 +25,7 @@ This replaced a second, parallel calculator that had drifted. The homepage versi
 
 ## 4. Property Details location
 
-`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PropertyPageView.tsx` renders `<PriceEmiFuture property={property} />` after `Lifestyle` and before `LegalDocuments`. The rendered section heading uses `id="pd-emi-title"`. An exact `id="loan-calculator"` target is UNKNOWN — needs verification.
+`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PropertyPageView.tsx` wraps `<AffordabilityFinancing property={property} />` in `<div id="affordability-financing" className="scroll-mt-24">`. Navigating to `/properties/{propertyId}#affordability-financing` (or `#loan-calculator`) automatically scrolls smoothly to this section via a hash scroll effect.
 
 ## 5. Component/file paths
 

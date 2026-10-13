@@ -84,7 +84,7 @@ The source palette `#E5E5F7` / `#444CF7` is not used anywhere in `src/`.
 
 The heading was `What are you planning?`, which referred to the removed life-stage cards and is now wrong — there is no plan step and no stage to plan for.
 
-Two further strings were added with the API-backed options: the hint under the chips, "A property has to score on every option you pick, so adding more narrows the search.", and the idle-state guidance, "Pick what matters to you and we'll find properties that score on all of it."
+Two further strings were added with the API-backed options: the hint under the chips, "A property has to score on every option you pick, so adding more narrows the search.", and the idle-state guidance in the results panel, which currently reads "Pick one or more options and we'll show the plots that score on every one of them." (see §17 for its full treatment).
 
 ## 8. User flow
 
@@ -312,6 +312,7 @@ type CardMatch = {
   id: string;
   label: string;
   badge: string | null;  // headline percentage, from a 0-10 match_score
+  score: number | null;  // the raw 0-10 match_score, for the proportion bar
   breakdown: { label: string; score: number }[];  // per-criterion, highest first
   href: string;
 };
@@ -322,10 +323,13 @@ type CardMatch = {
 | `id` | `property_id` |
 | `label` | `property_name` |
 | `badge` | `match_score × 10` as a percentage, or `null` when `match_score` is null |
+| `score` | The raw 0–10 `match_score`, or `null` |
 | `breakdown` | One entry per selected criterion, `"{name}" + score 0-10` |
 | `href` | `/properties/{property_id}` |
 
 Entries are filtered to the **features the visitor actually selected**. The endpoint is documented to return only the requested keys, but filtering keeps a card honest if it ever returns more. If filtering empties the list, the full returned list is used as a fallback. Scores of `0` are rendered like any other value — the guide is explicit that zero is a valid score, not a missing one.
+
+`score` exists alongside `badge` because the proportion bar needs the unrounded figure. `badge` is a string that has already lost the precision a 0–100 track needs at the top of the range.
 
 ### One criterion means no breakdown
 
@@ -352,22 +356,27 @@ Per_page is capped at 100, so a tenant with more active properties than that wou
 
 | Element | Treatment |
 |---|---|
-| Thumbnail slot | **Always rendered**, a fixed `h-20 w-20`. Tinted `rgba(242,240,234,0.06)` with a `BuildingIcon` at 28px / `rgba(242,240,234,0.28)` underneath, photo painted over it via `onError` → `display: none` |
-| Name | `text-sm font-semibold` |
-| Match pill | `text-xs` bold, gold `#c6a46c` fill with `#1c1f24` ink, reading `{n}% match`. It was a 9px pill on `bg-black/40`, i.e. a black chip with white text |
-| Rank | `01`-`04`, `tabular-nums`, muted. Only meaningful because `cards` is sorted by score |
-| Locality · price | `text-xs`, **both always rendered**, separated by a `·`. Price through the shared `formatPrice` |
+| Surface | None. The row is a `border-b` hairline on the panel's own `#141519`, so rows separate by rule rather than by tint |
+| Layout | `flex items-center gap-4 px-5 py-3` — thumbnail, text block, score, heart |
+| Thumbnail slot | **Always rendered**, a fixed `h-14 w-14`. Tinted `bg-white/6` with a `BuildingIcon` at 20px / `rgba(242,240,234,0.28)` underneath, photo painted over it via `onError` → `display: none` |
+| Micro-labels | Rank `01`-`04` in `#6b7280`, plus a gold "Top match" label on the first row |
+| Name | `text-[15px] font-bold tracking-tight` |
+| Score | `15px` bold tabular figure, gold `#c6a46c` on the top match and `#e8e6e1` elsewhere, over a `3px` proportion bar (gold / `#8a8f98`) in a `w-24` column. Unscored rows read "Unscored" |
+| Locality · price | `text-[12px]`, **both always rendered**, separated by a `·`. Price through the shared `formatPrice` |
 | Breakdown | One `name 9/10` per criterion, only when 2+ are selected |
 | Favourite | 44x44 heart button, `aria-pressed`, `aria-label` naming the property |
-| Surface | `bg-[rgba(242,240,234,0.1)]`, `border-[rgba(242,240,234,0.12)]`, `backdrop-blur-md` |
+
+The "Top match" label is guarded on `index === 0 && badge !== null`. `cards` is sorted by `match_score`, so the first row is normally the winner — but a first row with a null score sorts first only because nothing scored above it, and calling that a "top match" would be a claim the data does not support. Same rule as `CompareProperties`' `best_property_id` label.
+
+The score bar is `aria-hidden`: the figure above it is the accessible value, and announcing the same number twice helps nobody.
 
 #### Why the thumbnail slot is unconditional
 
-Two bugs came from rendering it only when `cover_url` existed. A property with no image **lost the slot entirely**, so its text began 88px to the left of every other row and the row came out shorter. And a `cover_url` that failed to load — a presigned URL past its expiry answers 403 — painted the browser's broken-image glyph onto the dark card.
+Two bugs came from rendering it only when `cover_url` existed. A property with no image **lost the slot entirely**, so its text began a fixed inset to the left of every other row and the row came out shorter. And a `cover_url` that failed to load — a presigned URL past its expiry answers 403 — painted the browser's broken-image glyph onto the dark row.
 
 The fallback mark now sits *underneath* the image rather than replacing it, so `onError` hiding the `<img>` reveals the fallback instead of a hole. Every row therefore has the same height and the same left text edge.
 
-`BuildingIcon` is a 1px line drawing rather than a solid glyph: it has to sit at low contrast 88px to the left of a label, and anything heavier competes with the property name.
+`BuildingIcon` is a 1px line drawing rather than a solid glyph: it has to sit at low contrast one column to the left of a label, and anything heavier competes with the property name.
 
 #### Why both fields are unconditional
 
@@ -379,11 +388,13 @@ The wording of the placeholder is a guess and easy to reword. The underlying lim
 
 ### There is no `tone` prop any more
 
-`MatchCard` and `ResultsPanel` used to take `tone: "light" | "dark"`, because the desktop aside was an opaque cream slab while the mobile sheet was dark — the same results looked like two different things on two viewports. The aside is now the same glass as the sheet, so both components have a single set of colours and **no branching at all**.
+`MatchCard` and `ResultsPanel` used to take `tone: "light" | "dark"`, because the desktop aside was an opaque cream slab while the mobile sheet was dark — the same results looked like two different things on two viewports. Both components now have a single set of colours and **no branching at all**.
 
-The removed light palette was `#1c1f24`, `#4a463f`, `#5c5852`, `#6b655c` and `#a3352b`. Those survive only where they are also the dark-mode value: `#6b655c` is the rank number on both.
+This is still true after the panel was rebuilt to match `CompareProperties`. The desktop aside and the mobile sheet render the identical `ResultsHeader` and `ResultsPanel`; only the *surface behind them* differs, and that is the sheet's own `#1c1f24` against the aside's `#141519`. Neither component knows which viewport it is in.
 
-One value was **not** carried over. `favoriteError` rendered in `#a3352b` unconditionally, because the old light branch used it and nobody branched the alert. On the dark glass that red measures about 2.4:1, which makes an alert effectively invisible; it is now `#e8a49e`, matching the error state above it.
+The removed light palette was `#1c1f24`, `#4a463f`, `#5c5852`, `#6b655c` and `#a3352b`. Those survive only where they are also the dark-mode value: `#6b655c` was the rank number on both, and the rebuild moved the rank label to `#6b7280` as part of the Compare table's micro-label treatment.
+
+One value was **not** carried over. `favoriteError` rendered in `#a3352b` unconditionally, because the old light branch used it and nobody branched the alert. On the dark surface that red measures about 2.4:1, which makes an alert effectively invisible; it is now `#e8a49e`, matching the error state above it.
 
 ### The whole card is the "view" target
 
@@ -424,23 +435,47 @@ Feature result cards carry no `data-track` attributes, so a card click is not at
 
 | State | Condition | Presentation |
 |---|---|---|
-| `idle` | Nothing selected | Left-aligned: a small idle glow, "Select an option to see matching properties", and one supporting line |
-| `loading` | Request in flight | `aria-busy`, gold progress bar, "Finding your match", "Searching properties for {label}…" |
-| `ready` | `items.length > 0` | An 18px `{n} properties match` heading with the criteria chips below it, then the cards, in an `aria-live="polite"` region |
-| `empty` | `items.length === 0` | "No exact match yet" and "A property has to score on every feature you pick. Remove one to widen the search." |
-| `error` | Non-2xx | `role="alert"`, "We couldn't load matches" plus the backend message |
+| `idle` | Nothing selected | A gold icon tile, the eyebrow "Nothing selected yet", the 22px heading "Your matches appear here", and one supporting line — centred across, anchored to the top |
+| `loading` | Request in flight | `aria-busy`, a spinner in a gold tile, "Searching" / "Finding your match", "Searching properties for {label}…" |
+| `ready` | `items.length > 0` | The `ResultsHeader` band, then the rows, in an `aria-live="polite"` region |
+| `empty` | `items.length === 0` | A gold tile, "No exact match" / "Nothing scores on all of them", "A property has to score on every option you pick. Remove one to widen the search." |
+| `error` | Non-2xx | `role="alert"`, a rose tile, "Search error" / "We couldn't load matches" plus the backend message |
 
-Favourite loading and toggle failures are shown as a separate alert above the match count; they do not hide or invalidate the property matches. A save or remove failure leaves that property's previous saved state unchanged.
+Favourite loading and toggle failures are shown as a separate alert above the rows; they do not hide or invalidate the property matches. A save or remove failure leaves that property's previous saved state unchanged.
 
 The idle guidance is deliberate: AND matching is the most surprising property of the endpoint, and an unexplained blank panel would read as a bug. `total: 0` is mapped to `empty`, never to `error`.
 
-### Every state is left-aligned and the same shape
+### Every state is a status card, top-aligned
 
-`idle`, `loading`, `error` and `empty` all render `items-start justify-start text-left` with **no extra horizontal padding**, so they start on the same left edge as the results header. They previously used `items-center justify-center px-6 text-center` — a centred blob floating in the middle of a panel whose real content is flush left — which also made the panel jump when the first card arrived. All four keep `min-h-64` so none of them collapses the panel.
+`idle`, `loading`, `error` and `empty` all render the same composition that `CompareProperties` uses for its own status cards: an icon tile in a `h-14 w-14 rounded-2xl` gold wash, an `11px` uppercase eyebrow, a `22px` bold heading, one supporting paragraph capped at `max-w-md`, and nothing else. All four carry `items-center text-center justify-start px-8 pt-14 pb-10` and `min-h-[280px] flex-1`.
+
+**Horizontally they are centred; vertically they are anchored to the top.**
+
+That vertical alignment has been through two states:
+
+1. **Originally `items-start justify-start text-left`** — flush to the gutter, no horizontal centring. With nothing selected there is no left edge to align to, so the copy hung off the gutter as a few stranded lines in the top-left of a tall empty column, which read as a broken layout rather than as an instruction.
+2. **Then fully centred**, `items-center justify-center p-8`. Better as a composition, but the panel is **tall** — `.find-your-plot-panel` derives its height from the viewport rather than from its content — so centring stranded the tile and its four lines of copy in the middle of that height, a long way below the header band that already states what the panel is showing.
+3. **Now: centred across, anchored to the top.** The eye reads band → tile → heading → paragraph as one stack, rather than having to find the content in the middle of the column. `pt-14` is what puts it there without tucking it against the band's own hairline.
+
+`min-h-[280px]` replaced the `360px` the centred version carried — that floor existed to give a centred block room to sit in the middle of. Top-aligned, the content needs only its own height plus `pt-14`, and the lower floor stops a short viewport from squeezing the tile and the heading together.
+
+This applies to the mobile sheet as well, because `ResultsPanel` is a single component with no `tone` prop — see §15. There is no viewport branch to add, and none should be.
+
+The heading and the match count live in `ResultsHeader`, outside the scroll region, so the `ready` state no longer carries a heading of its own — see §18.
 
 At desktop the section's height is driven by the left column anyway, so the panel does not change the page's shape on selection.
 
 `loadingLabel` is the names of at most the first two selected features, resolved through the loaded feature list, falling back to "your preferences".
+
+### The loading spinner sets a custom property, not a colour
+
+`loading.css` defines `.ila-loader` with `--ila-loader-color` (default `#171717`), and the loader paints entirely from that variable — **not** from `color`. A `text-[#c6a46c]` utility placed on a loader therefore has no effect on it.
+
+The loading tile uses `[--ila-loader-color:#c6a46c]` with `ila-loader--sm` for size.
+
+`CompareProperties` renders its loading spinner as `ila-loader ila-loader--lg text-[#c9a84c]`, and **neither modifier does anything**: `--ila-loader-color` is left at the near-black default, and `ila-loader--lg` is not defined anywhere in `loading.css`. That spinner is near-black on a gold wash — visible, but not the gold its class names imply.
+
+`ila-fyp-progress`, the animated gold bar this state previously used, is still defined in `globals.css` including its reduced-motion fallback, but **is no longer referenced by this component**.
 
 ## 18. Responsive layout
 
@@ -469,12 +504,15 @@ The `<header>` was previously a sibling *above* both columns, so the panel began
 
 ```
 aside.find-your-plot-panel      align-self: start
-                                height:    calc(100svh - var(--nav-h) - 7rem)
-                                max-height:calc(100svh - var(--nav-h) - 9rem)
-└── div (panel)                 flex column, overflow-hidden
-    ├── div.ila-scroll-dark     min-h-0 flex-1 overflow-y-auto   ← the list
-    └── div                     shrink-0 border-t pt-4            ← pinned CTA
+                                height:     calc(100svh - var(--nav-h) - 7rem)
+                                max-height: calc(100svh - var(--nav-h) - 9rem)
+└── div (panel)                 flex column, overflow-x-clip, bg #141519
+    ├── ResultsHeader           shrink-0, border-b            ← band, does not scroll
+    ├── div.ila-scroll-dark     min-h-0 flex-1 overflow-y-auto  ← the rows
+    └── div                     shrink-0 border-t              ← pinned CTA
 ```
+
+`overflow-x-clip` on the panel, never `overflow-hidden`. Nothing inside is sticky against this element, and `clip` does not create a scrollport.
 
 The `max-height` is the hard limit: without it, five or more result rows made the panel taller than the viewport and the last row was unreachable. `7rem` is this section's `py-24` (96px) below its own top edge plus breathing room. `svh` rather than `vh` so a mobile browser's collapsed address bar cannot push the panel past the usable area.
 
@@ -525,20 +563,44 @@ Measured panel width, on a viewport of that size:
 | 1440px | 656px |
 | 1920px | 1136px |
 
-**A 1136px results panel is very wide for a list of cards.** Each row is an 80px thumbnail, a name, a pill, a locality and price, and a 44px heart — at that width the rows are sparse and the "View all N properties" button is a very long pill. If it reads badly in practice, capping the aside at a maximum (and accepting dead space again) is a one-class change.
-
-The aside was an opaque cream slab — `radial-gradient(ellipse at 50% 28%, #ffffff 0%, #f4f0e8 55%, #ebe4d8 100%)` — which read as pasted onto a dark section, matched neither the page's cool-grey light sections nor the dark sheet showing the same results. It is now the same glass as everything else:
-
-| | Value |
-|---|---|
-| Panel | `bg-[rgba(242,240,234,0.05)]`, `border-[rgba(242,240,234,0.1)]`, `backdrop-blur-md`, `rounded-[22px]` |
-| Result rows | `bg-[rgba(242,240,234,0.1)]` |
-
-The rows sit at 10% white over a panel that is itself at 5%, which composites to roughly 15% against the section — one step lighter than the panel behind them, with no second hard-coded colour needed.
+**A 1136px results panel is very wide for a list of cards.** Each row is a 56px thumbnail, a name, a score, a locality and price, and a 44px heart — at that width the rows are sparse and the "View all N properties" button is a very long pill. If it reads badly in practice, capping the aside at a maximum (and accepting dead space again) is a one-class change.
 
 The option tiles reflow in an asymmetrical bento grid — 2 columns on mobile, 3 columns from `sm` (`grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3`). All features are displayed together without pagination. Subheadings are removed, leaving clean, prominently typed heading-only cards with adaptive layout for wide tiles to eliminate empty space.
 
 Because the life-stage card grid is gone, the left column is now a single block rather than a `grid-cols-2` of tall cards. The outer `min-[981px]:grid-cols-[1.15fr_0.85fr]` split is unchanged.
+
+### The panel mirrors the `CompareProperties` right column
+
+The desktop results panel now shares its **layout and typography** with the right-hand column of `CompareProperties`. It deliberately does not share its **colour** — see the caveat at the end.
+
+| Element | Treatment | Matches Compare |
+|---|---|---|
+| Panel surface | `bg-[#141519]`, **no** radius, border, shadow or `backdrop-blur` | ✅ |
+| Header band | `shrink-0`, `border-b`, `px-5 py-4`; title `15px` bold, subtitle `12px` | ✅ |
+| Criteria pills | Full-width scrolling row, `-mx-5 px-5`, gold `rounded-full` "active" pills | ✅ category row |
+| Result rows | `border-b` hairlines on the surface itself, `flex items-center gap-4 px-5 py-3` | ✅ table rows |
+| Score | `15px` bold tabular figure + `3px` proportion bar, gold on the top match, `#8a8f98` on the rest | ✅ score bars |
+| Micro-label pair | `10px` uppercase rank plus a "Top match" state label | ✅ "Best match" / "Pinned" |
+| Pinned CTA | `rounded-xl`, `min-h-11`, gold, `border-t` sibling of the scrollport | ✅ per-column CTA |
+| Scrollport | `ila-scroll-dark` (dark thumb), `min-h-0 flex-1` | gold scrollbar |
+
+### Why the surface is solid rather than glass
+
+The panel was `bg-[rgba(242,240,234,0.05)]` glass with a `rounded-[22px]`, a hairline and a deep drop shadow, and the rows were `bg-[rgba(242,240,234,0.1)]` cards on top of it. Two translucencies compositing over the same dark section left each row only marginally lighter than the panel behind it — a stack of chips, not a list.
+
+`#141519` is a step below the section's own `#1c1f24`, so the panel is a surface in its own right rather than a tint on someone else's. With a solid fill there is nothing for a border and a shadow to separate, which is why both are gone along with the radius.
+
+### Why the layout is shared but the colour is not
+
+`CompareProperties` sits on a light `#eceef2` section, so its right column — and its non-ready status cards, which sit on `.compare-results-bg`, the light blueprint layer — are light. This section is `#1c1f24`. Reproducing the light panel here would put a light rectangle in the middle of a dark section rather than a seamless continuation of it.
+
+Everything about **structure and typography** is therefore shared, and the surface stays dark. One consequence worth knowing: this component does **not** use `.compare-results-bg`, so the blueprint texture never appears inside the panel in any state.
+
+### The panel is still not flush to the viewport edge
+
+`CompareProperties` achieves its flush column by making the whole section a `lg:grid lg:h-[104dvh]` with no outer gutter, so the right column touches the right, top and bottom edges. `FindYourPlot` is a normal flow section with `px-6 sm:px-10` and a content-driven height, so its panel sits inside the gutter.
+
+Matching that would mean restructuring the section into a screen-height grid the way Compare does, which changes the left column's padding and the page's scroll behaviour. That was out of scope for this change; it is a separate piece of work.
 
 ### Section padding matches `GrowthCorridors`
 
@@ -665,6 +727,11 @@ The `PERSONA_SELECT` event went with the life-stage cards. The component does no
 23. Confirm `cards` is sorted by `match_score` descending, so the `01`-`04` numbers and the card order agree.
 24. With one criterion selected, confirm no per-criterion breakdown is shown; with two or more, confirm one line per criterion.
 25. Confirm the thumbnail, locality and price appear once `/api/properties` and `/api/locations` resolve, and that a property missing from the list response still renders with name and score.
+26. Desktop: with nothing selected, confirm the panel shows a status card — gold tile, eyebrow, 22px heading, one paragraph — **centred horizontally but anchored to the top of the panel**, sitting just below the header band rather than floating in the middle of the column.
+27. Desktop: the header band (title, count line, criteria pills) stays fixed while the result rows scroll under it, and the "View all N properties" button stays fixed at the bottom.
+28. Desktop: exactly one row carries the gold "Top match" label, and it is row 1. Confirm a row whose `match_score` is null never takes that label.
+29. Compare each panel state against the corresponding state of the `CompareProperties` right column at 1280px+ and confirm the composition, type scale and gold match.
+30. Confirm the loading spinner renders in gold, not near-black — a `text-` colour utility on `.ila-loader` has no effect, only `[--ila-loader-color:…]` does.
 
 Automated test coverage for this component is UNKNOWN — needs verification.
 

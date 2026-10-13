@@ -26,6 +26,15 @@ type ShortlistPlot = {
   location: string;
   meta: string;
   highlight: string;
+  /**
+   * The property's own cover, from `GET /api/properties`.
+   *
+   * Null when the row publishes no `cover_url`, and non-null-but-403 when the
+   * presigned signature has expired — which is why `image` stays alongside it as
+   * an underneath fallback rather than being used as the primary source.
+   */
+  coverUrl: string | null;
+  /** Local asset used only when there is no usable `coverUrl`. */
   image: StaticImageData;
 };
 
@@ -37,12 +46,17 @@ function toPlot(property: PropertyListItem, index: number): ShortlistPlot {
   return {
     id: property.id,
     name: property.name,
-    location: property.slug || "Property details available",
+    // `slug` is a URL segment, not a place — it used to be shown here, which
+    // put something like "maheshwaram-enclave-4f2" in the locality line.
+    // `locality` and `city` are the same fields `GrowthCorridors` reads, and
+    // they are both optional on the list row.
+    location: property.locality || property.city || "Hyderabad",
     meta: [property.property_type, property.price_label ?? price]
       .filter(Boolean)
       .join(" · "),
     highlight:
       property.description || "Property details available from ILA Homes.",
+    coverUrl: property.cover_url,
     image: PROPERTY_IMAGES[index % PROPERTY_IMAGES.length],
   };
 }
@@ -223,13 +237,46 @@ export default function ShortlistShare() {
               onClick={() => togglePlot(plot.id)}
             >
               <span className="shortlist-share__option-media">
-                <Image
-                  className="shortlist-share__option-image"
-                  src={plot.image}
-                  alt=""
-                  fill
-                  sizes="(max-width: 768px) 5.75rem, 7rem"
-                />
+                {/* The local asset is always mounted as the *underneath* layer and
+                    the API cover paints over it. Two cases need it: a property
+                    with no `cover_url`, and one whose presigned URL has expired
+                    and answers 403. `onError` hides only the overlay, so both
+                    reveal this rather than a broken-image glyph or a hole.
+
+                    Assigning a local image by list position instead — which is
+                    what this did — meant the picture had no relationship to the
+                    property it was attached to: property 1 always got the same
+                    family photo whatever the API returned. */}
+                <span
+                  aria-hidden
+                  className="shortlist-share__option-fallback"
+                >
+                  <Image
+                    className="shortlist-share__option-image"
+                    src={plot.image}
+                    alt=""
+                    fill
+                    sizes="(max-width: 980px) 5.75rem, 7rem"
+                  />
+                </span>
+
+                {plot.coverUrl ? (
+                  <Image
+                    className="shortlist-share__option-image shortlist-share__option-cover"
+                    src={plot.coverUrl}
+                    alt=""
+                    fill
+                    sizes="(max-width: 980px) 5.75rem, 7rem"
+                    // Presigned cover URLs expire, so they are loaded directly
+                    // rather than through the optimizer cache — the same reason
+                    // `GrowthCorridors` sets `unoptimized` on its card images.
+                    unoptimized
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                    }}
+                  />
+                ) : null}
+
                 <span className="shortlist-share__option-check" aria-hidden="true">
                   {isSelected ? "✓" : ""}
                 </span>

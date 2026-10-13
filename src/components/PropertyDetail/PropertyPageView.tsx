@@ -65,6 +65,31 @@ export default function PropertyPageView({
     setActiveGalleryId(gallery[0]?.id ?? "");
   }, [property.id, gallery]);
 
+  useEffect(() => {
+    const scrollToAffordability = () => {
+      const hash = window.location.hash;
+      if (
+        hash === "#affordability-financing" ||
+        hash === "#loan-calculator" ||
+        hash === "#pd-affordability"
+      ) {
+        const el =
+          document.getElementById("affordability-financing") ||
+          document.getElementById("pd-affordability");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    };
+
+    const timer = setTimeout(scrollToAffordability, 120);
+    window.addEventListener("hashchange", scrollToAffordability);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("hashchange", scrollToAffordability);
+    };
+  }, []);
+
   const activeImage =
     gallery.find((item) => item.id === activeGalleryId) ?? gallery[0];
 
@@ -89,7 +114,9 @@ export default function PropertyPageView({
       <LifeStageMatch property={property} />
       <FutureNeighbourhoodMap property={property} />
       <Lifestyle key={property.id} property={property} />
-      <AffordabilityFinancing property={property} />
+      <div id="affordability-financing" className="scroll-mt-24">
+        <AffordabilityFinancing property={property} />
+      </div>
       <LegalDocuments
         property={property}
         documentsState={documentsState}

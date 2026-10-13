@@ -103,11 +103,11 @@ When expanded, `PropertySheet` renders:
 - the price card: a dark gradient surface (`bg-linear-to-br from-[#35322b] via-[#24231f] to-[#171614]`) with a gold hairline on its top edge, a `Price` eyebrow, the price, and a `Starting from` row justified to the right edge. The approval badge is **not** repeated here; approval and RERA appear once, in the chip row below.
 - approval and optional `RERA` chips — the approval pill is green with a status dot, the RERA pill is gold with a `✦` seal
 - a spec sheet `<dl>`: four label/value rows separated by hairlines, labelled `Total plots`, `Available`, `Acres`, `Plot size`. Each row carries a small colour dot drawn from the master-plan palette (`#8a8174`, `#1F8A68`, `#7CB342`, `#C6A46C` respectively)
-- an underline tab bar (`role="tablist"`) with the four tabs: `about`, `location`, `amenities`, `developer`. The active tab is marked by a 2px gold `after:` underline
+- an underline tab bar (`role="tablist"`) with the four tabs: `about`, `location`, `amenities`, `developer` with increased text size (`text-sm`), `whitespace-nowrap`, and `overflow-y-hidden` so that tab options never scroll vertically. The active tab is marked by a 2px gold `after:` underline
 - the active tab content inside a `role="tabpanel"` (see §16)
 - `View Project` when a `PropertyRecord` exists
 - `Brochure` link to `#brochure`
-- `Loan Calculator` link to `#loan-calculator`
+- `Loan Calculator` link navigating to `/properties/{propertyId}#affordability-financing` with smooth auto-scroll to the Affordability & Financing section
 - `Show less` when `collapsible` is true
 
 The expanded mobile container uses `h-[88%] max-h-[88%]` and scrolls its content. Percentages resolve against the viewport for a `fixed` element, so the sheet no longer depends on viewport units that resize with mobile browser chrome.
@@ -136,7 +136,7 @@ On mobile (`md:hidden`):
 - the sheet has no dimming scrim and leaves the map visible
 - the minimized sheet is 48 CSS height units tall (`h-48`, 192px) — sized so the control row, identity row, status strip and safe-area padding all fit without the body scrolling
 - the expanded sheet occupies 88% of the viewport height
-- the control row places `Close property details` left, the grabber centre, and `Maximize property details` right. The row is symmetric (two equal `h-7 w-7` slots flanking the 80px grabber) so the grabber stays optically centred; while expanded the right slot renders an inert `h-7 w-7` placeholder to preserve that symmetry. Both the grabber and the maximize button call `setPropertySheetExpanded(true)`
+- the control row places `Close property details` left, the grabber centre, and `Maximize property details` (when minimized) or `Minimize property details` (when expanded) right. When minimized, clicking the right button or grabber expands to 88% height; when expanded, clicking the right button or grabber minimizes back to `h-48`
 - the close action clears `selectedProjectId`, `activeProjectId`, and `propertySheetExpanded`
 - the plot details sheet is mutually exclusive with the property sheet because the render condition requires `!selectedPlot`
 
@@ -162,7 +162,7 @@ The map marker determines mobile behavior with `window.matchMedia("(max-width: 7
   - `PropertySheet`
   - `PropertySheetProps`
   - `SHEET_TABS`, `SheetTab`
-  - `PinIcon`, `ArrowIcon`, `CloseIcon`, `ExpandIcon`, `ChevronIcon` — the local SVG icons the sheet renders
+  - `PinIcon`, `ArrowIcon`, `CloseIcon`, `ExpandIcon`, `MinimizeIcon`, `ChevronIcon` — the local SVG icons the sheet renders
   - `selectProperty`
   - `openProject`
   - `closeLayout`

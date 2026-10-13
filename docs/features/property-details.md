@@ -82,6 +82,7 @@ When ready, it calls `apiPropertyToRecord(property, lifeStage, documents.items)`
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\LifeStageMatch.tsx` — Buyer Fit.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\FutureNeighbourhoodMap.tsx` — Future Neighbourhood.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\Lifestyle.tsx` — lifestyle/amenity content.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\AffordabilityFinancing.tsx` — Affordability and Financing container (`id="affordability-financing"`).
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PriceEmiFuture.tsx` — pricing, EMI, amortization, future value.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\LegalDocuments.tsx` — Verification.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\SatelliteBeforeAfter.tsx` — Location Story.

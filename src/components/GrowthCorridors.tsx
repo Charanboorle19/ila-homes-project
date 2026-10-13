@@ -1521,12 +1521,39 @@ export default function GrowthCorridors() {
                 heading with something floating beside it. Mobile keeps the
                 single-column stack. */}
             <header className="lg:flex lg:items-end lg:justify-between lg:gap-12 lg:shrink-0">
+              {/* Premium two-tone heading: the eyebrow, a fading hairline in the
+                  section gold, then the line itself with its payoff words lifted
+                  out in that same gold.
+
+                  The phrase is marked with colour and scale rather than weight,
+                  so the line stays one typographic voice -- mixing semibold and
+                  bold inside one heading reads as a mistake rather than as an
+                  emphasis. It is set at `1.06em` so it grows with the heading's
+                  own responsive size instead of needing a second breakpoint
+                  rule, and its tracking is pulled tighter, which is what makes a
+                  short phrase read as deliberate rather than inherited.
+
+                  The gold is `#8A6A1F`, the value the eyebrow already uses, not
+                  the brighter `#c9a84c`: on this mist background the lighter one
+                  lands near 1.9:1 and only survives as a hairline, while the
+                  darker clears 4.3:1 -- ample for text this size.
+
+                  The leading is pinned because the raised phrase makes the
+                  heading's own line box taller than the type scale assumes,
+                  which otherwise opens the two lines apart. */}
               <div className="max-w-xl">
                 <p className="text-[10px] font-bold tracking-[0.22em] text-[#8A6A1F] uppercase">
                   {SECTION_EYEBROW}
                 </p>
-                <h2 className="mt-3 text-[24px] font-semibold tracking-[-0.01em] text-balance text-[#0f1114] lg:text-[32px]">
-                  Explore the locations shaping Hyderabad&rsquo;s next phase
+                <span
+                  aria-hidden
+                  className="mt-3 block h-px w-16 bg-linear-to-r from-[#c9a84c] to-[#c9a84c]/0"
+                />
+                <h2 className="mt-4 text-[24px] leading-[1.14] font-semibold tracking-[-0.01em] text-balance text-[#0f1114] lg:text-[32px] lg:leading-[1.08]">
+                  Explore Properties{" "}
+                  <span className="text-[1.06em] tracking-[-0.02em] text-[#8A6A1F]">
+                    That Fit Your Vision
+                  </span>
                 </h2>
               </div>
 
@@ -1587,7 +1614,12 @@ export default function GrowthCorridors() {
                     {items.length === 1 ? "development" : "developments"}
                   </p>
                   <div className="flex items-center gap-3">
-                    <p className="text-[13px] font-medium tabular-nums text-[#4a5060]">
+                    {/* Mobile-only. Below `lg` the row is a touch carousel and
+                        this is the only cue for how much is parked off-screen;
+                        at `lg` the row shows whole cards and the arrows beside it
+                        already carry the position, so a "1 / 4" there is just
+                        noise on a desktop band. */}
+                    <p className="text-[13px] font-medium tabular-nums text-[#4a5060] lg:hidden">
                       {activeCardIndex + 1} / {items.length}
                     </p>
                     <div className="hidden items-center gap-2 lg:flex">

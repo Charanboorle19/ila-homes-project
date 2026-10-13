@@ -51,6 +51,14 @@ type CardMatch = {
   /** Headline match percentage, from a 0-10 `match_score`. Null when unscored. */
   badge: string | null;
   /**
+   * The raw 0-10 `match_score`, kept alongside the rounded `badge`.
+   *
+   * The bar under the percentage is a true proportion, so it needs the
+   * unrounded figure -- `badge` is a string and has already lost the precision
+   * a 0-100 track would need at the top of the range.
+   */
+  score: number | null;
+  /**
    * Per-criterion scores, highest first.
    *
    * Empty when the visitor picked a single criterion: with one criterion the
@@ -105,6 +113,7 @@ function featureCard(
     label: item.property_name,
     badge:
       item.match_score == null ? null : `${Math.round(item.match_score * 10)}%`,
+    score: item.match_score,
     breakdown,
     // The endpoint returns ACTIVE properties with real UUIDs, which is what
     // /properties/[propertyId] requires.
@@ -408,12 +417,20 @@ function IdleGlowIcon({ className = "" }: { className?: string }) {
 }
 
 /**
- * One result card, used unchanged by the desktop aside and the mobile sheet.
+ * One result row, in the table language of `CompareProperties`' right column:
+ * a hairline-separated row sitting directly on the panel surface, a micro-label
+ * above the name, and the score on the right as a figure over a proportion bar.
  *
- * There is no `tone` prop. The desktop panel used to be an opaque cream slab
- * while the sheet was dark, so the same result looked like two different things
- * on two viewports. Both are the same glass surface now, which is also why this
- * component has no branching at all.
+ * **Nothing here is translucent any more.** The rows were
+ * `bg-[rgba(242,240,234,0.1)]` cards on a `rgba(242,240,234,0.05)` glass panel,
+ * and two translucencies compositing over the same dark section left the rows
+ * only marginally lighter than the panel behind them — a stack of chips rather
+ * than a list. Rows are now separated by a `border-b` hairline on the solid
+ * surface, which is what the compare table does and why it reads as a table.
+ *
+ * There is no `tone` prop and there is still one set of colours: the desktop
+ * aside and the mobile sheet render the identical component, so a result cannot
+ * look like two different things on two viewports.
  */
 function MatchCard({
   match,
@@ -438,84 +455,93 @@ function MatchCard({
 
   const price = property ? formatPrice(property.price) : null;
 
-  return (
-    <article className="group relative overflow-hidden rounded-xl border border-[rgba(242,240,234,0.12)] bg-[rgba(242,240,234,0.1)] backdrop-blur-md">
-      {/* Stretched link: the whole card is the "view" target.
+  /**
+   * `cards` is sorted by `match_score`, so the first row is the top match.
+   *
+   * Guarded on `match.badge` rather than on `index === 0` alone: a first row
+   * with a null `match_score` sorts first only because nothing scored above it,
+   * and promoting an unscored property as the "top match" would be a claim the
+   * data does not support. That is the same rule the compare table's
+   * `best_property_id` label follows.
+   */
+  const isTop = index === 0 && match.badge !== null;
 
-          A <Link> wrapping the card would put the favourite button inside an
+  /** A true proportion — `match_score` is bounded 0–10, so this is not a guess. */
+  const percent =
+    match.score === null ? 0 : Math.max(0, Math.min(100, match.score * 10));
+
+  return (
+    <article className="group relative flex border-b border-[rgba(242,240,234,0.08)] transition-colors hover:bg-white/[0.03]">
+      {/* Stretched link: the whole row is the "view" target.
+
+          A <Link> wrapping the row would put the favourite button inside an
           anchor, which is invalid and makes screen readers announce one
           control.
 
           `pointer-events-none` on the content wrapper below is what makes this
           actually work. The wrapper is a *positioned* element that paints after
           this link in tree order, and hit testing follows paint order — so it
-          sat on top and swallowed every click on the card. The link was
+          sat on top and swallowed every click on the row. The link was
           reachable only in theory; tapping a result did nothing at all. */}
-      <Link href={match.href} className="absolute inset-0 z-0 rounded-xl">
+      <Link href={match.href} className="absolute inset-0 z-0">
         <span className="sr-only">View {match.label}</span>
       </Link>
 
-      <div className="pointer-events-none relative flex gap-3 p-3 sm:gap-3.5 sm:p-4">
-        {/* The thumbnail slot is ALWAYS rendered, at a fixed 80px, whether or not
+      <div className="pointer-events-none relative flex flex-1 items-center gap-4 px-5 py-3">
+        {/* The thumbnail slot is ALWAYS rendered, at a fixed 56px, whether or not
             there is an image.
 
             Two things were wrong when it was conditional. A property with no
-            `cover_url` lost the slot entirely, so its text started 88px to the
-            left of every other row and the row came out shorter. And a
-            `cover_url` that failed to load — a presigned URL past its expiry
-            answers 403 — rendered the browser's broken-image glyph on the dark
-            card instead of disappearing.
+            `cover_url` lost the slot entirely, so its text started to the left
+            of every other row and the row came out shorter. And a `cover_url`
+            that failed to load — a presigned URL past its expiry answers 403 —
+            rendered the browser's broken-image glyph on the dark row instead of
+            disappearing.
 
             The fallback mark sits underneath the image, so hiding the failed
             `<img>` in `onError` reveals it rather than a hole. */}
-            <span
-              aria-hidden
-              className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-[rgba(242,240,234,0.06)]"
-            >
-              <span className="absolute inset-0 flex items-center justify-center text-[rgba(242,240,234,0.28)]">
-                <BuildingIcon className="h-6 w-6" />
-              </span>
-              {property?.cover_url ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={property.cover_url}
-                  alt=""
-                  loading="lazy"
-                  onError={(event) => {
-                    event.currentTarget.style.display = "none";
-                  }}
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-              ) : null}
-            </span>
+        <span
+          aria-hidden
+          className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-white/6"
+        >
+          <span className="absolute inset-0 flex items-center justify-center text-[rgba(242,240,234,0.28)]">
+            <BuildingIcon className="h-5 w-5" />
+          </span>
+          {property?.cover_url ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={property.cover_url}
+              alt=""
+              loading="lazy"
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : null}
+        </span>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-3">
-            {/* The rank number is only meaningful because `cards` is sorted by
-                match score -- see the sort in the component below. */}
-            <span
-              aria-hidden
-              className="mt-0.5 shrink-0 text-[11px] font-bold tabular-nums text-[#6b655c]"
-            >
+          {/* The micro-label pair carries both the rank and the state, so the
+              gold alone is never the claim — the same rule the compare table's
+              "Best match" / "Pinned" labels follow. */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold tracking-[0.14em] text-[#6b7280] tabular-nums uppercase">
               {label}
             </span>
-
-            <h3 className="min-w-0 flex-1 text-sm font-semibold tracking-tight text-[#f2f0ea]">
-              {match.label}
-            </h3>
-
-            {/* Gold, 12px, dark ink. It was a 9px pill on `bg-black/40`, which
-                was a black chip with white text -- the least prominent thing on
-                a card it is supposed to lead with. */}
-            {match.badge ? (
-              <span className="shrink-0 rounded-full bg-[#c6a46c] px-2.5 py-1 text-xs font-bold text-[#1c1f24] tabular-nums">
-                {match.badge} match
+            {isTop ? (
+              <span className="text-[10px] font-bold tracking-[0.14em] text-[#c6a46c] uppercase">
+                Top match
               </span>
             ) : null}
           </div>
 
-          {/* Both fields are always rendered, so every row starts and ends its text in
-              the same place.
+          <h3 className="mt-0.5 truncate text-[15px] font-bold tracking-tight text-[#f2f0ea]">
+            {match.label}
+          </h3>
+
+          {/* Both fields are always rendered, so every row starts and ends its
+              text in the same place.
 
               `localityName` is null when the property has no `location_id`, or
               when its locality falls outside the 100 rows fetched. `formatPrice`
@@ -523,14 +549,16 @@ function MatchCard({
               the price side is never empty once the property record has loaded.
               Before it loads both read as unavailable rather than the whole
               line disappearing, which is what shifted the rows around. */}
-          <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-            <span className="text-[#c4beb3]">
-              {localityName ?? <span className="text-[#6b655c]">Location unavailable</span>}
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px]">
+            <span className="text-[#8a909e]">
+              {localityName ?? (
+                <span className="text-[#6b7280]">Location unavailable</span>
+              )}
             </span>
-            <span aria-hidden className="text-[#6b655c]">
+            <span aria-hidden className="text-[#6b7280]">
               ·
             </span>
-            <span className="font-semibold text-[#c4beb3]">
+            <span className="font-semibold text-[#8a909e]">
               {price ?? "Price on request"}
             </span>
           </p>
@@ -538,11 +566,11 @@ function MatchCard({
           {/* Only rendered when more than one criterion was picked; with one,
               the headline already is that criterion's score. */}
           {match.breakdown.length > 0 ? (
-            <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-snug text-[#9a9388]">
+            <ul className="mt-1 flex flex-wrap gap-x-3 text-[11px] leading-snug text-[#6b7280]">
               {match.breakdown.map((entry) => (
                 <li key={entry.label} className="truncate">
                   {entry.label}{" "}
-                  <span className="font-semibold tabular-nums">
+                  <span className="font-semibold tabular-nums text-[#8a909e]">
                     {entry.score}/10
                   </span>
                 </li>
@@ -551,7 +579,42 @@ function MatchCard({
           ) : null}
         </div>
 
-        {/* The only control on the card, and 44px on its longest axis.
+        {/* The score, right-aligned over its own proportion bar. Gold on the top
+            match and neutral grey on the rest, matching the compare table's
+            score bars.
+
+            The bar is `aria-hidden`: the figure above it is the accessible
+            value, and a second announcement of the same number helps nobody. */}
+        <div className="flex w-24 shrink-0 flex-col items-end">
+          {match.badge ? (
+            <>
+              <span
+                className={`text-[15px] font-bold tabular-nums ${
+                  isTop ? "text-[#c6a46c]" : "text-[#e8e6e1]"
+                }`}
+              >
+                {match.badge}
+              </span>
+              <span className="text-[11px] text-[#8a909e]">match</span>
+            </>
+          ) : (
+            <span className="text-[12px] text-[#6b7280]">Unscored</span>
+          )}
+
+          <div
+            aria-hidden="true"
+            className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-white/10"
+          >
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                isTop ? "bg-[#c6a46c]" : "bg-[#8a8f98]"
+              }`}
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        </div>
+
+        {/* The only control on the row, and 44px on its longest axis.
             `pointer-events-auto` takes clicks back from the wrapper above;
             `relative z-10` keeps it above the stretched link visually. */}
         <button
@@ -563,13 +626,110 @@ function MatchCard({
           className={`pointer-events-auto relative z-10 flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full border transition disabled:cursor-default disabled:opacity-70 ${
             isSaved
               ? "border-[#c6a46c] bg-[#c6a46c] text-[#1c1f24]"
-              : "border-[rgba(242,240,234,0.2)] text-[#c4beb3] hover:border-[#c6a46c] hover:text-[#c6a46c]"
+              : "border-[rgba(242,240,234,0.15)] bg-white/5 text-[#8a909e] hover:border-[#c6a46c] hover:text-[#c6a46c]"
           }`}
         >
           <HeartIcon filled={isSaved} className="h-5 w-5" />
         </button>
       </div>
     </article>
+  );
+}
+
+/**
+ * The header band: title, the count line, and the criteria pills.
+ *
+ * Shared by the desktop aside and the mobile sheet, so the two cannot drift —
+ * and so the ready-state heading is not inside the scroll region, which is what
+ * lets it stay put while the results scroll under it. Both are siblings of the
+ * scrollport rather than children of it, which is the arrangement
+ * `CompareProperties`' right column uses for the same reason.
+ */
+function ResultsHeader({
+  status,
+  matches,
+  criteria,
+}: {
+  status: ResultStatus;
+  matches: CardMatch[];
+  /** Names of the selected features. */
+  criteria: string[];
+}) {
+  /**
+   * The top match, only where a score exists to justify the claim.
+   *
+   * `matches[0]` only because `cards` is sorted by `match_score`; a null score
+   * on that first row is not a win, so it is not labelled as one.
+   */
+  const first = matches[0];
+  const topMatch =
+    status === "ready" && first && first.badge !== null ? first : null;
+
+  /**
+   * One sentence per state, so the band never reads as a stale heading over a
+   * panel that has moved on. `ready` is the only one that carries a count.
+   */
+  const summary =
+    status === "ready" ? null : (
+      <>
+        {status === "loading" ? "Searching properties…" : null}
+        {status === "empty"
+          ? "No properties scored on every option"
+          : null}
+        {status === "error" ? "Search could not be completed" : null}
+        {status === "idle" ? "Nothing selected yet" : null}
+      </>
+    );
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[rgba(242,240,234,0.08)] px-5 py-4">
+      <div className="min-w-0">
+        <h3 className="text-[15px] font-bold tracking-tight text-[#f2f0ea]">
+          Your matches
+        </h3>
+
+        {summary ? (
+          <p className="text-[12px] text-[#8a909e]">{summary}</p>
+        ) : (
+          <p className="text-[12px] text-[#8a909e]">
+            <strong className="text-[#e8e6e1]">{matches.length}</strong>{" "}
+            {matches.length === 1 ? "property scores" : "properties score"} on
+            every option you picked
+            {topMatch ? (
+              <>
+                {" "}
+                · Top match:{" "}
+                <strong className="text-[#c6a46c]">{topMatch.label}</strong>
+              </>
+            ) : null}
+          </p>
+        )}
+      </div>
+
+      {/* Read-only. They restate the criteria behind the scores so the
+          percentages have something to be a percentage *of*; making them
+          removable from here would be a further change.
+
+          Every pill is the gold "active" state from the compare table's category
+          row, because every criterion here is by definition selected. The row
+          scrolls rather than wrapping, and `-mx-5 px-5` bleeds it to the band's
+          edges so a long criterion list never detaches from it. */}
+      {criteria.length > 0 ? (
+        <div className="-mx-5 flex w-full items-center gap-1.5 overflow-x-auto px-5 pt-1 scrollbar-none">
+          <span className="mr-1 shrink-0 text-[10px] font-bold tracking-[0.16em] text-[#6b7280] uppercase">
+            Criteria
+          </span>
+          {criteria.map((name) => (
+            <span
+              key={name}
+              className="shrink-0 rounded-full bg-[#c6a46c] px-3 py-1 text-[11px] font-semibold whitespace-nowrap text-[#0f1114]"
+            >
+              {name}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -588,8 +748,6 @@ function ResultsPanel({
 }: {
   status: ResultStatus;
   matches: CardMatch[];
-  /** Names of the selected features, for the header chips. */
-  criteria: string[];
   loadingLabel: string;
   error?: string | null;
   savedIds: Set<string>;
@@ -600,27 +758,46 @@ function ResultsPanel({
   localityNames: Record<string, string>;
 }) {
   /**
- * Left-aligned from the top, like the rest of the section.
+ * The four non-ready states, in the composition `CompareProperties` uses for
+ * its own status cards: an icon tile, an eyebrow, a heading at 22px, one
+ * supporting paragraph, and nothing else.
  *
- * These states used to be a centred block -- `items-center justify-center
- * px-6 text-center` -- which put the one thing a visitor reads in the middle of
- * a panel whose real content is flush left, and made the panel jump between a
- * centred blob and a left-aligned header the moment a card arrived.
+ * These were left-aligned from the top, which is right for a paragraph inside a
+ * list and wrong for a panel with nothing in it. With nothing selected there is
+ * no left edge for the text to align to — it hung off the gutter, a few lines of
+ * copy stranded in the top-left of a tall empty column, which is what read as a
+ * broken layout rather than as an instruction. Centring it under a tile is what
+ * makes the empty panel say what it is for.
  *
- * `items-start justify-start text-left` with no extra horizontal padding, so
- * every state starts on the same left edge as the results header, and `min-h-64`
- * gives all four a floor so none of them collapses the panel.
+ * **`justify-start`, not `justify-center`.** The panel is tall —
+ * `.find-your-plot-panel` sets its height from the viewport rather than from its
+ * content — so centring stranded the tile and its four lines of copy in the
+ * middle of that height, a long way below the header band that already states
+ * what the panel is showing. The content now sits just under the band, so the
+ * eye reads band → tile → heading → paragraph as one stack. `pt-14` is what puts
+ * it there without tucking it against the band's own hairline; `px-8 pb-10` keep
+ * the measure and the floor.
+ *
+ * `min-h-[280px]` rather than the `360px` this had while centred: that floor
+ * existed to give a centred block room to sit in the middle of. Top-aligned, the
+ * content needs only its own height plus `pt-14`, and the lower floor stops a
+ * short viewport from squeezing the tile and the heading together.
  */
   if (status === "idle") {
     return (
-      <div className="flex h-full min-h-64 flex-col items-start justify-start text-left">
-        <IdleGlowIcon className="h-9 w-9" />
-        <p className="mt-3 text-base font-semibold text-[#f2f0ea]">
-          Select an option to see matching properties
+      <div className="flex min-h-[280px] flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center">
+        <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#c6a46c]/15 text-[#c6a46c]">
+          <IdleGlowIcon className="h-7 w-7" />
+        </span>
+        <p className="text-[11px] font-bold tracking-[0.18em] text-[#c6a46c] uppercase">
+          Nothing selected yet
         </p>
-        <p className="mt-1.5 text-sm leading-relaxed text-[#9a9388]">
-          Pick one or more criteria and we&apos;ll find the plots that score on
-          all of them.
+        <h3 className="mt-1 text-[22px] font-bold tracking-tight text-[#f2f0ea]">
+          Your matches appear here
+        </h3>
+        <p className="mt-2 max-w-md text-[14px] leading-relaxed text-[#9a9388]">
+          Pick one or more options and we&apos;ll show the plots that score on
+          every one of them.
         </p>
       </div>
     );
@@ -629,16 +806,29 @@ function ResultsPanel({
   if (status === "loading") {
     return (
       <div
-        className="flex h-full min-h-64 flex-col items-start justify-start text-left"
+        className="flex min-h-[280px] flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center"
         aria-busy="true"
       >
-        <div className="h-1 w-40 overflow-hidden rounded-full bg-white/10">
-          <div className="ila-fyp-progress h-full w-1/2 rounded-full bg-[#c6a46c]" />
-        </div>
-        <p className="mt-4 text-base font-semibold text-[#f2f0ea]">
-          Finding your match
+        {/* `[--ila-loader-color:…]` rather than a `text-[…]` utility: the loader
+            paints from its own custom property, not from `color`, so a text
+            colour leaves it at the near-black default. `CompareProperties` uses
+            a `text-` utility here, which does not reach the loader either.
+
+            `ila-fyp-progress`, the gold bar this replaced, is still defined in
+            globals.css. This component no longer references it. */}
+        <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#c6a46c]/15">
+          <span
+            className="ila-loader ila-loader--sm [--ila-loader-color:#c6a46c]"
+            aria-hidden
+          />
+        </span>
+        <p className="text-[11px] font-bold tracking-[0.18em] text-[#c6a46c] uppercase">
+          Searching
         </p>
-        <p className="mt-1.5 text-sm text-[#9a9388]">
+        <h3 className="mt-1 text-[22px] font-bold tracking-tight text-[#f2f0ea]">
+          Finding your match
+        </h3>
+        <p className="mt-2 max-w-md text-[14px] leading-relaxed text-[#9a9388]">
           Searching properties for {loadingLabel}…
         </p>
       </div>
@@ -648,13 +838,19 @@ function ResultsPanel({
   if (status === "error") {
     return (
       <div
-        className="flex h-full min-h-64 flex-col items-start justify-start text-left"
+        className="flex min-h-[280px] flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center"
         role="alert"
       >
-        <p className="text-base font-semibold text-[#e8a49e]">
-          We couldn&apos;t load matches
+        <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8a49e]/15 text-[#e8a49e]">
+          <CloseIcon className="h-6 w-6" />
+        </span>
+        <p className="text-[11px] font-bold tracking-[0.18em] text-[#e8a49e] uppercase">
+          Search error
         </p>
-        <p className="mt-2 max-w-xs text-sm leading-relaxed text-[#9a9388]">
+        <h3 className="mt-1 text-[22px] font-bold tracking-tight text-[#f2f0ea]">
+          We couldn&apos;t load matches
+        </h3>
+        <p className="mt-2 max-w-md text-[14px] leading-relaxed text-[#9a9388]">
           {error || "Please try again."}
         </p>
       </div>
@@ -663,12 +859,18 @@ function ResultsPanel({
 
   if (status === "empty") {
     return (
-      <div className="flex h-full min-h-64 flex-col items-start justify-start text-left">
-        <p className="text-base font-semibold text-[#f2f0ea]">
-          No exact match yet
+      <div className="flex min-h-[280px] flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center">
+        <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#c6a46c]/15 text-[#c6a46c]">
+          <BuildingIcon className="h-7 w-7" />
+        </span>
+        <p className="text-[11px] font-bold tracking-[0.18em] text-[#c6a46c] uppercase">
+          No exact match
         </p>
-        <p className="mt-2 max-w-xs text-sm leading-relaxed text-[#9a9388]">
-          A property has to score on every feature you pick. Remove one to widen
+        <h3 className="mt-1 text-[22px] font-bold tracking-tight text-[#f2f0ea]">
+          Nothing scores on all of them
+        </h3>
+        <p className="mt-2 max-w-md text-[14px] leading-relaxed text-[#9a9388]">
+          A property has to score on every option you pick. Remove one to widen
           the search.
         </p>
       </div>
@@ -676,43 +878,27 @@ function ResultsPanel({
   }
 
   return (
-    <div className="space-y-3 p-0.5" aria-live="polite">
+    <div aria-live="polite">
       {favoriteError ? (
         /* `#e8a49e`, not the `#a3352b` this carried while the panel was light.
-           On the dark glass that red is about 2.4:1 -- effectively invisible for
-           an alert, which is the one message here that must not be missed. */
-        <p className="text-xs text-[#e8a49e]" role="alert">
+           On the dark surface that red is about 2.4:1 -- effectively invisible for
+           an alert, which is the one message here that must not be missed. It is
+           a full-width band rather than a floating line, so a row scrolling past
+           it cannot push it out of view. */
+        <p
+          className="border-b border-[rgba(242,240,234,0.08)] px-5 py-3 text-[12px] text-[#e8a49e]"
+          role="alert"
+        >
           {favoriteError}
         </p>
       ) : null}
 
-      {/* The header is the answer to the section's question, so it is stated as
-          a sentence at heading size. It was a 10px uppercase gold label, which
-          read as a caption on a list rather than as a result. */}
-      <div>
-        <h3 className="text-lg font-semibold tracking-tight text-balance text-[#f2f0ea]">
-          {matches.length} {matches.length === 1 ? "property" : "properties"}{" "}
-          match
-        </h3>
-
-        {/* Read-only. They restate the criteria behind the scores so the
-            percentages have something to be a percentage *of*; making them
-            removable from here would be a further change. */}
-        {criteria.length > 0 ? (
-          <ul className="mt-2 flex flex-wrap gap-1.5">
-            {criteria.map((name) => (
-              <li
-                key={name}
-                className="rounded-full bg-white/8 px-2.5 py-1 text-[11px] font-medium text-[#c4beb3]"
-              >
-                {name}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      <div className="grid gap-2">
+      {/* No heading here: the count and the criteria pills moved into
+          `ResultsHeader`, which is a sibling of the scroll region so they stay
+          put while the rows move under them. The band is the only place the
+          "N properties match" answer appears, which is what stops the count
+          scrolling out of view above a list it is describing. */}
+      <div className="flex flex-col">
         {matches.map((match, index) => {
           const property = propertyIndex[match.id] ?? null;
           return (
@@ -1409,41 +1595,57 @@ export default function FindYourPlot() {
 
           {/* The results panel, desktop.
 
-              This was an opaque cream slab --
-              `radial-gradient(ellipse at 50% 28%, #ffffff 0%, #f4f0e8 55%, #ebe4d8 100%)`
-              -- which read as pasted onto a dark section, matched neither the
-              page's cool-grey light sections nor the dark mobile sheet showing
-              the identical results.
+              Its **layout** now matches the right-hand column of
+              `CompareProperties` exactly: square flush surface, a header band
+              that does not scroll, hairline-separated rows, and a pinned gold
+              footer CTA. Its **colour** does not, deliberately -- this section
+              is dark and that one is light, so a `#eceef2` preview panel here
+              would be a light rectangle punched into a dark section rather than
+              a seamless continuation of it. Everything that is about structure
+              and typography is shared; the surface stays `#141519`.
 
-              It is now the same glass as everything else: 5% white over the
-              section, a 10% white hairline, blurred so the blueprint tile reads
-              through it. The result rows sit at 10% white on top, which
-              composites to roughly 15% against the section -- one step lighter
-              than the panel behind them, without a second hard-coded colour.
+              `.find-your-plot-panel` in globals.css still owns two things:
+              `max-height`, which keeps the panel from running off the bottom of
+              the screen, and `height` + `align-self: start`, which let it grow
+              past the left column rather than matching it -- without that the
+              grid row's `stretch` wins and the panel stays locked to the height
+              of the heading plus the bento grid.
 
-              `flex-1` rather than `sticky top-24 min-h-112`: the panel spans
-              from the eyebrow to the pager, so it is as tall as the left column
-              by definition and has nothing left to stick through. The `<aside>`
-              is the flex container so this needs no percentage height to
-              resolve against.
-
-              `max-height` from `.find-your-plot-panel` (globals.css) keeps it
-              from running off the bottom of the screen, and the `height` on the
-              same class lets it grow past the left column rather than matching
-              it -- without `align-self: start` the grid row's stretch wins and
-              the panel stays locked to the height of the heading plus the 2x2
-              tiles. That matters now the panel is also much wider.
-
-              Inside: a scrolling list and a pinned footer. The button is a
-              sibling of the scroll region, not inside it, so it stays put while
-              the list scrolls. */}
+              `flex-1` rather than `sticky`: the panel spans from the eyebrow to
+              the pager, so it is as tall as the left column by definition and has
+              nothing left to stick through. The `<aside>` is the flex container
+              so this needs no percentage height to resolve against. */}
             <aside className="find-your-plot-panel hidden min-[981px]:flex">
-              <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-[rgba(242,240,234,0.1)] bg-[rgba(242,240,234,0.05)] p-5 shadow-[0_20px_50px_rgba(0,0,0,0.28)] backdrop-blur-md">
-                <div className="ila-scroll-dark min-h-0 flex-1 overflow-y-auto">
+              {/* Square, flush, solid `#141519` -- no radius, no border, no shadow,
+                  no `backdrop-blur`. This is the treatment `CompareProperties`
+                  gives its right column, and it is a change of kind rather than
+                  of taste: the panel was `rgba(242,240,234,0.05)` glass with a
+                  22px radius, a hairline and a deep drop shadow, which read as a
+                  translucent card floating *over* a dark section. `#141519` is a
+                  step below the section's own `#1c1f24`, so the panel is a
+                  surface in its own right rather than a tint on someone else's.
+
+                  Nothing is rounded because the panel no longer needs to be
+                  separated from its surroundings by a border and a shadow -- the
+                  darker fill does that on its own.
+
+                  Three layers, matching the compare column exactly: a header band
+                  that does not scroll, the rows, and a pinned CTA that is a
+                  sibling of the scrollport rather than a child of it.
+                  `overflow-x-clip`, never `overflow-hidden`: nothing inside is
+                  sticky against this element, and `clip` does not create a
+                  scrollport. */}
+              <div className="flex min-w-0 flex-1 flex-col overflow-x-clip bg-[#141519]">
+                <ResultsHeader
+                  status={apiStatus}
+                  matches={cards}
+                  criteria={criteriaLabels}
+                />
+
+                <div className="ila-scroll-dark flex min-h-0 flex-1 flex-col overflow-y-auto">
                   <ResultsPanel
                     status={apiStatus}
                     matches={cards}
-                    criteria={criteriaLabels}
                     loadingLabel={loadingLabel}
                     error={apiError}
                     savedIds={savedIds}
@@ -1461,12 +1663,18 @@ export default function FindYourPlot() {
                     response, not the match count -- the matches are already all
                     on screen above, so a button promising "all of them" would
                     point at the page it is on. It renders only once there are
-                    matches to act on. */}
+                    matches to act on.
+
+                    `rounded-xl` and `min-h-11` rather than the old
+                    `rounded-full min-h-12`: the compare column's pinned CTAs are
+                    `rounded-xl` at 44px, and this is the same kind of control --
+                    a footer action on a dark card, not the page's primary
+                    gold pill. */}
                 {apiStatus === "ready" && propertyTotal > 0 ? (
-                  <div className="shrink-0 border-t border-[rgba(242,240,234,0.12)] pt-4">
+                  <div className="shrink-0 border-t border-[rgba(242,240,234,0.08)] px-5 py-4">
                     <Link
                       href="/properties"
-                      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-[#c6a46c] px-5 text-sm font-semibold tracking-wide text-[#1c1f24] transition hover:bg-[#d4b57e] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c6a46c]"
+                      className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#c6a46c] px-4 text-[13px] font-semibold text-[#0f1114] transition hover:bg-[#d4b57e] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c6a46c]"
                     >
                       View all {propertyTotal} properties
                     </Link>
@@ -1538,10 +1746,18 @@ export default function FindYourPlot() {
                 <CloseIcon className="h-3.5 w-3.5" />
               </button>
             </div>
-            <ResultsPanel
+            {/* Same band as the desktop aside, minus its own background: the
+                sheet is already `#1c1f24` and its own border. Sharing the
+                component is what keeps the two viewports describing the same
+                results in the same words. */}
+            <ResultsHeader
               status={apiStatus}
               matches={cards}
               criteria={criteriaLabels}
+            />
+            <ResultsPanel
+              status={apiStatus}
+              matches={cards}
               loadingLabel={loadingLabel}
               error={apiError}
               savedIds={savedIds}

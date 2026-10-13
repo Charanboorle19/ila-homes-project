@@ -176,6 +176,59 @@ There is no component named `PropertyPopup` in the inspected source. The equival
 
 `PropertySheet` receives the selected `EstateProject`, selected `PropertyRecord`/API detail, plot count/data, and selection callbacks. Its tabs are `about`, `location`, `amenities`, and `developer`. It opens when `selectedProjectId` is set and is closed by clearing `selectedProjectId`/`activeProjectId`.
 
+### The mobile property sheet is full-bleed
+
+Below `md`, `PropertySheet` is rendered through a React portal onto `<body>` rather than inside the map frame. The portal is necessary because the map frame carries `overflow-hidden`, which clipped the sheet and made it a child of a card instead of a surface in its own right; `fixed` from `<body>` escapes every clipping ancestor.
+
+The sheet is **`fixed inset-x-0 bottom-0`** — full viewport width. It was `inset-x-2`, an 8px inset per side chosen to line the sheet up with the map card's own `mx-2` gutters. That nested it inside a second frame the map was not in, and the doubled margin read as a card floating above the fold rather than as a sheet attached to the screen. Full bleed leaves the two top corners as the only rounded ones, and `bottom-0` docks it so the square bottom corners read as deliberate.
+
+Height uses percentages (`h-48` collapsed, `h-[88%]` expanded) and the bottom padding uses `env(safe-area-inset-bottom)` — never `dvh`, which would resize the sheet whenever the mobile browser shows or hides its URL bar. The sheet is suppressed entirely in fullscreen, where the map is the whole point.
+
+### The mobile sheet is dark; the desktop sidebar is not
+
+`PropertySheet` renders in two places with genuinely different surfaces, so it takes an explicit `tone: "light" | "dark"` prop. It **defaults to `light`**, which is the desktop sidebar sitting in the light `#d9d2c7` panel; only the phone bottom sheet passes `tone="dark"`.
+
+The prop is explicit rather than derived from `dense`. `dense` already distinguishes the two hosts, but it means "compact type scale", not "dark surface" — deriving colour from it would silently couple two unrelated decisions.
+
+`SHEET_TONE` in `MapSection.tsx` holds both palettes as class strings. Two reasons it is a table of class strings rather than CSS custom properties:
+
+- arbitrary-value `var()` calls would make every themed colour invisible to Tailwind's scanner and to anyone grepping for a hex;
+- a missing key is a TypeScript error rather than an invisible fallback.
+
+| | Light (desktop sidebar) | Dark (phone sheet) |
+|---|---|---|
+| Sheet shell | `bg-[#f5f2ea]` | `bg-[#141519]` |
+| Tab bodies / stats list | `bg-white`, `border-[#ded9cf]` | `bg-white/[0.06]`, `border-white/10` |
+| Primary ink | `text-[#24231f]` | `text-[#f2f0ea]` |
+| Muted copy | `text-[#77736a]` / `text-[#8a8174]` | `text-[#a8a49c]` / `text-[#8a857c]` |
+| Gold ink | `text-[#a07c3c]` (no-image) / `text-[#8a6d34]` (labels) | `text-[#c6a46c]` |
+| Price block | inverted dark gradient, `#3a362e` edge | **lighter** than the shell — `from-[#2b2f36] via-[#21252b] to-[#1a1e23]`, gold edge |
+| Primary action | `bg-[#24231f] text-white` | `bg-[#c6a46c] text-[#171717]` |
+| Secondary / tertiary | white `bg-white` with `#ded9cf` edge | `bg-white/[0.06]` / `[0.04]`, `border-white/15` |
+| Approval chip | `bg-[#f2f7f2] text-[#1f5c45]` | `bg-[#1f8a68]/15 text-[#6fd0a8]` |
+
+Three things the dark palette had to invert rather than just re-tint:
+
+1. **The price block stops being the dark surface.** On the light sheet it was the only inverted block, which is what made it the most-sought value. On a dark shell it would disappear into the background, so it becomes a step *lighter* than the shell with a gold hairline instead of a `#3a362e` one.
+2. **The primary action flips from near-black to gold.** `bg-[#24231f] text-white` on `#141519` is a 3% step and reads as a hole.
+3. **The close button inverts too.** It was `bg-[#171717]` when the shell was cream; on a `#141519` shell that is invisible, so it is now `bg-[#f2f0ea] text-[#141519]`. It keeps the same role — light fill, dark glyph — and still reads as the destructive exit. The maximize button's `#c6a46c` fill needed no change and remains the only gold in the control row.
+
+The `onPhoto*` keys are deliberately identical in both palettes: the hero carries its own `from-black/88` gradient scrim, so white copy is correct over a photo regardless of the shell behind it.
+
+### Its two controls are 40px and filled
+
+| Control | Size | Treatment | Meaning carried by the fill |
+|---|---|---|---|
+| Close | `h-10 w-10` (40px), `CloseIcon` `h-4 w-4` | `bg-[#f2f0ea]`, `#141519` glyph | Ends the sheet. A light fill with a dark glyph is the inverse of the near-black fill it used on the cream sheet, which is why the value had to change when the shell went dark. |
+| Maximize | `h-10 w-10` (40px), `ExpandIcon` `h-4.5 w-4.5` | `bg-[#c6a46c]`, `#171717` glyph | Opens the full card. The section's gold — the same accent the price block and the status chips sit on — because it is the action that *adds* something rather than ending it. |
+
+Both were `h-7 w-7` (28px) with a `bg-white/85` fill and a `border-white/70` hairline. Two problems:
+
+- **28px is well under the 44px touch minimum**, and on a sheet whose whole job is one-thumb tapping it was the smallest target in the section.
+- **`bg-white/85` on the sheet's own surface is invisible** — a near-invisible step on the cream sheet it started on, and pure white-on-white once the shell went dark. The solid fills make each legible on its own, and differing them means they read as two different actions rather than as a matched pair of decorations.
+
+The row is symmetric — close, centred grabber, maximize — so the right-hand spacer while expanded is also `h-10 w-10`. A mismatched spacer would push the centred grabber off-centre by exactly the size difference.
+
 ## 15. How the map connects to the Property List
 
 The homepage property/plot list is rendered inside `MapSection` and uses the same `propertyList`, `propertyAnchors`, `remoteProject.plots`, `filter`, `query`, and selection state as the map. Clicking a list item calls the same project/plot opening logic used by map selections.

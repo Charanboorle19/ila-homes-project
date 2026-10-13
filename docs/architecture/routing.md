@@ -70,7 +70,7 @@ The page renders the catalogue heading and the client component `PropertiesList`
 - **Dynamic parameters:** None.
 - **Query parameters:** The page does not read URL query parameters. `PropertiesList` makes an internal API request with `status=ALL`, `page=1`, and `per_page=100`; those are API request parameters, not page URL parameters.
 - **How users reach it:** `Navbar`, `Footer`, the `Properties` breadcrumb on property detail pages, the API property-card links from the homepage/list experiences, and the API-property error-state link.
-- **Navigation behavior:** Property cards use Next.js `Link` elements to `/properties/{property.id}`. Favourite controls are buttons and do not navigate.
+- **Navigation behavior:** Property cards use Next.js `Link` elements to `/properties/{property.id}`. Favourite controls are buttons and do not navigate. **Every route change is preceded by an explicit `window.scrollTo(0, 0)` from `ScrollToTop` — see §27.**
 - **Data/API dependencies:** `PropertiesList` loads `GET /api/properties?status=ALL&page=1&per_page=100`, optionally enriches items with `GET /api/properties/{id}`, and separately uses the favourites endpoints. Requests go through the internal API client with tenant configuration.
 - **Loading/error/not-found:** `PropertiesList` has client-managed `loading`, `ready`, and `error` states. It renders a loading status and an error message when the list request fails. No route-level error or not-found file exists. Exact complete list-error presentation is `UNKNOWN — needs verification`.
 - **Route-specific logic:** The list is client-side because tenant identity is resolved in the browser. It requests only page 1 with up to 100 items and has no URL-backed filtering, sorting, search, or pagination controls.
@@ -88,7 +88,7 @@ The route first resolves the parameter against local static property data. A loc
 - **Dynamic parameters:** `propertyId`.
 - **Query parameters:** None are read or written by the page.
 - **How users reach it:** `PropertiesList`, `GrowthCorridors` property links, `SimilarProperties`, the map `PropertySheet` when a `PropertyRecord` is available, and direct deep links.
-- **Navigation behavior:** Internal property links use `next/link`. The detail hero breadcrumb links to `/` and `/properties`. Similar-property cards navigate to another `/properties/{id}` path.
+- **Navigation behavior:** Internal property links use `next/link`. The detail hero breadcrumb links to `/` and `/properties`. Similar-property cards navigate to another `/properties/{id}` path. **Every route change is preceded by an explicit `window.scrollTo(0, 0)` from `ScrollToTop`, mounted in the root layout — see §27.**
 - **Data/API dependencies:** Local ids use `src/data/properties.ts`. API ids use `GET /api/properties/{propertyId}`, with independent requests for documents and life-stage fit. Child sections may additionally request nearby places and use map/image integrations.
 - **Loading/error/not-found:** Local records render without a page data-loading state. API-backed records show `Loading property…` while loading. Invalid/non-UUID or failed API records render an in-page `Property unavailable` state with a link back to `/properties`. No `not-found.tsx` or `error.tsx` is present, and the route does not call `notFound()`.
 - **Route-specific logic:** `generateStaticParams()` returns local property ids. `generateMetadata()` uses local property metadata when available and a derived `${propertyId} · ILA Homes` title for ids without local records. API detail, documents, and life-stage requests are independently cancellable.
@@ -233,7 +233,9 @@ The confirmed Next.js programmatic navigation is in `Hero.tsx`:
 router.push("/#projects");
 ```
 
-It is used only when the current document does not contain an element with id `projects`. The same component otherwise uses `scrollIntoView` without changing the URL. No confirmed use of `router.replace`, `router.back`, `router.prefetch`, or redirect helpers exists in application source.
+It is used only when the current document does not contain an element with id `projects`. The same component otherwise uses `scrollIntoView` without changing the URL. No confirmed use of `router.replace`, `router.back`, `router.prefetch`, redirect helpers, or the `scroll` option exists in application source.
+
+`ScrollToTop` (see §27) is the only other code that moves scroll position on a route change.
 
 ## 19. Link-based navigation
 
@@ -319,7 +321,63 @@ Confirmed routing-related dependencies and project facilities are:
 - The exact behavior of all client section errors and all unexpected render exceptions is `UNKNOWN — needs verification`.
 - No automated routing test coverage was confirmed; `UNKNOWN — needs verification`.
 
-## 27. Important constraints
+## 27. Scroll position on navigation
+
+**Every route change sends the window to the top of the document.** This is not Next.js default behaviour on this site; it is enforced explicitly.
+
+### What Next.js does by default
+
+Per the bundled App Router docs (`01-app/03-api-reference/02-components/link.md`), `<Link>`'s `scroll` prop defaults to `true`, but the described behaviour is to **maintain scroll position**, similar to back/forward navigation: "scroll position will stay the same as long as the Page is visible in the viewport."
+
+The mechanism is documented in the same file's note on `scroll`. Next.js walks the top-level elements, bypassing sticky/fixed elements and anything without rendered HTML, until it identifies **a scrollable element that is visible in the viewport** — and scrolls *that* element rather than the window.
+
+`use-router.md` describes the same default from the other direction ("Next.js will scroll to the top of the page when navigating to a new route"), with `scroll: false` as the opt-out.
+
+### Why that fails here
+
+On a conventional site — a handful of short pages — that walk resolves to the window and lands correctly.
+
+This homepage is a **single very long document** with many independently scrollable regions:
+
+| Region | Scroll container |
+|---|---|
+| FindYourPlot results panel | `.ila-scroll-dark` |
+| CompareProperties metric table | `.ila-search-scroll` |
+| GrowthCorridors card carousel | `overflow-x-auto` snap row |
+| GrowthCorridors / MapSection map frames | MapLibre containers |
+| Mobile results sheet | `overflow-y-auto` dialog |
+
+Tapping a property card from inside one of those regions let the scroll target resolve against the section rather than the document, so the destination route opened at whatever offset that section was sitting at. This was the reported symptom: navigating to `/properties` or `/properties/{id}` from a scrolled section landed mid-page.
+
+### The fix
+
+`src/components/ScrollToTop.tsx` — a client component mounted in `src/app/layout.tsx` above `<Navbar>`:
+
+```tsx
+const pathname = usePathname();
+
+useEffect(() => {
+  if (window.location.hash) return;
+  window.scrollTo(0, 0);
+}, [pathname]);
+```
+
+Three decisions in that shape:
+
+| Decision | Reason |
+|---|---|
+| Root layout, not per-link | Property links exist in eight components (Navbar, Footer, PropertiesList, SimilarProperties, GrowthCorridors, MapSection `PropertySheet`, FindYourPlot, CompareProperties detail columns). Per-link handling is eight chances to miss one, and every new property card would silently inherit the bug. The root layout is the only element that survives every navigation. |
+| `useEffect`, not `useLayoutEffect` | A layout effect avoids a visible jump but also runs during server rendering, where React warns it is a no-op. The jump is not observable here: the effect lands in the same commit as the navigation and the destination pages are short at first paint. |
+| Bail on `window.location.hash` | `/#faq` and `/#contact` also change the pathname when followed from another route. Bailing hands those back to the browser's own fragment scroll instead of racing it. Same-page fragment links never change the pathname and so never reach the effect. |
+
+### What this does not change
+
+- **Same-page fragment scrolling is untouched.** `Hero`'s `scrollIntoView`, and every in-document anchor, still behave as before — the effect does not run when the pathname is unchanged.
+- **Browser back/forward still restores position**, because that is browser and App Router behaviour rather than anything this component overrides.
+- **Scroll positions *within* a section's own scroller are not reset** by this. `ScrollToTop` moves the window only; it does not reach into `.ila-scroll-dark` or `.ila-search-scroll`. If a preserved inner scroll offset is ever reported, that is a separate concern.
+- Whether `cacheComponents` is enabled is **false** — `next.config.ts` does not set it — so Next.js's `<Activity>`-based route preservation and its scroll-position side effect are **not** in play here. That guide's behaviour must not be assumed for this project.
+
+## 28. Important constraints
 
 - Document and preserve only the confirmed routes: `/`, `/properties`, `/properties/[propertyId]`, `/property/[trackingToken]/view`, and `/api/layout-image`.
 - Keep local static property ids distinct from API UUIDs; the detail route intentionally supports both through different branches.

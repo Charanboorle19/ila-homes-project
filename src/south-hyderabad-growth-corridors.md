@@ -18,7 +18,7 @@ The section lets visitors:
 
 ```text
 South Hyderabad · Growth corridors
-Explore locations shaping the next phase of Hyderabad
+Explore Properties That Fit Your Vision
 Navigate Hyderabad's southern growth corridors and discover verified opportunities — designed for clarity, not clutter.
 ```
 
@@ -230,6 +230,9 @@ Use [`src/components/GrowthCorridors.css`](../src/components/GrowthCorridors.css
 | Mobile | The map CTA appears in the card footer. The map disables one-finger page-blocking gestures and allows two-finger pinch zoom. |
 | Map mode | Entering map mode scrolls the map frame into view, offset below the sticky nav (`scroll-margin-top: calc(var(--nav-h) + 0.5rem)`). List mode and map mode differ greatly in height on a phone, so the scroll offset held from the card row would otherwise settle past the map, on the locality detail card below it. |
 | Up to 560px | The header map CTA is hidden; each card retains its own map action. |
+| Below `lg` (under 1024px) | The carousel counter (`{current} / {total}`) is shown, because the row is a touch carousel and it is the only cue for how much is parked off-screen. The previous/next arrows are hidden — swiping is the expected gesture there. |
+| `lg` and up | The carousel counter is **hidden** and the previous/next arrows are shown instead. Whole cards are in view at this width, so a `1 / 4` on a desktop band is noise rather than navigation. |
+| All widths | The section heading is two-tone: `Explore Properties` in ink, `That Fit Your Vision` in `#8A6A1F` at `1.06em` with tighter tracking, beneath a fading gold hairline. The emphasis is colour and scale, never weight, so the line stays one typographic voice. `#8A6A1F` carries the text (≈4.3:1 on the mist background); the brighter `#c9a84c` is reserved for the hairline. |
 | Reduced motion | Transitions and animations are disabled. |
 
 ## Accessibility behavior

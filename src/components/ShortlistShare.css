@@ -252,6 +252,19 @@
   padding-right: 0.15rem;
 }
 
+/* The chooser's own heading. It was rendered by the JSX with no rule anywhere
+   in the stylesheet, so it inherited the body's 16px and sat on the same weight
+   as the list below it. It is a label for the list, so it is set as one. */
+.shortlist-share__choose-label {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--ss-ink);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
 .shortlist-share__choose-desktop,
 .shortlist-share__choose {
   display: flex;
@@ -306,13 +319,31 @@
   line-height: 1.55;
 }
 
-.shortlist-share__panels {
+/* The scrollable property list.
+
+   **This class was `__panels` until the markup was renamed.** Every rule in
+   this file — including the whole scrollbar block — targeted `__panels`, while
+   the JSX has always rendered `__options`. Nothing here applied: the list had
+   no `overflow-y`, no `max-height` and no scrollbar, so it simply grew until
+   `.shortlist-share__right`'s `overflow: hidden` clipped it and every property
+   below the fold was unreachable. Renaming the CSS to match the markup is what
+   restores the scroll container; it was not a styling choice.
+
+   `grid-auto-rows` is what makes the rows align. Left on `auto`, each row is as
+   tall as its own text — a card with a two-line name sat taller than its
+   neighbour, and the thumbnails stepped in and out down the column. A single
+   fixed track plus the line clamps on the name and meta means every row is the
+   same height whatever the property is called.
+
+   `gap` was declared twice here (0.65rem then 0.55rem); the later declaration
+   won. Only one is kept. */
+.shortlist-share__options {
   display: grid;
-  flex: 1 1 auto;
-  gap: 0.65rem;
   grid-template-columns: 1fr;
-  gap: 0.55rem;
+  grid-auto-rows: 6.5rem;
   align-content: start;
+  gap: 0.55rem;
+  flex: 1 1 auto;
   min-height: 0;
   height: 100%;
   overflow-y: auto;
@@ -323,26 +354,30 @@
   scrollbar-color: #9aa1ad rgba(15, 17, 20, 0.08);
 }
 
-.shortlist-share__panels::-webkit-scrollbar {
+.shortlist-share__options::-webkit-scrollbar {
   width: 8px;
 }
 
-.shortlist-share__panels::-webkit-scrollbar-track {
+.shortlist-share__options::-webkit-scrollbar-track {
   background: rgba(15, 17, 20, 0.06);
   border-radius: 999px;
 }
 
-.shortlist-share__panels::-webkit-scrollbar-thumb {
+.shortlist-share__options::-webkit-scrollbar-thumb {
   background: #9aa1ad;
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.65);
 }
 
-.shortlist-share__panels::-webkit-scrollbar-thumb:hover {
+.shortlist-share__options::-webkit-scrollbar-thumb:hover {
   background: #6f7683;
 }
 
-/* Property cards — shared image/name/location/meta design across breakpoints */
+/* Property cards — shared image/name/location/meta design across breakpoints
+
+   `min-height` is `100%` rather than a fixed value because the row height is
+   now owned by the list's `grid-auto-rows`. The card fills its track, so the
+   thumbnail and the text share one baseline across every row. */
 .shortlist-share__option {
   position: relative;
   display: grid;
@@ -350,7 +385,8 @@
   align-items: stretch;
   gap: 0.7rem;
   width: 100%;
-  min-height: 7rem;
+  min-height: 0;
+  height: 100%;
   box-sizing: border-box;
   padding: 0.45rem;
   border: 1px solid rgba(15, 17, 20, 0.1);
@@ -381,12 +417,32 @@
   z-index: 1;
   display: block;
   width: 7rem;
-  min-height: 6.1rem;
+  min-height: 0;
+  height: 100%;
   align-self: stretch;
   overflow: hidden;
   border-radius: 9px;
   background: #ebecef;
   box-shadow: inset 0 0 0 1px rgba(15, 17, 20, 0.06);
+}
+
+/* The API cover paints over this one, not instead of it.
+
+   `cover_url` is a presigned S3 URL, so it can be absent (the property has no
+   cover) or answer 403 (the signature expired). Both cases must show a picture
+   rather than a hole, and `onError` hides only the overlay — revealing whatever
+   sits underneath. That is why the local asset stays mounted at all times
+   rather than being swapped in conditionally. */
+.shortlist-share__option-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.shortlist-share__option-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }
 
 .shortlist-share__option-image {
@@ -444,7 +500,15 @@
   min-width: 0;
 }
 
+/* Name and meta are clamped so a long development name cannot grow its row past
+   the fixed `grid-auto-rows` track and break the alignment above. Two lines is
+   the most that fits at this column width without touching the thumbnail. */
 .shortlist-share__option-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   color: var(--ss-ink);
   font-size: 0.84rem;
   font-weight: 600;
@@ -460,14 +524,21 @@
   color: var(--ss-muted);
   font-size: 0.7rem;
   font-weight: 400;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .shortlist-share__option-meta {
   color: var(--ss-soft-text);
   font-size: 0.74rem;
   font-weight: 400;
-  line-height: 1.4;
+  line-height: 1.35;
   padding-left: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .shortlist-share__option-score {
@@ -736,7 +807,7 @@
     display: none;
   }
 
-  .shortlist-share__choose-mobile .shortlist-share__panels {
+  .shortlist-share__choose-mobile .shortlist-share__options {
     display: flex;
     flex-direction: column;
     flex-wrap: nowrap;
@@ -759,17 +830,17 @@
     scrollbar-color: rgba(154, 123, 50, 0.55) rgba(15, 17, 20, 0.06);
   }
 
-  .shortlist-share__choose-mobile .shortlist-share__panels::-webkit-scrollbar {
+  .shortlist-share__choose-mobile .shortlist-share__options::-webkit-scrollbar {
     width: 6px;
     display: block;
   }
 
-  .shortlist-share__choose-mobile .shortlist-share__panels::-webkit-scrollbar-track {
+  .shortlist-share__choose-mobile .shortlist-share__options::-webkit-scrollbar-track {
     background: rgba(15, 17, 20, 0.06);
     border-radius: 999px;
   }
 
-  .shortlist-share__choose-mobile .shortlist-share__panels::-webkit-scrollbar-thumb {
+  .shortlist-share__choose-mobile .shortlist-share__options::-webkit-scrollbar-thumb {
     background: rgba(154, 123, 50, 0.55);
     border-radius: 999px;
   }

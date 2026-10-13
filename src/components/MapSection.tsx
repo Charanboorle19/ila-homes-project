@@ -286,6 +286,20 @@ function ExpandIcon({ className = "" }: { className?: string }) {
   );
 }
 
+function MinimizeIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function ChevronIcon({ className = "" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -303,6 +317,102 @@ function ChevronIcon({ className = "" }: { className?: string }) {
 const SHEET_TABS = ["about", "location", "amenities", "developer"] as const;
 type SheetTab = (typeof SHEET_TABS)[number];
 
+/**
+ * Surfaces for the two hosts `PropertySheet` renders in.
+ *
+ * The component is shared between two surfaces that are genuinely different
+ * colours — the desktop sidebar sits in a light `#d9d2c7` panel, and the phone
+ * bottom sheet is dark — so it cannot resolve its own palette from `dense`,
+ * which means "compact type", not "dark surface". `tone` is therefore explicit,
+ * and defaults to `light` so the desktop caller is unchanged.
+ *
+ * Every themed colour is a class string in this table rather than an
+ * arbitrary-value `var()` call, so the compiled CSS stays statically analysable
+ * and a missing key is a TypeScript error rather than an invisible fallback.
+ *
+ * Keys are only added when two or more call sites share them; a colour used
+ * once is written inline. That is why this table is not a 1:1 map of every hex
+ * in the component.
+ */
+const SHEET_TONE = {
+  light: {
+    /** Tab-body surface. */
+    panel: "border-[#ded9cf] bg-white",
+    panelBody: "text-[#3f3a34]",
+    panelLabel: "text-[#8a6d34]",
+    /** Hairlines: the outer edge of a block versus a divider inside it. */
+    edge: "border-[#ded9cf]",
+    divider: "border-[#f0ece3]",
+    /** Type. */
+    ink: "text-[#24231f]",
+    muted: "text-[#77736a]",
+    faint: "text-[#8a8174]",
+    goldInk: "text-[#a07c3c]",
+    tabActive: "text-[#24231f]",
+    tabIdle: "text-[#8a8174] hover:text-[#24231f]",
+    /** Status chips. */
+    greenChip: "border-[#d9e3da] bg-[#f2f7f2] text-[#1f5c45]",
+    goldChip: "border-[#e6d7b0] bg-[#faf4e4] text-[#8a6d34]",
+    softChip: "border-[#e5ddcd] bg-[#faf7f0] text-[#5c5348]",
+    /** Price block — already an inverted surface in both themes, so only the
+        gradient steps change. */
+    price: "border-[#3a362e] bg-linear-to-br from-[#35322b] via-[#24231f] to-[#171614]",
+    priceLabel: "text-[#d7c39b]",
+    priceMuted: "text-white/55",
+    /** Actions. */
+    primary: "bg-[#24231f] text-white hover:bg-[#2f2e29]",
+    secondary:
+      "border-[#ded9cf] bg-white text-[#24231f] hover:border-[#c6a46c] hover:bg-[#faf6ec]",
+    tertiary:
+      "border-[#ded9cf] bg-white text-[#5c5348] hover:bg-[#eee9dd]",
+    /** Media and container surfaces. */
+    media: "border-[#ded9cf] bg-[#e8e4dc]",
+    strip: "border-[#e6e0d4] bg-white/70",
+    /** On-photo copy — the hero already carries a black gradient scrim. */
+    onPhoto: "text-white",
+    onPhotoMuted: "text-white/85",
+    onPhotoGold: "text-[#e8d3a6]",
+    onPhotoRule: "bg-[#c6a46c]",
+    noPhotoGold: "bg-[#c6a46c]",
+    tile: "bg-[#f1e5c9] text-[#8a6d34]",
+  },
+  dark: {
+    panel: "border-white/10 bg-white/[0.06]",
+    panelBody: "text-[#c9c5bd]",
+    panelLabel: "text-[#c6a46c]",
+    edge: "border-white/12",
+    divider: "border-white/8",
+    ink: "text-[#f2f0ea]",
+    muted: "text-[#a8a49c]",
+    faint: "text-[#8a857c]",
+    goldInk: "text-[#c6a46c]",
+    tabActive: "text-[#f2f0ea]",
+    tabIdle: "text-[#8a857c] hover:text-[#f2f0ea]",
+    greenChip:
+      "border-[#1f8a68]/45 bg-[#1f8a68]/15 text-[#6fd0a8]",
+    goldChip:
+      "border-[#c6a46c]/40 bg-[#c6a46c]/12 text-[#c6a46c]",
+    softChip: "border-white/12 bg-white/[0.06] text-[#c9c5bd]",
+    price:
+      "border-[#c6a46c]/30 bg-linear-to-br from-[#2b2f36] via-[#21252b] to-[#1a1e23]",
+    priceLabel: "text-[#c6a46c]",
+    priceMuted: "text-white/55",
+    primary: "bg-[#c6a46c] text-[#171717] hover:bg-[#d4b57e]",
+    secondary:
+      "border-white/15 bg-white/[0.06] text-[#f2f0ea] hover:border-[#c6a46c]/50 hover:bg-white/10",
+    tertiary:
+      "border-white/12 bg-white/[0.04] text-[#c9c5bd] hover:bg-white/[0.09]",
+    media: "border-white/12 bg-[#23262b]",
+    strip: "border-white/12 bg-white/[0.05]",
+    onPhoto: "text-white",
+    onPhotoMuted: "text-white/85",
+    onPhotoGold: "text-[#e8d3a6]",
+    onPhotoRule: "bg-[#c6a46c]",
+    noPhotoGold: "bg-[#c6a46c]",
+    tile: "bg-[#c6a46c]/15 text-[#c6a46c]",
+  },
+} as const;
+
 type PropertySheetProps = {
   project: EstateProject;
   property: PropertyRecord | undefined;
@@ -310,6 +420,11 @@ type PropertySheetProps = {
   apiProperty?: ApiProperty | null;
   expanded: boolean;
   dense: boolean;
+  /**
+   * Surface palette. Defaults to `light` — the desktop sidebar. The phone
+   * bottom sheet passes `dark`.
+   */
+  tone?: keyof typeof SHEET_TONE;
   /** When false the card always renders its full form and drops the toggle. */
   collapsible?: boolean;
   tab: SheetTab;
@@ -329,6 +444,7 @@ function PropertySheet({
   apiProperty = null,
   expanded,
   dense,
+  tone = "light",
   collapsible = true,
   tab,
   onTabChange,
@@ -389,7 +505,13 @@ function PropertySheet({
     (apiProperty?.rera_registered ? "RERA registered" : null) ??
     popupSample?.approvalLabel ?? property?.approval ?? "Approval pending";
   const apiAmenities = apiProperty?.amenities?.filter(Boolean) ?? [];
-  const viewPropertyId = property?.id ?? apiProperty?.id;
+  const viewPropertyId =
+    property?.id ??
+    apiProperty?.id ??
+    (project?.id === "sark-green" ? "sark-green-plains" : project?.id);
+  const loanCalculatorHref = viewPropertyId
+    ? `/properties/${viewPropertyId}#affordability-financing`
+    : "#affordability-financing";
 
   // Type scale: the phone sheet is tight, the sidebar has room to breathe.
   const t = dense
@@ -398,14 +520,14 @@ function PropertySheet({
         name: "text-[16px]",
         location: "text-[12px]",
         price: "text-[16px]",
-        sub: "text-[11px]",
+        sub: "text-[12px]",
         chip: "text-[10px]",
         chipPad: "px-2.5 py-0.5",
         statPad: "py-2",
         statValue: "text-[13px]",
         statLabel: "text-[9px]",
-        tab: "text-[11px]",
-        body: "text-[13px]",
+        tab: "text-sm",
+        body: "text-sm",
         action: "text-[13px]",
         actionPad: "py-3",
       }
@@ -420,11 +542,14 @@ function PropertySheet({
         statPad: "py-3",
         statValue: "text-[15px]",
         statLabel: "text-[10px]",
-        tab: "text-xs",
-        body: "text-[13px]",
+        tab: "text-sm",
+        body: "text-sm",
         action: "text-sm",
         actionPad: "py-3.5",
       };
+
+  // Surface palette for this host. See `SHEET_TONE`.
+  const c = SHEET_TONE[tone];
 
   // Non-collapsible hosts (desktop sidebar) always render the full card.
   const showFull = expanded || !collapsible;
@@ -432,24 +557,23 @@ function PropertySheet({
   // Every tab body shares one surface, so switching tabs never changes the
   // card's padding, border or shadow. `text` is set here on purpose: the page
   // sets body colour to white, so a panel with no explicit colour of its own
-  // would render its body copy white-on-white.
-  const panel =
-    "rounded-2xl border border-[#ded9cf] bg-white p-4 text-[#3f3a34] shadow-[0_2px_10px_rgba(36,35,31,0.05)] sm:p-5";
+  // would render its body copy white-on-white in either theme.
+  const panel = `rounded-2xl border ${c.panel} p-4 shadow-[0_2px_10px_rgba(36,35,31,0.05)] sm:p-5 ${c.panelBody}`;
   const panelLabel =
-    "block text-[10px] font-semibold tracking-[0.16em] text-[#8a6d34] uppercase";
+    `block text-[11px] font-semibold tracking-[0.16em] uppercase ${c.panelLabel}`;
 
   // Chips always wrap — long approval labels must never be clipped.
   const chips = (
     <div className="flex flex-wrap items-center gap-1.5">
       <span
-        className={`inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#d9e3da] bg-[#f2f7f2] ${t.chipPad} ${t.chip} font-semibold text-[#1f5c45]`}
+        className={`inline-flex max-w-full items-center gap-1.5 rounded-full border ${c.greenChip} ${t.chipPad} ${t.chip} font-semibold`}
       >
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#1f8a68]" />
         <span className="wrap-break-word">{approval}</span>
       </span>
       {property?.reraRegistered ? (
         <span
-          className={`inline-flex shrink-0 items-center gap-1 rounded-full border border-[#e6d7b0] bg-[#faf4e4] ${t.chipPad} ${t.chip} font-semibold tracking-[0.08em] text-[#8a6d34] uppercase`}
+          className={`inline-flex shrink-0 items-center gap-1 rounded-full border ${c.goldChip} ${t.chipPad} ${t.chip} font-semibold tracking-[0.08em] uppercase`}
         >
           <span className="text-[9px] leading-none">✦</span>
           RERA
@@ -462,7 +586,7 @@ function PropertySheet({
     return (
       <div className={className}>
         {popupImage ? (
-          <div className="relative h-52 w-full shrink-0 overflow-hidden rounded-2xl border border-[#ded9cf] bg-[#e8e4dc] shadow-[0_10px_26px_rgba(36,35,31,0.10)] sm:h-60">
+          <div className={`relative h-52 w-full shrink-0 overflow-hidden rounded-2xl border ${c.media} shadow-[0_10px_26px_rgba(36,35,31,0.10)] sm:h-60`}>
             <Image
               src={popupImage.src}
               alt={popupImage.alt}
@@ -479,20 +603,20 @@ function PropertySheet({
             <div className="absolute inset-0 bg-linear-to-t from-black/88 via-black/35 to-black/10" />
             <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
               <p
-                className={`${t.eyebrow} flex items-center gap-2 font-semibold tracking-[0.2em] text-[#e8d3a6] uppercase`}
+                className={`${t.eyebrow} flex items-center gap-2 font-semibold tracking-[0.2em] uppercase ${c.onPhotoGold}`}
               >
-                <span className="h-px w-4 shrink-0 bg-[#c6a46c]" />
+                <span className={`h-px w-4 shrink-0 ${c.onPhotoRule}`} />
                 Selected property
               </p>
               <h3
-                className={`${t.name} mt-1.5 text-balance font-semibold tracking-tight text-white`}
+                className={`${t.name} mt-1.5 text-balance font-semibold tracking-tight ${c.onPhoto}`}
               >
                 {projectName}
               </h3>
               <p
-                className={`${t.location} mt-1.5 flex items-start gap-1.5 text-white/85`}
+                className={`${t.location} mt-1.5 flex items-start gap-1.5 ${c.onPhotoMuted}`}
               >
-                <PinIcon className="mt-[0.15em] h-3.5 w-3.5 shrink-0 text-[#e8d3a6]" />
+                <PinIcon className={`mt-[0.15em] h-3.5 w-3.5 shrink-0 ${c.onPhotoGold}`} />
                 <span className="min-w-0 wrap-break-word">{projectLocation}</span>
               </p>
             </div>
@@ -500,18 +624,18 @@ function PropertySheet({
         ) : (
           <div className="shrink-0 pr-9">
             <p
-              className={`${t.eyebrow} flex items-center gap-2 font-semibold tracking-[0.2em] text-[#a07c3c] uppercase`}
+              className={`${t.eyebrow} flex items-center gap-2 font-semibold tracking-[0.2em] uppercase ${c.goldInk}`}
             >
-              <span className="h-px w-4 shrink-0 bg-[#c6a46c]" />
+              <span className={`h-px w-4 shrink-0 ${c.noPhotoGold}`} />
               Selected property
             </p>
             <h3
-              className={`${t.name} mt-1.5 text-balance font-semibold tracking-tight text-[#24231f]`}
+              className={`${t.name} mt-1.5 text-balance font-semibold tracking-tight ${c.ink}`}
             >
               {projectName}
             </h3>
-            <p className={`${t.location} mt-1.5 flex items-start gap-1.5 text-[#77736a]`}>
-              <PinIcon className="mt-[0.15em] h-3.5 w-3.5 shrink-0 text-[#c6a46c]" />
+            <p className={`${t.location} mt-1.5 flex items-start gap-1.5 ${c.muted}`}>
+              <PinIcon className={`mt-[0.15em] h-3.5 w-3.5 shrink-0 ${c.noPhotoGold}`} />
               <span className="min-w-0 wrap-break-word">{projectLocation}</span>
             </p>
           </div>
@@ -519,13 +643,13 @@ function PropertySheet({
 
         {/* Price is the most-sought value, so it owns the only inverted surface in
             the card; approval and RERA stay together in the status strip below. */}
-        <div className="relative mt-4 overflow-hidden rounded-2xl border border-[#3a362e] bg-linear-to-br from-[#35322b] via-[#24231f] to-[#171614] p-4 shadow-[0_12px_28px_rgba(36,35,31,0.16)] sm:p-5">
+        <div className={`relative mt-4 overflow-hidden rounded-2xl border ${c.price} p-4 shadow-[0_12px_28px_rgba(36,35,31,0.16)] sm:p-5`}>
           <span
             aria-hidden
             className="pointer-events-none absolute inset-x-5 top-0 h-px bg-linear-to-r from-transparent via-[#c6a46c]/70 to-transparent"
           />
           <span
-            className={`${t.eyebrow} block font-semibold tracking-[0.18em] text-[#d7c39b] uppercase`}
+            className={`${t.eyebrow} block font-semibold tracking-[0.18em] uppercase ${c.priceLabel}`}
           >
             Price
           </span>
@@ -535,7 +659,7 @@ function PropertySheet({
             {price}
           </strong>
           <div className="mt-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-white/12 pt-3 text-xs">
-            <span className="text-white/55">Starting from</span>
+            <span className={c.priceMuted}>Starting from</span>
             <span className="font-semibold text-white">{starting}</span>
           </div>
         </div>
@@ -545,7 +669,7 @@ function PropertySheet({
         {/* Four values read as one spec sheet: a label/value row each, rather
             than four tall tiles. Accents echo the master-plan palette so a
             number can be traced back to its meaning on the map. */}
-        <dl className="mt-4 overflow-hidden rounded-2xl border border-[#ded9cf] bg-white shadow-[0_2px_10px_rgba(36,35,31,0.05)]">
+        <dl className={`mt-4 overflow-hidden rounded-2xl border ${c.panel} shadow-[0_2px_10px_rgba(36,35,31,0.05)]`}>
           {[
             { label: "Total plots", value: totalPlots, accent: "#8a8174" },
             { label: "Available", value: availablePlots, accent: "#1F8A68" },
@@ -555,11 +679,11 @@ function PropertySheet({
             <div
               key={stat.label}
               className={`flex min-w-0 items-baseline justify-between gap-3 px-3.5 py-2 sm:px-4 ${
-                index === 0 ? "" : "border-t border-[#f0ece3]"
+                index === 0 ? "" : `border-t ${c.divider}`
               }`}
             >
               <dt
-                className={`${t.statLabel} flex min-w-0 items-center gap-2 font-semibold tracking-[0.1em] text-[#8a8174] uppercase`}
+                className={`${t.statLabel} flex min-w-0 items-center gap-2 font-semibold tracking-[0.1em] uppercase ${c.faint}`}
               >
                 <span
                   aria-hidden
@@ -569,7 +693,7 @@ function PropertySheet({
                 <span className="wrap-break-word">{stat.label}</span>
               </dt>
               <dd
-                className={`${t.statValue} min-w-0 wrap-break-word text-right font-bold text-[#24231f]`}
+                className={`${t.statValue} min-w-0 wrap-break-word text-right font-bold ${c.ink}`}
               >
                 {stat.value}
               </dd>
@@ -580,7 +704,7 @@ function PropertySheet({
         <div
           role="tablist"
           aria-label="Property information"
-          className="ila-tabs-scroll mt-5 flex snap-x snap-mandatory gap-4 overflow-x-auto border-b border-[#ded9cf] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-6"
+          className={`ila-tabs-scroll mt-5 flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden border-b [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-6 ${c.edge}`}
         >
           {SHEET_TABS.map((item) => (
             <button
@@ -591,10 +715,10 @@ function PropertySheet({
               aria-selected={tab === item}
               aria-controls={`property-panel-${item}`}
               onClick={() => onTabChange(item)}
-              className={`relative shrink-0 snap-start pb-2.5 font-semibold capitalize transition-colors ${t.tab} ${
+              className={`relative shrink-0 whitespace-nowrap snap-start pb-2.5 font-semibold capitalize transition-colors ${t.tab} ${
                 tab === item
-                  ? "text-[#24231f] after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-[#c6a46c]"
-                  : "text-[#8a8174] hover:text-[#24231f]"
+                  ? `${c.tabActive} after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-[#c6a46c]`
+                  : c.tabIdle
               }`}
             >
               {item}
@@ -634,11 +758,11 @@ function PropertySheet({
                   <li
                     key={item}
                     className={`flex min-w-0 items-center gap-2.5 py-2 ${
-                      index === 0 ? "" : "border-t border-[#f0ece3]"
+                      index === 0 ? "" : `border-t ${c.divider}`
                     }`}
                   >
                     <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-[#c6a46c]" />
-                    <span className="min-w-0 flex-1 wrap-break-word">{item}</span>
+                    <span className={`min-w-0 flex-1 wrap-break-word ${t.body}`}>{item}</span>
                   </li>
                 ))}
               </ul>
@@ -650,7 +774,7 @@ function PropertySheet({
               {/* Exactly two rows, side by side. `grid-flow-col` fills the
                   first row then the second, so the list scrolls sideways
                   instead of growing taller as amenities are added. */}
-              <ul className="ila-tabs-scroll -mx-1 mt-2.5 grid auto-cols-max grid-flow-col grid-rows-2 gap-1.5 overflow-x-auto px-1 pb-1 [grid-auto-columns:max-content] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <ul className="ila-tabs-scroll -mx-1 mt-2.5 grid auto-cols-max grid-flow-col grid-rows-2 gap-1.5 overflow-x-auto overflow-y-hidden px-1 pb-1 [grid-auto-columns:max-content] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {(
                   (apiAmenities.length ? apiAmenities : null) ??
                   popupSample?.amenities ??
@@ -661,7 +785,7 @@ function PropertySheet({
                 ).map((item) => (
                   <li
                     key={item}
-                    className={`${t.sub} flex items-center rounded-full border border-[#e5ddcd] bg-[#faf7f0] px-3 py-1.5 font-medium text-[#5c5348]`}
+                    className={`${t.sub} flex items-center rounded-full border ${c.softChip} px-3 py-1.5 font-medium`}
                   >
                     {item}
                   </li>
@@ -673,14 +797,14 @@ function PropertySheet({
             <div className={panel}>
               <p className={`${panelLabel} mb-2.5`}>Developer</p>
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#f1e5c9] text-base text-[#8a6d34]">
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base ${c.tile}`}>
                   ◆
                 </span>
                 <div className="min-w-0">
-                  <strong className="block wrap-break-word text-sm font-semibold text-[#24231f]">
+                  <strong className={`block wrap-break-word text-sm font-semibold ${c.ink}`}>
                     {popupSample?.developer ?? "Developer information"}
                   </strong>
-                  <p className="mt-0.5 wrap-break-word text-xs text-[#77736a]">
+                  <p className={`mt-0.5 wrap-break-word text-xs ${c.muted}`}>
                     {popupSample
                       ? `${popupSample.developerExperience} · ${popupSample.projectsCompleted} projects completed`
                       : "Developer details available on the property page."}
@@ -695,7 +819,7 @@ function PropertySheet({
           {viewPropertyId ? (
             <Link
               href={`/properties/${viewPropertyId}`}
-              className={`${t.action} group flex w-full items-center justify-center gap-2 rounded-xl bg-[#24231f] px-3 py-3.5 font-semibold text-white shadow-[0_8px_20px_rgba(36,35,31,0.18)] transition hover:bg-[#2f2e29] active:scale-[0.99]`}
+              className={`${t.action} group flex w-full items-center justify-center gap-2 rounded-xl px-3 py-3.5 font-semibold shadow-[0_8px_20px_rgba(36,35,31,0.18)] transition active:scale-[0.99] ${c.primary}`}
             >
               View Project
               <ArrowIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
@@ -704,13 +828,13 @@ function PropertySheet({
           <div className="grid grid-cols-2 gap-2">
             <Link
               href="#brochure"
-              className={`${t.action} flex items-center justify-center rounded-xl border border-[#ded9cf] bg-white px-2 py-3.5 text-center font-medium text-[#24231f] transition hover:border-[#c6a46c] hover:bg-[#faf6ec]`}
+              className={`${t.action} flex items-center justify-center rounded-xl px-2 py-3.5 text-center font-medium transition ${c.secondary}`}
             >
               Brochure
             </Link>
             <Link
-              href="#loan-calculator"
-              className={`${t.action} flex items-center justify-center rounded-xl border border-[#ded9cf] bg-white px-2 py-3.5 text-center font-medium text-[#24231f] transition hover:border-[#c6a46c] hover:bg-[#faf6ec]`}
+              href={loanCalculatorHref}
+              className={`${t.action} flex items-center justify-center rounded-xl px-2 py-3.5 text-center font-medium transition ${c.secondary}`}
             >
               Loan Calculator
             </Link>
@@ -722,7 +846,7 @@ function PropertySheet({
             type="button"
             aria-expanded
             onClick={onToggle}
-            className={`${t.action} ${t.actionPad} mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#ded9cf] bg-white px-3 font-semibold text-[#5c5348] transition hover:bg-[#eee9dd] active:scale-[0.99]`}
+            className={`${t.action} ${t.actionPad} mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 font-semibold transition active:scale-[0.99] ${c.tertiary}`}
           >
             Show less
             <ChevronIcon className="h-4 w-4 rotate-180" />
@@ -739,7 +863,7 @@ function PropertySheet({
     <div className={className}>
       <div className="flex items-center gap-2.5">
         {popupImage ? (
-          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-[#ded9cf] bg-[#e8e4dc]">
+          <div className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border ${c.media}`}>
             <Image
               src={popupImage.src}
               alt={popupImage.alt}
@@ -756,23 +880,23 @@ function PropertySheet({
 
         <div className="min-w-0 flex-1">
           <h3
-            className={`${t.name} line-clamp-1 text-balance font-semibold tracking-tight text-[#24231f]`}
+            className={`${t.name} line-clamp-1 text-balance font-semibold tracking-tight ${c.ink}`}
           >
             {projectName}
           </h3>
           <p
-            className={`${t.location} mt-0.5 flex items-center gap-1 text-[#77736a]`}
+            className={`${t.location} mt-0.5 flex items-center gap-1 ${c.muted}`}
           >
-            <PinIcon className="h-3 w-3 shrink-0 text-[#c6a46c]" />
+            <PinIcon className={`h-3 w-3 shrink-0 ${c.noPhotoGold}`} />
             <span className="min-w-0 truncate">{projectLocation}</span>
           </p>
           <div className="mt-0.5 flex items-baseline gap-1.5">
             <strong
-              className={`${t.price} min-w-0 truncate font-bold tracking-tight text-[#24231f]`}
+              className={`${t.price} min-w-0 truncate font-bold tracking-tight ${c.ink}`}
             >
               {price}
             </strong>
-            <span className={`${t.sub} min-w-0 truncate font-medium text-[#77736a]`}>
+            <span className={`${t.sub} min-w-0 truncate font-medium ${c.muted}`}>
               · from {starting}
             </span>
           </div>
@@ -786,15 +910,17 @@ function PropertySheet({
         type="button"
         aria-expanded={false}
         onClick={onToggle}
-        className="mt-2 flex w-full items-center rounded-lg border border-[#e6e0d4] bg-white/70 px-2 py-1.5 text-left transition active:scale-[0.99]"
+        className={`mt-2 flex w-full items-center rounded-lg border px-2 py-1.5 text-left transition active:scale-[0.99] ${c.strip}`}
       >
         <span className="flex w-full min-w-0 items-center gap-1.5">
-          <span className="inline-flex max-w-[7rem] shrink-0 items-center gap-1 truncate rounded-full bg-[#f2f7f2] px-1.5 py-0.5 text-[9px] font-semibold text-[#1f5c45]">
+          <span
+            className={`inline-flex max-w-[7rem] shrink-0 items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${c.greenChip}`}
+          >
             <span className="h-1 w-1 shrink-0 rounded-full bg-[#1f8a68]" />
             {property?.reraRegistered ? "RERA" : approval}
           </span>
           <span
-            className={`${t.sub} min-w-0 truncate font-semibold text-[#77736a]`}
+            className={`${t.sub} min-w-0 truncate font-semibold ${c.muted}`}
           >
             {availablePlots} avail · {projectExtent} · {plotSize}
           </span>
@@ -2793,24 +2919,54 @@ export default function MapSection() {
             here it was bounded by the map frame's `overflow-hidden`, which
             clipped the sheet and made it a child of a card instead of a
             surface in its own right. `fixed` from <body> escapes every
-            clipping ancestor, so `inset-x-2` lines the sheet up with the map
-            card's `mx-2` gutters while still belonging to the page.
-            `bottom-0` docks it to the viewport edge, so the square bottom
-            corners read as intentional rather than as a card floating above
-            the fold. Height uses percentages and `pb` uses the safe-area
+            clipping ancestor.
+
+            **`inset-x-0` — the sheet is full-bleed.** It was `inset-x-2`, an 8px
+            inset on each side, chosen to line the sheet up with the map card's
+            own `mx-2` gutters. That put the sheet inside a second frame the map
+            was not in, and the doubled margin read as a card floating above the
+            fold rather than as a sheet attached to the screen. At full bleed the
+            sheet spans the viewport, its only rounded corners are the two at the
+            top, and `bottom-0` docks it so the square bottom corners read as
+            deliberate.
+
+            Height uses percentages and `pb` uses the safe-area
             inset — never `dvh`, which resizes the sheet whenever the mobile
             browser shows or hides its URL bar. */}
         {portalReady && selectedProject && !selectedPlot && !mapFullscreen
           ? createPortal(
               <div
-                className={`pointer-events-auto fixed inset-x-2 bottom-0 z-[200] flex flex-col overflow-hidden rounded-t-[1.5rem] border-x border-t border-[#ded9cf] bg-[#f5f2ea] pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-12px_32px_rgba(36,35,31,0.18)] transition-[height,max-height] duration-300 md:hidden ${propertySheetExpanded ? "h-[88%] max-h-[88%]" : "h-48 max-h-48"}`}
+                className={`pointer-events-auto fixed inset-x-0 bottom-0 z-[200] flex flex-col overflow-hidden rounded-t-[1.5rem] border-x border-t border-white/10 bg-[#141519] pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-12px_32px_rgba(0,0,0,0.5)] transition-[height,max-height] duration-300 md:hidden ${propertySheetExpanded ? "h-[88%] max-h-[88%]" : "h-48 max-h-48"}`}
               >
                 {/* Controls sit in normal flow above the body, so the card no longer needs
                     side padding to clear a floating button. Close on the left,
                     maximize on the right, grabber centred between two equal
                     slots — the row is symmetric, so the grabber stays centred
-                    whether or not the right slot is filled. */}
-                <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-2 pb-1">
+                    whether or not the right slot is filled.
+
+                    **Both controls were `h-7 w-7` (28px) and are now `h-10 w-10`
+                    (40px).** 28px is well under the 44px touch minimum, and on a
+                    sheet whose whole job is being tapped at with one thumb it was
+                    the smallest target in the section. The right-hand spacer is
+                    the same `h-10 w-10` — a mismatch would push the centred
+                    grabber off-centre by the size difference.
+
+                    **They are now filled rather than ghosted.** Both were
+                    `bg-white/85` with a `border-white/70` hairline, which on the
+                    sheet's own `#f5f2ea` is a near-invisible 3% step: the only
+                    thing separating them from the cream behind was a shadow.
+                    Each now carries a solid fill, and the two differ so they are
+                    distinguishable at a glance rather than as a matched pair:
+
+                    - **Close** — `#171717` with a white glyph. The same near-black
+                      fill the sibling plot sheet's close button already uses, so
+                      the destructive exit looks identical in both sheets.
+                    - **Maximize** — `#c6a46c` with `#171717`. The section's own
+                      gold, which is the accent used for the one action that
+                      *adds* something (opens the full card) rather than ending
+                      it. It is also the gold the price block and the chips sit
+                      on, so the expand control joins that set. */}
+                <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-2.5 pb-2">
                   <button
                     type="button"
                     aria-label="Close property details"
@@ -2818,36 +2974,52 @@ export default function MapSection() {
                       closeLayout();
                       setPropertySheetExpanded(false);
                     }}
-                    className="flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-white/85 text-[#24231f] shadow-sm backdrop-blur transition active:scale-95"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f0ea] text-[#141519] shadow-[0_6px_16px_rgba(0,0,0,0.45)] transition active:scale-95"
                   >
-                    <CloseIcon className="h-3 w-3" />
+                    <CloseIcon className="h-4 w-4" />
                   </button>
 
                   {propertySheetExpanded ? (
-                    <span className="h-1 w-10 rounded-full bg-black/15" aria-hidden />
+                    <button
+                      type="button"
+                      aria-label="Minimize property details"
+                      aria-expanded={true}
+                      onClick={() => setPropertySheetExpanded(false)}
+                      className="flex h-6 w-20 items-center justify-center rounded-full transition active:scale-95"
+                    >
+                      <span className="h-1 w-10 rounded-full bg-white/25" />
+                    </button>
                   ) : (
                     <button
                       type="button"
                       aria-label="Show full property details"
                       aria-expanded={false}
                       onClick={() => setPropertySheetExpanded(true)}
-                      className="flex h-4 w-20 items-center justify-center rounded-full transition active:scale-95"
+                      className="flex h-6 w-20 items-center justify-center rounded-full transition active:scale-95"
                     >
-                      <span className="h-1 w-10 rounded-full bg-black/30" />
+                      <span className="h-1 w-10 rounded-full bg-white/45" />
                     </button>
                   )}
 
                   {propertySheetExpanded ? (
-                    <span className="h-7 w-7" aria-hidden />
+                    <button
+                      type="button"
+                      aria-label="Minimize property details"
+                      aria-expanded={true}
+                      onClick={() => setPropertySheetExpanded(false)}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#c6a46c] text-[#171717] shadow-[0_6px_16px_rgba(36,35,31,0.28)] transition active:scale-95"
+                    >
+                      <MinimizeIcon className="h-4.5 w-4.5" />
+                    </button>
                   ) : (
                     <button
                       type="button"
                       aria-label="Maximize property details"
                       aria-expanded={false}
                       onClick={() => setPropertySheetExpanded(true)}
-                      className="flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-white/85 text-[#24231f] shadow-sm backdrop-blur transition active:scale-95"
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#c6a46c] text-[#171717] shadow-[0_6px_16px_rgba(36,35,31,0.28)] transition active:scale-95"
                     >
-                      <ExpandIcon className="h-3.5 w-3.5" />
+                      <ExpandIcon className="h-4.5 w-4.5" />
                     </button>
                   )}
                 </div>
@@ -2858,6 +3030,7 @@ export default function MapSection() {
                     apiProperty={activePopupApiProperty}
                     expanded={propertySheetExpanded}
                     dense
+                    tone="dark"
                     tab={propertySheetTab}
                     onTabChange={setPropertySheetTab}
                     onToggle={() => setPropertySheetExpanded((open) => !open)}

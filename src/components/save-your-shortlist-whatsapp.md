@@ -54,7 +54,8 @@ The package scripts are defined in [`package.json`](../package.json). The sectio
 | Property/layout data | [`src/data/propertyLayouts.js`](../src/data/propertyLayouts.js) |
 | Homepage global styles and responsive variables | [`src/index.css`](../src/index.css) |
 | Shared application sizing rules | [`src/App.css`](../src/App.css) |
-| Section image asset | [`src/assets/Sharing Dream Plots With Family.png`](../src/assets/Sharing%20Dream%20Plots%20With%20Family.png) |
+| Section image asset | [`src/app/assets/share on what'sapp.gif`](../src/app/assets/share%20on%20what'sapp.gif) |
+| Property fallback images | `Family Dreams Over a New Community.png`, `Golden-Hour Family Homecoming.png`, `Golden Hour Real Estate Growth.png`, `Golden-Hour View of Planned Cityscape.png` — **underneath the API cover, never the primary image** |
 
 `HomePage` renders the section after [`PlotCompare`](../src/components/PlotCompare.jsx) and before [`EmiAppreciation`](../src/components/EmiAppreciation.jsx):
 
@@ -68,37 +69,22 @@ The section has the page anchor `#shortlist-share` and the accessible section la
 
 ## Content and data model
 
-`ShortlistShare.jsx` imports all records from `propertyLayouts.js` and maps each record into the smaller shape needed by the UI:
+> **This section is stale in several respects.** It describes the pre-API, Vite-era implementation: `ShortlistShare.jsx`, `propertyLayouts.js`, a six-layout demo catalogue, local appreciation scores, and two pre-selected ids. The current component is **`src/components/ShortlistShare.tsx`**, loads its properties from **`GET /api/properties`**, and starts with **nothing selected**. See `docs/features/shortlist-share.md` for the maintained description.
+>
+> The correction below is limited to the property-block redesign recorded at the end of this document.
 
-```js
+`ShortlistShare.tsx` maps each API property into the shape the UI needs:
+
+```ts
 {
-  id,
-  name: layout.label,
-  location: layout.location,
-  meta: `${layout.plotSizes} · ${layout.priceRange} · ${layout.tag}`,
-  highlight: layout.highlight,
-  score,
+  id: property.id,
+  name: property.name,
+  location: property.locality || property.city || "Hyderabad",
+  meta: [property.property_type, property.price_label ?? price].filter(Boolean).join(" · "),
+  highlight: property.description || "Property details available from ILA Homes.",
+  coverUrl: property.cover_url,
+  image: PROPERTY_IMAGES[index % PROPERTY_IMAGES.length],
 }
-```
-
-The appreciation values are demo values defined locally in the component:
-
-| Layout | Score |
-| --- | ---: |
-| Singapore Township | 76/100 |
-| Nallagandla Enclave | 82/100 |
-| Kokapet Heights | 91/100 |
-| Khajaguda Residency | 74/100 |
-| Patancheru Gateway | 88/100 |
-| Mansanpally Meadows | 79/100 |
-
-The initial selected IDs are:
-
-```js
-[
-  'nallagandla-enclave',
-  'kokapet-heights',
-]
 ```
 
 The left side communicates the three-part value proposition:
@@ -244,6 +230,68 @@ npm run build
 ```
 
 At the time of writing, the build command is the appropriate automated validation for this documentation change. `npm run lint` may be unavailable in the Windows environment if Oxlint’s optional native binding is missing; that is an environment/package-installation issue rather than a section-specific runtime behavior.
+
+## Desktop property-block redesign
+
+Three problems were reported on the desktop block between the left column and the WhatsApp media: no vertical scrollbar, rows that did not line up, and images that were not the API response's.
+
+### The scrollbar: a CSS/JSX class-name mismatch
+
+This was not a styling choice, it was dead CSS.
+
+The stylesheet targeted **`.shortlist-share__panels`**. The JSX has always rendered **`.shortlist-share__options`**. That class had **no rule anywhere in the file**, so the entire scrollbar block — `overflow-y: auto`, `scrollbar-gutter: stable`, `scrollbar-width`, `scrollbar-color`, and all four `::-webkit-scrollbar` rules — never applied.
+
+The visible consequence: the list was a plain block that grew until `.shortlist-share__right`'s `max-height: min(40rem, 88vh)` plus `overflow: hidden` clipped it. Properties below the fold were **unreachable** — no scrollbar, no scrolling, silently truncated.
+
+**Fix:** every `__panels` rule renamed to `__options`, in both the desktop and the `@media (max-width: 980px)` blocks. The mobile list had the identical defect and is fixed by the same rename.
+
+### Row alignment
+
+| Change | Reason |
+|---|---|
+| `grid-auto-rows: 6.5rem` on the list | Rows were `min-height: 7rem` and grew with their own text, so a two-line name made one row taller than its neighbour and the thumbnails stepped in and out down the column. A fixed track makes every row identical. |
+| `.shortlist-share__option` → `height: 100%`, `min-height: 0` | The card now fills its grid track instead of choosing its own height. |
+| `.shortlist-share__option-media` → `height: 100%`, `min-height: 0` | The thumbnail shares the row's baseline across every card. |
+| Name clamped to 2 lines | A long development name can no longer push a row past the fixed track. |
+| Locality and meta clamped to 1 line each | Both are single-line values in practice; `text-overflow: ellipsis` keeps them on one line instead of wrapping into the row above. |
+| `gap` declared once | It was declared twice on the same rule (`0.65rem` then `0.55rem`); the later one silently won. |
+| `.shortlist-share__choose-label` given rules | It is rendered by the JSX but had no stylesheet rule, so it inherited the body's 16px and sat at the same weight as the list heading it is meant to label. |
+
+### Images now come from the API
+
+Previously `PROPERTY_IMAGES[index % 4]` assigned one of four local assets by **list position**. The picture had no relationship to the property it sat next to — the first property always got the same family photo regardless of what the API returned.
+
+Now each card renders:
+
+1. `property.cover_url` as the primary image, `unoptimized` — it is a presigned S3 URL that expires, so it bypasses the optimizer cache, the same reason `GrowthCorridors` sets `unoptimized`.
+2. The local asset mounted permanently **underneath** in `.shortlist-share__option-fallback`.
+
+Two cases need that underneath layer, and both previously produced a hole or a broken-image glyph:
+
+- **`cover_url` is `null`** — the property publishes no cover. `PropertyListItem.cover_url` is `string | null`.
+- **The presigned URL has expired** and answers `403`. `onError` sets `display: none` on the overlay only, which reveals the fallback underneath. Hiding the *whole* layer instead would leave the row's text shifted, which is the bug already documented and fixed in `FindYourPlot`.
+
+`plot.image` is retained on the type for exactly this purpose. It is never the primary source.
+
+### Location line
+
+`toPlot` used `property.slug` for the location, which is a URL segment — it rendered things like `maheshwaram-enclave-4f2` in the locality line. It now reads `property.locality || property.city || "Hyderabad"`, the same fields `GrowthCorridors` uses.
+
+### Not changed
+
+- **The left column, the feature list, the WhatsApp media, and the share flow** are untouched. The WhatsApp text already builds per-property trackable share URLs via `createPropertyShares` and `buildShareUrl`, so the "Shareable link" promise is genuinely met.
+- **The mobile list** keeps its own `display: flex` and `max-height` override in the `@media (max-width: 980px)` block. It is more specific, so it wins over the desktop `grid-auto-rows`, and its cards keep `height: auto`.
+- `.shortlist-share__detail-head`, `__detail-kicker`, `__detail-title` and `__detail-summary` have rules in the stylesheet but are not rendered by the JSX. They were dead before this change and remain so; removing them is a separate cleanup.
+
+### Verification
+
+1. Desktop, above 980px: confirm a visible thin scrollbar in the property list and that the last property is reachable.
+2. Select the last property in the list — it must be clickable, not clipped.
+3. Confirm every row is the same height and every thumbnail shares one baseline, including a property with a long name.
+4. Confirm each card shows its own API cover. Force a `403` by using an expired `cover_url` — the local fallback should appear, not a broken-image glyph.
+5. Confirm a property with `cover_url: null` still shows the fallback rather than an empty tile.
+6. Confirm the locality line reads a place name, not a slug.
+7. Mobile, at 980px and below: confirm the list still scrolls at four rows tall and the cards are unchanged.
 
 ## Related sections
 

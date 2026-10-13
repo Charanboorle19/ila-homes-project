@@ -123,14 +123,15 @@ The stage data was a curated marketing funnel: four personas, each with hand-pic
 
 ## 10. Feature controls
 
-The options are the endpoint's rows, rendered as an **equal-width tile grid** in the left block. They appear in the order the endpoint returns them (`sort_order`, then `name`).
+The options are the endpoint's rows, rendered as an asymmetrical **bento grid** in the left block. All features are displayed together without pagination. Subheadings (`feature.description`) are removed so each tile displays only its silhouette icon, heading (`feature.name`), and selection indicator. They appear in the order the endpoint returns them (`sort_order`, then `name`).
 
 | Aspect | Behaviour |
 |---|---|
 | Source | `fetchActiveFeatures()` in `featuresService.ts` |
 | Loaded | Once on mount, in a `useEffect` with an `AbortController` |
-| Label | `PropertyFeature.name` |
-| Detail | `PropertyFeature.description`, rendered visibly and clamped to two lines |
+| Label | `PropertyFeature.name` (heading) |
+| Detail | Subheadings are removed per user specification; only card headings are rendered |
+| Pagination | Removed — all features render simultaneously in the bento grid |
 | Ordering | Not re-sorted client-side — the endpoint already sorts |
 | Missing keys | Not filtered. The endpoint is trusted to return well-formed rows |
 | Loading | A `role="status"` line reading `Loading options…`, with the shared `ila-loader ila-loader--sm ila-loader--light` animation — see `docs\features\loading.md` |
@@ -142,66 +143,51 @@ The options are the endpoint's rows, rendered as an **equal-width tile grid** in
 
 Because the options are now the section's only input, there is no local fallback list. A failed load is reported rather than silently degrading, and there is no longer a second path to point the visitor at — the earlier "The life-stage plans above still work" line went with the life stages.
 
-### 10a. Equal-width tile grid
+### 10a. Bento tile grid
 
-The layout before this was a fixed two-row strip scrolled horizontally (`grid-rows-2 grid-flow-col w-max` inside `overflow-x-auto`), which only worked because the ten hard-coded labels were short and roughly uniform. With tenant-supplied labels of unknown length it hid options behind a scroll, which is undiscoverable and awkward on touch.
+The feature tiles are displayed in an asymmetrical **bento grid layout** across 2 columns on mobile and 3 columns on desktop (`grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3`).
 
-That was replaced by a **bento grid** with variable tile spans, and that has now been replaced again by **equal tiles**. The bento rule (`tileSpanClass`, `col-span-2` for the first tile or any label over 16 characters) made the column rhythm depend on label length, so the grid read as one full-width card, two half-width cards, then another full-width one — arbitrary, and unstable because adding or renaming a single feature reshuffled everything after it. `tileSpan` and `useBentoColumns`'s span arithmetic are gone; every tile is now exactly one column.
-
-Tile sizing:
+Tile sizing and layout:
 
 | Property | Value |
 |---|---|
-| Span | Always 1 column |
+| Span | Asymmetrical bento rhythm via `getBentoSpan(index)`: hero banner (`col-span-2 sm:col-span-2` at index 0), desktop accent (`col-span-1 sm:col-span-2` at index 6), mobile accent (`col-span-2 sm:col-span-1` at index 5), and standard tiles (`col-span-1 sm:col-span-1`) |
 | Radius | `rounded-2xl` |
-| Height | Content-sized. There is no `min-h-*` |
-| Padding | `p-3.5`, rising to `sm:p-4` |
-| Glyph | 16px, `h-4 w-4`, gold `#c6a46c`, first row of the tile |
-| Label | `text-sm`, rising to `sm:text-[15px]`, with `pr-6` to clear the selection circle |
-| Description | `text-xs`, **not clamped**, `#f2f0ea]/70` in both states |
-| Selected | Gold `#c6a46c` border, `bg-[#c6a46c]/10` wash, selection circle filled gold with a dark tick |
-| Unselected | `bg-[rgba(242,240,234,0.06)]`, `border-[rgba(242,240,234,0.14)]`, empty selection circle |
-| Both | `backdrop-blur-md` — the tiles are glass, not opaque |
+| Height | `min-h-[5.25rem] sm:min-h-[5.75rem]` with matching row heights |
+| Padding | `p-3.5 sm:p-4` |
+| Glyph | Scaled silhouette glyph (`h-4.5 w-4.5` to `h-5 w-5`), gold `#c6a46c` within a rounded icon chip (`h-8.5 w-8.5` up to `h-11 w-11`) |
+| Label | Increased text size: prominent `text-[15px] sm:text-lg font-bold text-[#f2f0ea]` on wide bento cards, and `text-[14px] sm:text-[15px] font-semibold text-[#f2f0ea]` on standard cards |
+| Subheading | Removed — cards display headings only |
+| Layout | Adaptive: wide cards use a horizontal layout (icon on left, prominent title in center, checkmark on right) to fill the width naturally with zero empty space; standard cards use a vertical stacked layout |
+| Selected | Gold `#c6a46c` border, `bg-[#c6a46c]/15` wash, selection circle filled gold with a dark tick, gold glow shadow |
+| Unselected | `bg-[rgba(242,240,234,0.06)]`, `border-[rgba(242,240,234,0.13)]`, empty selection circle |
+| Both | `backdrop-blur-md` — translucent glass allowing the blueprint pattern to show through |
 
 #### Tiles are glass so the blueprint tile shows through
 
-The section paints a decorative blueprint pattern behind its content (see §6). An opaque tile fill hides it completely — the pattern was only ever visible in the gaps between tiles and the margins around them, which read as an accident rather than a background.
-
-Both states are now translucent with `backdrop-blur-md`, and both borders are white at low alpha:
+The section paints a decorative blueprint pattern behind its content (see §6). Both states are translucent with `backdrop-blur-md`, and both borders are white at low alpha:
 
 ```
 unselected  bg-[rgba(242,240,234,0.06)]  border-[rgba(242,240,234,0.14)]
 hover       bg-[rgba(242,240,234,0.12)]  border-[rgba(242,240,234,0.32)]
-selected    bg-[#c6a46c]/10               border-[#c6a46c]
+selected    bg-[#c6a46c]/12              border-[#c6a46c]
 ```
 
 This replaces the solid `#23262b` / `#272a30` pair. `backdrop-filter` has something real to blur because `.find-your-plot-bg` is a sibling layer rather than a background on the section itself.
 
-#### Descriptions are never truncated
+#### Subheadings removed: headings only for clean scannability
 
-`line-clamp-2` was cutting descriptions mid-sentence with an ellipsis — "landscaped areas,…". The two ways out were to shorten each description to about six words or to let it run to as many lines as it needs.
+Subheadings (`PropertyFeature.description`) were removed in favor of concise, heading-only cards (`feature.name`). This keeps the bento grid balanced and highly scannable across desktop and mobile devices without arbitrary line-clamping or variable text height.
 
-**Shortening is a data change, not a code change.** Descriptions come from `PropertyFeature.description` via `GET /api/features`, so the copy is the tenant's. The clamp is therefore simply removed, and because tiles are content-sized a longer description makes a taller tile rather than a cut-off one. The trade is real: a long description in a 2-column mobile layout can run to five or six lines, and the third row of tiles will grow with it. `line-clamp-3` is the middle ground if that proves too tall.
+#### The tiles look selectable
 
-#### Tiles size to their content
-
-`min-h-28` / `sm:min-h-32` was leaving roughly 35px of empty space under each tile's content, because nothing in a tile grew to fill it. With the clamp gone and the glyph added, the minimum heights are removed and the grid's default `align-items: stretch` still keeps tiles in a row level. Space now appears only where a short-description tile genuinely sits beside a longer one.
-
-#### The description contrast was the weakest on the page
-
-`#9a9388` on `#23262b` is about 6:1, which passes AA comfortably, but the colour carries no weight — it read as disabled next to the label. It is now `#f2f0ea` at 70%, the tile's own ink token at reduced alpha, which is the same value used elsewhere in the section for secondary text.
-
-#### The tiles have to look selectable
-
-This is a multi-select and nothing in the tile said so. Three changes carry it:
-
-- **The selection circle is always rendered** — a 20px outlined circle in the top-right when unselected, filled gold with a dark tick when selected. Previously the badge appeared *only* once selected, so an untouched grid was eight identical unmarked rectangles. It is `aria-hidden`, because the button's own `aria-pressed` already carries the state and announcing both would double it.
-- **Selection is a border plus a 10% gold wash, not a solid gold fill.** The old solid fill inverted the whole card's typography and left the gold selection dot invisible against the gold it sat on. A wash keeps the label and description legible in both states, so the description is now `#9a9388` throughout rather than switching colour.
-- **Each tile carries a glyph** — family, tree, shield or rising arrow — so the grid is scannable by silhouette instead of by reading four label lengths.
+- **The selection circle is always rendered** — a 20px outlined circle in the top-right when unselected, filled gold with a dark tick when selected. It is `aria-hidden`, because the button's own `aria-pressed` already carries the state and announcing both would double it.
+- **Selection is a border plus a 12% gold wash, not a solid gold fill.** The old solid fill inverted the whole card's typography and left the gold selection dot invisible against the gold it sat on.
+- **Each tile carries a glyph** — family, tree, shield or rising arrow — so the grid is scannable by silhouette instead of by reading labels.
 
 #### Glyphs are resolved from the feature key by substring
 
-`featureIcon(key)` matches substrings, not an exact list, because the keys are tenant-supplied and unverified. It returns **`null` for anything unrecognised**, and the tile renders no glyph in that case: a confidently wrong glyph on a card is worse than none, and the visible label carries the meaning on its own.
+`featureIcon(key)` matches substrings, not an exact list, because the keys are tenant-supplied and unverified. It returns **`null` for anything unrecognised**, falling back to a clean checkmark icon.
 
 | Group | Matches |
 |---|---|
@@ -210,74 +196,14 @@ This is a multi-select and nothing in the tile said so. Three changes carry it:
 | Shield | `shiel`, `secur`, `safe`, `gated`, `cctv`, `guard`, `boundary` |
 | Growth | `growth`, `grow`, `appreciat`, `return`, `invest`, `yield`, `profit`, `future` |
 
-**The real key list has not been seen** — `GET /api/features` answers `403 UNKNOWN_DOMAIN`, so tiles never render in a browser. The groups are deliberately broad and should be widened once the actual keys are known; a key matching nothing is expected until then.
+### 10b. Removal of pagination: all data displayed
 
-### Column count is fixed at 2
+Pagination controls have been removed. All features loaded from `GET /api/features` render directly in the responsive bento grid without pagination splits or Previous / Next controls.
 
-`grid-cols-2` at every viewport. There is no `sm:` or `min-[1400px]:` step.
-
-This was tuned to the block width before — 2 columns on mobile, 3 from `sm`, 4 from `min-[1400px]` — because above 981px the section splits into `1.15fr / 0.85fr` and the left block is only about **500px** wide, so a fourth column there would leave roughly 118px tiles and wrap every label. A fixed 2x2 removes that whole calculation: a page is always four tiles, the page size is something the visitor can predict, and every tile is the same **size** rather than only the same width.
-
-### Equal-size rows, and a reserved height
-
-```
-grid-cols-2 grid-rows-[repeat(2,minmax(auto,1fr))] gap-2 min-h-[14rem]
-```
-
-- `grid-rows-[repeat(2,minmax(auto,1fr))]` forces exactly two equal rows, so all four tiles match in height as well as width. The `auto` minimum is what makes this safe: Tailwind's own `grid-rows-2` is `minmax(0, 1fr)`, and a zero row minimum lets a long description overflow its row and overlap the row below it.
-- `min-h-[14rem]` reserves two full tiles' worth of height. **Without it the Previous / Next row jumps upward on the last page**, because a page holding one or two tiles produced a shorter grid. `grid-rows-2` alone does not fix this — `fr` resolves against the container's used height, which is `auto`.
-- `gap-2` (8px) at every width.
-
-### The description box is reserved, not clamped
-
-Descriptions are tenant-supplied, so they cannot be shortened here, and `line-clamp-2` was cutting them mid-sentence ("landscaped areas,…"). But a tile beside a one-line description has to stay the same size, so the space is **reserved** rather than left to the text:
-
-```
-min-h-[2.75em] text-xs leading-snug text-[#f2f0ea]/70
-```
-
-`2.75em` is two lines at this element's own `leading-snug` (12px x 1.375 x 2), written in `em` so it tracks the font size instead of hard-coding 33px. Anything longer than two lines grows the tile instead of being cut.
-
-### `grid-flow-row-dense` is gone
-
-Dense flow existed to backfill the hole a double-width tile opens in a 3-column grid. With every tile now exactly one column there are no holes to backfill, so the class is gone. That also **restores strict visual and tab order**, which dense had broken — tab sequence across the grid once again reads left-to-right, and the known deviation recorded in §21 no longer applies.
-
-### Horizontal scrolling is gone
-
-`overflow-x-auto`, `scrollbar-none`, `grid-rows-2 grid-flow-col` and `w-max` were all removed. Nothing in the section scrolls sideways any more, and options are reached with buttons rather than a swipe.
-
-### 10b. Two rows of four, with Previous / Next
-
-A page is `TILES_PER_PAGE = 4` tiles in a 2x2. A long feature list cannot push the results panel out of reach, and the left block keeps a bounded height.
-
-#### Pages are a straight slice
-
-`buildPages(features)` cuts every four tiles, carrying each tile's global index through as `Tile = { feature, index }`.
-
-This has been through three implementations: walking the list accumulating each tile's column span and cutting on `columns × 3` column-units, then slicing `columns × 3`, and now a flat four. All three are gone; `useBentoColumns()` is deleted, along with its two media queries and the `columns` state. `pages` now depends only on `features`.
-
-#### Navigation
-
-| Aspect | Behaviour |
-|---|---|
-| Rendered | Only when `pageCount > 1`; omitted entirely when everything fits |
-| Position | Fixed. The grid's `min-h-[14rem]` means the row does not move between a full page and a short last page |
-| Container | `<nav aria-label="Feature pages">`, below the AND-matching hint |
-| Controls | `Previous` and `Next` buttons with a chevron icon |
-| Disabled | `Previous` on the first page, `Next` on the last, with `disabled` set as well as dimmed styling |
-| Disabled colour | `text-[#9a9388]`, **5.4:1** on `#1c1f24`. The previous `#6b655c` measured **2.9:1**, below the 4.5:1 AA threshold for 12px text, so the disabled state was effectively invisible |
-| Position indicator | `1–4 of 24`, from the global tile indices, `tabular-nums` so the digits do not jitter |
-| Announced | The range uses a visually hidden "to" between the numbers, so it reads "1 to 4 of 24" rather than "1 dash 4 of 24" |
-
-The range is built from each tile's index in the **full** list, carried through `buildPages` as `Tile = { feature, index }`. It would be wrong to derive it from the visible slice's own indices.
-
-`safePage = Math.min(page, pageCount - 1)` **clamps rather than resets**. The feature list can shrink underneath the visitor — a feature is deactivated, or a reload returns fewer rows — so they land on the nearest page that exists instead of being thrown back to the first.
-
-#### Selection survives paging
-
-Selected state lives in `selectedKeys`, not in the tile, so a feature selected on one page is still selected when that page is revisited. The `N selected` counter above the grid reflects selections across **all** pages, not just the visible one.
-
-This does mean a selection made on a hidden page is not visible on the current one. The counter is what communicates that; no per-tile off-page marker is drawn.
+- No `page` state, no `TILES_PER_PAGE` slice, and no `buildPages` splitting.
+- No `<nav aria-label="Feature pages">` navigation bar.
+- Visitors can view and select from all available tenant features immediately in a single unified bento overview.
+- The `selectedKeys` array tracks selections across all features.
 
 ## 11. Selection behavior
 
@@ -300,9 +226,8 @@ Removing the final chip does not call the API. `findPropertiesByFeatures([])` wo
 | `apiError` | `string \| null` | Match request failure text |
 | `sheetOpen` | boolean | Mobile results sheet |
 | `isMobileSheet` | boolean | Viewport is below `980px` |
-| `page` | number | Current page of feature tiles |
 
-`pages` is a `useMemo` over `features` alone. There is no separate `columns` state any more — `useBentoColumns()` is deleted.
+All features render directly into the bento grid without pagination state.
 
 `ResultStatus` is `idle | loading | ready | empty | error`. `empty` and `error` are both reachable because the section now has one live path.
 
@@ -532,7 +457,7 @@ content-slot (max-w-7xl, mx-auto)
     └── aside (flex)           ← results panel
 ```
 
-The `<header>` was previously a sibling *above* both columns, so the panel began under it — level with the "Choose one or more" row, which lined its top edge up with neither the heading above nor the first row of tiles below. Folding the header into the left column puts the panel's top level with the `Find your plot` eyebrow and its bottom level with the pager, and fills the empty top-right corner. `items-stretch` gives both columns the same height.
+The `<header>` was previously a sibling *above* both columns, so the panel began under it — level with the "Choose one or more" row, which lined its top edge up with neither the heading above nor the first row of tiles below. Folding the header into the left column puts the panel's top level with the `Find your plot` eyebrow, and fills the empty top-right corner. `items-stretch` gives both columns the same height.
 
 ### The panel is not sticky any more
 
@@ -553,9 +478,9 @@ aside.find-your-plot-panel      align-self: start
 
 The `max-height` is the hard limit: without it, five or more result rows made the panel taller than the viewport and the last row was unreachable. `7rem` is this section's `py-24` (96px) below its own top edge plus breathing room. `svh` rather than `vh` so a mobile browser's collapsed address bar cannot push the panel past the usable area.
 
-`height` is set from the viewport, not from the content, so the panel is the same height on two screens of different sizes. `align-self: start` is what makes that possible — without it the grid row's `stretch` wins over any height and the panel is locked to whatever the heading plus the 2x2 tile grid happens to measure, which is what left it short.
+`height` is set from the viewport, not from the content, so the panel is the same height on two screens of different sizes. `align-self: start` is what makes that possible — without it the grid row's `stretch` wins over any height and the panel is locked to whatever the heading plus the tile grid happens to measure.
 
-**This trades away equal column heights.** The panel's bottom sits below the Previous / Next row on any screen taller than the left column's content. Equal bottoms were a deliberate choice two changes ago. Dropping `align-self` and `height` from `.find-your-plot-panel` returns the panel to tracking the row, at the cost of the extra height.
+**This trades away equal column heights.** The panel's bottom can extend past the left column's content on screens taller than the options block. Equal bottoms were a deliberate choice two changes ago. Dropping `align-self` and `height` from `.find-your-plot-panel` returns the panel to tracking the row, at the cost of the extra height.
 
 `min-h-0` on the scroll region is load-bearing — a flex item defaults to `min-height: auto` and would refuse to shrink below its content, pushing the panel past its cap.
 
@@ -611,9 +536,7 @@ The aside was an opaque cream slab — `radial-gradient(ellipse at 50% 28%, #fff
 
 The rows sit at 10% white over a panel that is itself at 5%, which composites to roughly 15% against the section — one step lighter than the panel behind them, with no second hard-coded colour needed.
 
-The option tiles reflow rather than scroll — 2 columns at every viewport, 2 rows per page. See §10a for why the column count is fixed rather than stepped. All four tiles are the same size: equal-width columns, `grid-rows-[repeat(2,minmax(auto,1fr))]` for equal-height rows, and a reserved two-line description box so a short one does not shrink its tile.
-
-Exactly four tiles render at a time, with `Previous` / `Next` to reach the rest — see §10b. The page size is a constant, not a value read from the layout.
+The option tiles reflow in an asymmetrical bento grid — 2 columns on mobile, 3 columns from `sm` (`grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3`). All features are displayed together without pagination. Subheadings are removed, leaving clean, prominently typed heading-only cards with adaptive layout for wide tiles to eliminate empty space.
 
 Because the life-stage card grid is gone, the left column is now a single block rather than a `grid-cols-2` of tall cards. The outer `min-[981px]:grid-cols-[1.15fr_0.85fr]` split is unchanged.
 
@@ -630,9 +553,8 @@ The container is `px-6 py-16 sm:px-10 sm:py-24`, identical to the localities sec
 | Header paragraph → options block | `mt-6` (24px) | Section blocks |
 | Label row → tile grid | `mt-6` (24px) | Section blocks |
 | Options block → results aside | `gap-8` (32px) | Columns, from `min-[981px]` |
-| Tile grid gutters | `gap-2` (8px) | Tiles, at every width |
-| Tile grid → AND hint | `mt-3` (12px) | Within one block |
-| AND hint → pager | `mt-4` (16px) | Within one block |
+| Tile grid gutters | `gap-2.5 sm:gap-3` (10-12px) | Bento tiles |
+| Tile grid → AND hint | `mt-3.5` (14px) | Within one block |
 
 Previously the two block gaps were `mt-8` (32px) and `mt-3` (12px) — a large break into a tight one — and `min-[981px]:gap-10` (40px) was off the 8/12/16/24/32 scale entirely. The tile gutter also stepped 10px to 12px at `sm`; `gap-2` is a single value at every width.
 
@@ -682,11 +604,9 @@ Each tile is a whole-card target rather than a small pill, which improves touch 
 
 The selected state is conveyed by `aria-pressed`, not by the check badge or the colour alone. Each result card's favourite button also exposes its saved state with `aria-pressed` and is disabled while its save/remove request is pending.
 
-Page navigation is a `<nav aria-label="Feature pages">` containing two buttons and a text range. Both buttons set `disabled` as well as dimming, so they are unreachable by keyboard when at the first or last page. The range text hides a visually-hidden "to" between the two numbers so it is announced as "9 to 16 of 24" rather than with an ambiguous dash.
+With pagination removed, all tiles remain in the DOM within the `role="group"` container, allowing full keyboard navigation across all available features.
 
-Paging replaces tiles in the DOM rather than hiding them with CSS, so only the current page's tiles are focusable and exposed to assistive technology.
-
-Visual order and DOM order now match across the grid. This was previously not true while the tiles had variable spans and the grid carried `grid-flow-row-dense`; both are gone, so tab sequence reads strictly left-to-right — see §10a.
+Visual order and DOM order follow standard reading flow across the bento grid columns without dense reordering.
 
 The selection circle on each tile is `aria-hidden`. The button's own `aria-pressed` already carries the selected state, so exposing the circle as well would announce it twice.
 
@@ -736,12 +656,12 @@ The `PERSONA_SELECT` event went with the life-stage cards. The component does no
 14. A favourites load or toggle failure shows its alert without removing the match results.
 15. Confirm the text-only cards read acceptably without an image.
 16. Confirm no tile clips a long feature name or description at 320px, 768px, 1000px and 1440px.
-17. Confirm the double-width tiles produce an even grid with no hole at each column count.
+17. Confirm all cards render with uniform, balanced dimensions and no awkward empty spaces.
 18. Tab through the tiles and result-card controls and confirm focus is always visible and both pressed states are announced.
-19. With more than one page, confirm every page renders **exactly a 2x2** and that the Previous / Next row does not move between a full page and a short last page.
-20. Confirm `Previous` is disabled on page 1 and `Next` on the last page, and that the range indicator is correct.
-21. Select a feature on page 2, go back to page 1, return to page 2, and confirm it is still selected and the `N selected` count is right.
-22. With more than one page, confirm the disabled Previous / Next styling is visibly disabled but still readable, and that `N selected` is visible (including at zero) on every page.
+19. Confirm all features render together in the bento grid with no pagination splits or pager navigation buttons.
+20. Confirm cards display headings only (`feature.name`), with no subheadings or descriptions.
+21. Confirm selecting features updates `selectedKeys`, turns on the card's active styling/check mark, and maintains accurate `N selected` counter.
+22. Confirm bento grid renders with increased typography sizes (`text-lg font-bold` on wide cards, `text-[15px] font-semibold` on standard cards) and balanced proportions across mobile and desktop.
 23. Confirm `cards` is sorted by `match_score` descending, so the `01`-`04` numbers and the card order agree.
 24. With one criterion selected, confirm no per-criterion breakdown is shown; with two or more, confirm one line per criterion.
 25. Confirm the thumbnail, locality and price appear once `/api/properties` and `/api/locations` resolve, and that a property missing from the list response still renders with name and score.

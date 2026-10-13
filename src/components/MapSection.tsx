@@ -2729,8 +2729,8 @@ export default function MapSection() {
 
         {/* Search — desktop overlay (mobile search lives in the section header) */}
         <div className="pointer-events-none absolute top-3 right-3 z-20 hidden flex-col items-end gap-2 md:flex sm:top-4 sm:right-4">
-          <div className="pointer-events-auto flex w-[min(19rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_8px_24px_rgba(15,23,42,0.16)]">
-            <div className="flex items-center gap-2 border-b border-black/10 px-3">
+          <div className="pointer-events-auto flex w-[min(20rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-black/15 bg-[#eae4da]/95 shadow-[0_12px_32px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all focus-within:border-[#8a6d2f]/60 focus-within:shadow-[0_14px_36px_rgba(15,23,42,0.22)]">
+            <div className="flex items-center gap-2 border-b border-black/10 px-3.5 py-1">
               <SearchIcon className="h-4 w-4 shrink-0 text-[#5c5348]" />
               <input
                 value={query}
@@ -2740,21 +2740,21 @@ export default function MapSection() {
                     ? "Search plot, facing or area"
                     : "Search projects or plots"
                 }
-                className="min-w-0 flex-1 bg-transparent py-2.5 text-sm font-medium text-[#171717] outline-none placeholder:text-[#5c5348]/70"
+                className="min-w-0 flex-1 bg-transparent py-2 text-sm font-medium text-[#171717] outline-none placeholder:text-[#5c5348]/70"
               />
               {query ? (
                 <button
                   type="button"
                   aria-label="Clear search"
                   onClick={() => setQuery("")}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#4a453e] text-white transition hover:bg-[#171717]"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#4a453e] text-white transition hover:bg-[#171717]"
                 >
                   <CloseIcon className="h-3 w-3" />
                 </button>
               ) : null}
             </div>
 
-            <div className="grid grid-cols-3">
+            <div className="grid grid-cols-3 divide-x divide-black/10">
               {filters.map((item) => {
                 const active = filter === item.key;
                 return (
@@ -2762,10 +2762,10 @@ export default function MapSection() {
                     key={item.key}
                     type="button"
                     onClick={() => setFilter(item.key)}
-                    className={`border-r border-black/10 px-2 py-2 text-left transition last:border-r-0 ${
+                    className={`px-2.5 py-2 text-left transition ${
                       active
                         ? "bg-[#171717] text-white"
-                        : "bg-transparent text-[#171717] hover:bg-[#cfc3a8]"
+                        : "bg-transparent text-[#171717] hover:bg-[#cfc3a8]/60"
                     }`}
                   >
                     <span className="block text-[11px] font-semibold sm:text-xs">
@@ -2782,7 +2782,7 @@ export default function MapSection() {
                 );
               })}
             </div>
-        </div>
+          </div>
         </div>
 
         {/* Mobile development popup — shown when a property marker is tapped.

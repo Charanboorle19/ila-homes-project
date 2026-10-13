@@ -260,124 +260,313 @@ If a purpose-built comparison endpoint is later confirmed, the comparison view s
 
 Follow the existing Tailwind breakpoints: base, `sm` (`640px`), `md` (`768px`), `lg` (`1024px`) — the set used by the catalogue ([`property-list.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-list.md) §34) and the map ([`search.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\search.md) §34).
 
-- **Desktop (`lg` and above)** — side-by-side columns, all properties visible at once. With a maximum of 3 this is comfortable. The attribute label column stays fixed-width and the property columns share the remainder.
-- **Tablet (`sm` to `md`)** — compact comparison layout: reduce type scale and padding rather than dropping columns. Do **not** stack columns vertically, which destroys the side-by-side purpose.
-- **Mobile (below `sm`)** — the side-by-side table does not fit, and stacking vertically loses the comparison. **Proposed pattern:** horizontal scrolling, with the attribute label column sticky at the left edge and property columns scrolling beneath it. This is the established horizontal-scroll convention in the project — `GrowthCorridors` uses horizontal overflow for locality cards on mobile ([`map.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\map.md) §20) and `MapSection`'s amenities list uses `overflow-x-auto` ([`property-popup.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-popup.md) §16).
+- **Desktop (`lg` and above / 1024px+)** — **Two-Column Grid running edge to edge**. Neither column carries an outer gutter: the picker is flush left and bottom, the results card flush right and top and bottom.
+  ```
+  0px                                                   viewport edge
+  ┌──────────────────────────────────────────────────────────┐  ↑
+  │ eyebrow / heading / intro │  │  results card            │  │
+  │         (row 1)          │  │  (row 1 / row 2 span)    │  │
+  ├─────────────────────────┤  │                          │  │
+  │ property picker          │  │                          │  │
+  │         (row 2)          │  │                          │  ↓
+  └─────────────────────────┴──┴──────────────────────────┘
+  ```
+  - **The section is the grid.** `lg:grid lg:h-[104dvh] lg:grid-cols-[480px_minmax(0,1fr)] xl:grid-cols-[500px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-0 lg:gap-y-5 lg:overflow-hidden`. Row 1 is the heading's natural height; row 2 takes the remainder.
+  - **Left column widened to `480px` / `500px`** from `440px` / `460px`. The picker carries two 180px tiles per row; at 440px those came to 194px — tall and narrow, with most development names wrapping to two lines. The extra 40px takes them to 218px. Nothing in the results column moves: its `w-64` cells and `w-52` label column are fixed, so the table's geometry is untouched and the extra width comes entirely out of the results column.
+  - **`lg:gap-x-0` — the columns touch.** The picker's `border-r` is the seam, and the dark table starts the instant the white panel ends. A column gap here would break the single uninterrupted surface the edge-to-edge layout is for.
+  - **No outer gutters.** Neither column has `lg:px-*`, and neither has `lg:pb-*`; the results column has no `lg:pt-*` either. Type is held off the viewport edges by the panels' own internal padding — `px-4` on the picker list, `px-5` on the heading, `px-4` on the table cells — not by a wrapper inset.
+  - **Heading and sub-heading in the left column**, at `lg:col-start-1 lg:row-start-1` with `lg:px-5 lg:pt-5 lg:pb-0`. They previously spanned the full width above both columns, which cost the results table roughly 150px of height for no reason. `lg:pb-0` hands the space below to the section's `lg:gap-y-5` so the gap is not doubled.
+  - **Heading type retuned for the column measure.** `lg:text-[24px] lg:leading-[1.15]` on the `h2` (was `lg:text-[2rem]`) and `lg:text-[13px] lg:leading-[1.55]` on the intro (was `lg:text-[16px]`). At 32px the sentence ran to three lines in the available width and pushed the picker down. The mobile steps are unchanged; this is the `lg` pass.
+  - **Results column spans both rows** — `lg:col-start-2 lg:row-start-1 lg:row-span-2` — so the table starts level with the heading and runs to the section's bottom edge. Nothing sits above it.
+  - **Both columns keep their own vertical scroll**: the picker through its `overflow-y-auto` list, the results card through its table's `overflow-auto` wrapper.
+  - **No rounded corners on either panel, and no shadow.** A panel that runs to the viewport edge cannot round: the `#eceef2` section surface shows through the corner and the card reads as clipped rather than deliberate. Both desktop panels are square; the picker's `border-r` and the dark surface itself carry the definition. The **loading, idle and error status cards** lost their `rounded-2xl` and `shadow-sm` on the same grounds, and the **ready card** also lost its `border` — the dark surface is the edge. Mobile and tablet cards keep their rounding; they are inset, not flush.
+  - **Picker header compacted to one row.** The `Available Properties` `h3` and the `Select 2 to 5 developments below…` paragraph are deleted: the section heading directly above already carries that copy, and in this column two stacked headings plus a paragraph cost a whole tile row. Only the `N total` count survives, because it is the one thing the section heading does not say.
+  - **Picker footer is flush.** `shrink-0 border-t border-black/10 p-4` — no `mt-*`, no `pt-*`. The list above takes the slack, so the action never drifts as the selection changes.
+  - **`lg:contents` bridges the markup to the grid.** The block wrapper and the old desktop grid are both `lg:contents`, which drops their boxes so the two panels become direct grid items and can each take a cell. Below `lg` they are ordinary blocks and the mobile/tablet flow is unchanged.
+  - **`content-slot` moved onto the panels themselves.** `.content-slot` is `position: relative; z-index: 1`, which keeps the panels above the `.compare-plots-bg` dot layer. `display: contents` discards a box's own positioning, so the two wrapper elements no longer supply it and each panel now carries the class.
+  - **`min-h-0` is load-bearing at every level.** A flex or grid item defaults to `min-height: auto`, which floors it at its content height; without `min-h-0` on both columns, the picker, the results block and the ready card, their contents push past the section and `overflow-hidden` clips them. The property list and the table wrapper already carried it.
+  - **Section height is `104dvh`, not `100dvh`.** **The trade is a short page scroll at `lg`** — return to `lg:h-[100dvh]` to remove it. `dvh` rather than `vh` either way, so the browser's own chrome is not counted.
+  - **`overflow-hidden` at `lg` only.** Safe on the desktop branch because nothing there is sticky against an ancestor scrollport — the metric label column sticks against the table's own `overflow-auto` wrapper, which sits between it and the section. The mobile branch, whose sticky Compare row *does* resolve against this section, keeps `overflow-x-clip`.
+  - **Status card floors lowered** to `min-h-[360px]` (loading, idle) and `min-h-[280px]` (error), from `min-h-[580px]` / `min-h-[360px]`. The old floors were taller than the space a short desktop viewport leaves for the panels and would have been clipped.
+  - **Left Block (Properties Selector)**: Dedicated selection panel (`lg:w-[480px] xl:w-[500px]`) containing the available developments in a 2-column scrollable grid (custom slim scrollbar `ila-search-scroll`), property cards with cover image, dark gradient scrim, type tags, selection order indicators (1 to 5), selection counter, "Clear all" button, and prominent "Compare now" CTA button. The card is `flex h-full min-h-0 flex-col` and the grid is `min-h-0 flex-1` with `content-start`, so it absorbs the row height instead of carrying a `max-h`.
+  - **Right Block (Results & Intelligence)**:
+    - **Ready State**: A **single dark surface** — `#141519`, square, flush right/top/bottom — with the title, copy-link control and category filter pills (`All metrics`, `Overview`, `Location & connectivity`, `Inventory & approvals`, `Growth & running cost`) as a hairline-separated header band on that same surface, then the side-by-side comparison table below it. The table has a sticky left metric label column (`w-52 sticky left-0`), property columns with "Best match" / "Pinned" micro-labels, winning values in gold text with no badge, visual score bars for 0–100 metrics, RERA verification indicators, and one gold "Enquire" CTA per column on the same track as the columns. There are no thumbnails and no header price line — the header carries only the micro-label, the name and the locality, and price is already a row in the table.
+    - **Idle / Loading / Error States — blueprint background**: see below.
 
-Sticky-column behavior and whether it degrades gracefully without JavaScript is `UNKNOWN — needs verification`. An alternative pattern — one property per scroll-snap screen with per-property attribute lists — is mobile-friendly but is a different information model and is not recommended unless the sticky column proves unworkable.
+### The results panel's blueprint background
+
+While **no comparison is on screen** — `idle`, `loading` or `error` — the right column is backed by the blueprint tile in `.compare-results-bg` (`globals.css`), a conditional `absolute inset-0` layer gated on `compareStatus !== "ready"`. Once a comparison exists the ready state paints an opaque `#141519` surface over the whole column, so the pattern would be invisible anyway and rendering it would cost a full-panel gradient stack for nothing.
+
+The source pattern, retinted to this section:
+
+| Source | Here | Why |
+|---|---|---|
+| `background-color: #E5E5F7` | `#eceef2` | The section surface. This panel sits directly on it, so a different fill would read as a faint rectangle inside a larger one. |
+| `#444CF7` line work | `#c9a84c` | The section's own gold. The blue is not in this palette, and a blue grid behind gold-accented copy reads as a second accent. |
+| `#444CF755` (alpha `0x55`) | `#c9a84c33` (alpha `0x33`) | Same retint, with the alpha reduced to match the lower opacity below. |
+| `opacity: 0.8` | **`0.35`** | The source is sized for a hero panel with no copy over it. Here the idle copy, the four feature cards and the loading text all sit on top, so the pattern has to stay a texture behind them. Same reasoning as the drop to `0.16` on the dark Find Your Plot surface and the `0.4` on `.growth-corridors-bg` — matched to the surface, not carried across sections. |
+
+**The fill appears twice and must stay equal to `background-color`.** It is both the `background-color` *and* the stop inside every gradient, because the gradients paint over the fill rather than being composited with it. Changing one without the other leaves a second, misaligned copy of the pattern painted on top — the same constraint `.growth-corridors-bg` documents.
+
+**The status cards are transparent and sit above it.** Each carries `relative z-10`. An absolutely positioned box paints *after* in-flow content, so without `z-10` the pattern would cover the copy rather than sit behind it. Their backgrounds went to `bg-transparent` (idle and loading) and `bg-rose-50/40` (error, reduced from `/60`) — an opaque card would hide the very pattern the panel is showing.
+
+### The idle state's four capability cards
+
+Four cards naming what a comparison will cover, below the idle copy and above the CTA. They were four hand-written `<div>`s; they are now rendered from one module-level `FEATURE_HINTS` array, so the tile, the type scale and the border can only be defined once. Written out separately, the four had already drifted apart.
+
+**The icon is a tile, not a glyph inside the title.** The original was `💰 Pricing & Rates` on one line, which put the glyph on the text baseline: it rendered at the 12px bold weight, sat optically low against the cap height, and made all four titles begin at a different `x` depending on how wide each glyph happened to be. An `h-8 w-8` tile puts every title on the same line and rhymes with the `rounded-2xl bg-[#c9a84c]/15` `CompareIcon` tile directly above it.
+
+| Element | Specification |
+|---|---|
+| Grid | `mt-6 grid w-full max-w-xl grid-cols-2 gap-2.5 text-left` |
+| Card | `flex items-start gap-2.5 rounded-xl border border-black/10 bg-white/80 p-3 shadow-xs` |
+| Icon tile | `h-8 w-8 shrink-0 rounded-lg border border-[#c9a84c]/25 bg-[#c9a84c]/15 text-[#8a6a12]` |
+| Icon glyph | `h-[18px] w-[18px]`, `currentColor` |
+| Title | `text-[12px] leading-tight font-bold text-[#0f1114]` |
+| Body | `mt-1 line-clamp-2 text-[11px] leading-[1.4] text-[#5b6270]` |
+
+**The icons are hand-drawn line glyphs, not emoji.** These were `💰 📍 🏛️ 📈` and they had three faults on this surface:
+
+1. **Emoji are rendered by the platform, not by us.** They cannot be sized or aligned to the tile — the same glyph lands at a different optical size and baseline across Windows, macOS, Android and iOS, which is why the original row looked ragged.
+2. **Emoji present at full colour** beside a single-hue palette read as clip-art rather than as part of the drawing.
+3. **Two of the four were near-duplicates.** `📍` and `🏛️` are both "a landmark you point at", so half the row said the same thing.
+
+The replacements are `TagIcon`, `PinIcon`, `ShieldCheckIcon` and `TrendIcon` — components defined next to `ArrowIcon`, `CloseIcon`, `PlusIcon` and `CompareIcon`, on the same `24` viewBox with `fill="none"`, `stroke="currentColor"`, `strokeWidth="1.8"` and round caps and joins, so they sit at the same optical weight as the rest of the file and scale from `className` alone. Each is `aria-hidden` individually rather than through a wrapper, matching the other glyphs.
+
+| Card | Was | Now | Why |
+|---|---|---|---|
+| Pricing & Rates | `💰` | `TagIcon` — a price tag | A money bag is generic; a tag is the shape a rate is quoted on |
+| Connectivity Score | `📍` | `PinIcon` — a map pin with a centre ring | Now purely *proximity*, which is what the ORR/metro/schools copy measures |
+| Approvals & Legal | `🏛️` | `ShieldCheckIcon` — a shield with a tick inside | The tick is what makes it "verified" rather than merely "protective" — which is the claim the RERA copy makes. Also no longer duplicates the pin |
+| Est. Growth & Fit | `📈` | `TrendIcon` — a rising line under an arrow head | Same meaning as the emoji, but now in the file's stroke weight |
+
+**`FEATURE_HINTS.icon` holds a component, typed as `ComponentType<{ className?: string }>`.** The array is declared after the four icons so the component values are in scope.
+
+**`h-[18px]` inside an `h-8 w-8` tile.** 16px reads thin against a 32px box; 20px crowds the border. 18px is roughly what the 15px emoji was contributing, so the tile reads at the same density it did before — the change is in *what* the glyph is, not in how loud it is. The tile sets no font size, because the icon is an SVG sized purely by `className` and coloured by `currentColor` — neither a platform font nor an emoji presentation applies.
+
+**The gold is a wash, not the solid accent.** `bg-[#c9a84c]/15` is the same tile treatment the `CompareIcon` above already uses, so the five read as a set. Four *solid* gold tiles would spend the section's only accent on decoration and compete with **Run Comparison**, the one gold element in this state that is an action.
+
+**`items-start`, and `mt-1` under the title.** With `items-center` the tile would drift lower on the cards whose body wraps to two lines and sit high on the ones whose body does not — the four would not agree. Top-aligned, the tile stays put and a two-line body simply hangs off its title.
+
+**`line-clamp-2` bounds the height, and that is load-bearing.** The idle card lives in a `min-h-[360px] flex-1` box inside a section capped at `104dvh`. Four cards each running to three lines would push the copy under the CTA and the section's `lg:overflow-hidden` would clip it.
+
+**`max-w-xl`, up from `max-w-lg`.** The results column is 544px at `lg` with 32px of padding, so the old 512px cap was already inert there; at `xl` the wider cap buys the cards enough measure that most bodies fit two lines instead of three.
+
+The `bg-white/80` is unchanged and still required: it is what keeps these reading as cards sitting *over* the blueprint tile rather than dissolving into it.
+- **Mobile & Tablet (below `lg` / <1024px)**:
+  - **Mobile (below `sm`)**: Dedicated full-screen **Comparison Results Dialog**:
+    - **Launcher Card**: When comparison is generated, a high-contrast card (`bg-[#16181d]`, gold border) replaces the inline table on mobile, with a top match summary and an "Open comparison table" button.
+    - **Dialog**: `fixed inset-0`, square and flush on all four edges, with no backdrop and no drag handle. See below.
+    - **Header band**: Title, "Comparing N developments · Top match: …" line, a 44px close button, and the category pills.
+    - **Category Filter Pills**: Fast category switcher (`All metrics`, `Overview`, `Location & connectivity`, `Inventory & approvals`, `Growth & running cost`), in a full-bleed horizontal strip.
+    - **Comparison table**: The **same table the desktop card renders** — sticky metric caption column, one column per property, `Best match` / `Pinned` micro-labels, gold winning values, score bars, RERA ticks, a data-availability row, and one Enquire CTA per column. Columns are **sized to their own content**, so a value like `3` or `₹85 L` occupies a narrow cell instead of a 335px one, and the table only scrolls sideways when it genuinely overflows.
+    - **Share bar**: Full-width "Copy shareable comparison link" with an inline clipboard confirmation, mounted only when the backend returned a `share_url`.
+  - **Tablet (`sm` to `lg`)**: Inline comparison table below the property carousel.
 
 ### One left gutter on mobile: 20px
 
-Below `sm` every piece of content starts at **x = 20px** (`px-5`). This was not true and the elements disagreed with each other:
+Below `sm` every piece of content **in the page flow** starts at **x = 20px** (`px-5`).
 
-| Element | Was | Now |
-|---|---|---|
-| Heading block | `px-6` → 24px | `px-5` → 20px |
-| Selection card | `px-4` → 16px | `px-5` → 20px |
-| Property tiles | `-mx-4 px-4` → 16px | `-mx-5 px-5` → 20px |
-| "N of 5 selected" row | 16px (card padding) | 20px |
-| "Compare now" button | 16px (card padding) | 20px |
-| `compareError` line | 0px (wrapper edge) | 20px |
-| Results table, sticky label column | `px-3` → 12px | `px-5` → 20px |
-| Results table, group header | `px-3` / `sticky left-3` | `px-5` / `sticky left-5` |
+| Element | Specification |
+|---|---|
+| Heading block | `px-5` → 20px |
+| Selection card | `px-5` → 20px |
+| Property tiles | `-mr-5 pr-5` right bleed |
+| Action row | `px-5` sticky on mobile |
+| Results launcher | `px-5` rounded card |
+| Comparison dialog | **exempt** — see below |
 
-The card and the results table are **full-bleed and square-edged on mobile** by design — inset and rounded from `sm` up. That means they cannot sit inside a section gutter; they carry it themselves, which is why their inner padding *is* the gutter.
+**The comparison dialog is exempt because it is not in the page flow.** It is `fixed inset-0`, flush to both viewport edges with no outer gutter at all, exactly as the desktop card is flush to the right edge of the section. A 20px inset on a full-bleed dialog would frame it as a card sitting inside a screen, which is what the old bottom sheet already looked like and is not what a full-screen surface should look like.
+
+Its spacing is per block instead, and deliberately so:
+
+| Block | Specification |
+|---|---|
+| Header band | `px-4` → 16px |
+| Category pill strip | `-mx-4 px-4` → bleeds to both edges, content starts on the header's 16px line |
+| Table caption column | `w-[116px]` with `px-3` → caption text starts at 12px |
+| Table value cells | `px-3` → value text starts at 12px, same line as the captions |
+| Table property columns | `max-content`, capped by `max-w-[220px]` on the header cell — content-sized, not gutter-driven |
+| Share bar | `px-4` → 16px |
+
+The header's 16px and the table's 12px are close enough to read as one alignment group rather than as two unrelated indents — the old sheet had a 20px header, a 16px scroller and a 16px card all disagreeing.
 
 ### Background: a dot grid
 
 ```html
-<section class="relative overflow-hidden bg-[#eceef2]">
+<section class="relative overflow-x-clip bg-[#eceef2] lg:grid lg:gap-x-0 …">
   <div aria-hidden class="compare-plots-bg pointer-events-none absolute inset-0 z-0" />
-  <div class="content-slot …">…</div>
+  <div class="content-slot lg:col-start-1 lg:row-start-1">…heading…</div>
+  <div class="content-slot lg:col-start-1 lg:row-start-2">…picker…</div>
+  <div class="content-slot lg:col-start-2 lg:row-span-2">…results…</div>
 </section>
 ```
 
-`.compare-plots-bg` lives in `globals.css`. One layer: a 0.8px dot on a `25px 10px` tile, masked by a radial ellipse from `0.7` at the centre to `0` at 75%. Both content wrappers carry `.content-slot` (`position: relative; z-index: 1`) so they sit above it — the same stacking helper `GrowthCorridors` and `FindYourPlot` use.
+`.compare-plots-bg` lives in `globals.css` with a 0.8px dot on a `25px 10px` tile. At `lg` the two panels run over it edge to edge and cover most of it; what remains visible is the sliver above the heading and the gutter between the columns is zero, so the pattern reads mainly on mobile. The right column's own blueprint tile, `.compare-results-bg`, is a separate layer described below and is only mounted when no comparison is on screen.
 
-| | Source | Here |
-|---|---|---|
-| Fill | `#E5E5F7` | `#eceef2` — the section surface |
-| Dot | `#444CF7` | `#c9a84c` — the section's gold, same value as the selected card border |
-| `opacity` | `0.8` | **`0.8`, kept** |
-| Tile | `25px 10px` | unchanged |
-| Mask | `0.7 → 0` at 75% | unchanged |
+### Mobile Comparison Dialog & Results Block
 
-**The opacity is deliberately *not* reduced.** 0.8 is what the source was designed for — a dark dot on a light surface, which is what this is. `.find-your-plot-bg` had to come down to `0.16` on the dark section for the same pattern family, because there the equivalent weight put bright lines under `#f2f0ea` body copy. The value has to match the surface, not the pattern.
+When `runComparison()` completes, `mobileModalOpen` is automatically set to `true` on any viewport under 1024px. When closed, the mobile view keeps a launcher card that re-opens it at any time.
 
-Unlike the blueprint tile there is **no fill/erase coupling** to preserve: this pattern's fill and dot are independent colours, where the blueprint tile repeats its fill inside every gradient as the stop that erases the line work.
+#### 0. The launcher card — what a closed dialog leaves behind
 
-### Status line, Clear all, and the Compare action
+Below `sm` the table is not in the page flow at all; it lives in the dialog. So when the dialog is closed there is nothing on the page showing that a comparison exists, and the launcher card is the whole mobile result surface until it is re-opened.
 
-| State | Status copy |
+`mt-6 block sm:hidden` on a `rounded-2xl border border-[#c9a84c]/30 bg-[#16181d] p-5` card. `p-5` matches the section's own 20px mobile gutter, so its content edge is the same line as the heading, the property carousel and the Compare button above it.
+
+| Element | Treatment |
 |---|---|
-| 0 selected | `Select at least 2 to compare` |
-| 1 selected | `Select 1 more to compare` |
-| 2 or more | `2 of 5 selected` |
+| Badge row | `items-center` — badge left, `N developments` right at 12px `shrink-0`, so a long name in the match row below cannot push the count around |
+| State badge | Pulsing gold dot + `Comparison ready`, 11px, `rounded-full border border-[#c9a84c]/30 bg-[#c9a84c]/10` |
+| Heading | `text-[18px] leading-[1.25]`, `Side-by-side comparison is ready` |
+| Body | `text-[13px] leading-relaxed text-white/70` — names what the table holds: one row per metric, one column per development. It no longer promises a sideways swipe, which only applies when the columns overflow |
+| Top match row | `mt-4`, `rounded-xl border border-white/10 bg-white/5 p-3`: `Top overall match` micro-label in gold, name truncated at 13px, `View` link at `min-h-9 shrink-0` |
+| CTA | `mt-4 min-h-12` full-width gold, `Open comparison table` |
 
-The old copy was always `N of 5 selected`, optionally suffixed with `· add 1 more to compare`. At zero that put a count in front of a dead button and named no next step. The counts come from `COMPARE_MIN_IDS` / `COMPARE_MAX_IDS`; the middle state is literal because the minimum is 2.
+Two changes from the previous card. The CTA is `min-h-12` (48px) rather than a 32px label-height bar, and it says **"table"** rather than "Popup" — the destination is a full-screen dialog with nothing behind it to pop over, and calling it a popup described a pattern the component no longer implements.
 
-**The disabled button** is `disabled:bg-[#e4e7ec] disabled:text-[#5b6270]`, which measures **4.9:1**. The previous `disabled:bg-black/8 disabled:text-[#8a909e]` sat near **1.9:1** over the card's own `#f7f8fa` — grey on grey, effectively unreadable — while still reading as *enabled*, since the gold fill, hover and shadow were already gone.
+#### Full screen, square, and without a backdrop
 
-**Clear all** carries `min-h-11` for a 44px tap target with the label still at 11px, plus `-mr-2 px-2` to widen the hit area without moving the text off the row's right edge.
+`fixed inset-0 z-[100] flex flex-col bg-[#141519] text-white lg:hidden`. Square, flush top, bottom, left and right.
 
-### The action row is sticky on mobile
+It was a 94vh bottom sheet: `justify-end` on the wrapper, `h-[94vh] max-h-[94vh]` with `rounded-t-[26px]`, a `border-t border-white/15` reading as a lid, and a `bg-black/75 backdrop-blur-sm` button filling the space above it. A full-screen dialog has no sheet to peek over, so **all of that is gone** — including the backdrop button. An opaque surface covering the whole viewport has nothing behind it to tap to dismiss; the close button and `Escape` are the ways out, and keeping a full-viewport backdrop button under an opaque panel would have left a dead 75%-black layer in the tree doing nothing.
 
-When at least one card is selected, the status row **and** the Compare button — one wrapper, not the status line alone — pin to the bottom of the viewport:
+There is no drag handle either, for the same reason: it was a bottom-sheet affordance and there is no edge to drag from.
 
-```
-sticky bottom-0 z-20 bg-[#f7f8fa] pb-[env(safe-area-inset-bottom)]
-sm:static sm:z-auto sm:bg-white/80 sm:pb-0
-```
+#### 1. Header band — `shrink-0`
 
-- The background is opaque because cards scroll underneath it. It matches the card it sits in: `#f7f8fa` on mobile, `white/80` from `sm`.
-- `pb-[env(safe-area-inset-bottom)]` keeps the button clear of the home indicator on phones with a gesture bar.
-- Reset entirely at `sm`, where the row is no longer pinned.
+`px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3` on `bg-[#17191e]`.
 
-**This required changing the section's `overflow-hidden` to `overflow-x-clip`.** `overflow: hidden` creates a scroll container, and a sticky descendant resolves against its nearest scrollport — so under `overflow: hidden` the row would have had a scrollport that never scrolls, and sticky would have done nothing at all. `overflow: clip` clips just as well and is not a scroll container. This is the same fix `FindYourPlot`'s section already uses.
+- **Title** `text-[18px] leading-[1.25] font-bold tracking-tight text-white`.
+- **Sub-line** `text-[12px] leading-snug`: `Comparing N developments · Top match: {name}`, in the same colours as the desktop card's header (`#8a909e`, `#e8e6e1` for the count, `#c9a84c` for the name).
+- **Close button** `h-11 w-11` — **44px, up from the sheet's 32px.** With the drag handle gone this is the only visible dismissal on the surface, so it has to be a real touch target. `rounded-full border border-white/12 bg-white/8`, `aria-label="Close comparison"`.
+- The text column carries `min-w-0` so a long top-match name wraps inside its own line instead of pushing the close button off the band.
 
-### Comparison table
+**Safe-area top inset, with a floor.** `calc(env(safe-area-inset-top) + 0.75rem)`, not a bare `env()`. The root layout sets no `viewport-fit=cover`, so `env(safe-area-inset-top)` resolves to `0px` in every current browser and a bare inset would leave the title flush against the screen edge. The `calc` guarantees 12px and adds the inset where it *is* honoured — the same shape `MapSection`'s sheet uses for its bottom inset. This is the only element on the surface that reaches the status bar, which is why the inset moved here when the dialog became full-screen.
 
-#### There is no label column
+#### 2. Category pill strip — full-bleed, snapping
 
-Each metric is a **caption line above its values**, not a row with a label in a left column:
+`-mx-4 mt-3 flex snap-x gap-2 overflow-x-auto px-4 pb-0.5 scrollbar-none`.
 
-```
-┌──────────────────────────────┬──────────────────┐
-│ caption, sticky left         │ (spans scroll)  │
-├──────────────────────────────┼──────────────────┤
-│ value 1 (46%)                │ value 2 (46%)    │ ...
-```
+`-mx-4 px-4` bleeds the strip to both edges of the header while its pills still start on the header's own 16px line — the same treatment the property carousel gets from `-mr-5 pr-5`, and the reason the strip can scroll without the pills appearing to detach from the band.
 
-The caption and group bar are `sticky left-0` and cover the visible scrollport; the value rows overflow it. The label no longer competes with the data for width, and by property four there is still something naming the numbers.
+`snap-x` **without** `snap-mandatory`. Proximity lets a pill settle between two stops, which matters when a category label is wider than half the viewport; mandatory would fight a slow drag.
 
-**The reference image shows a left label column, and this does not.** It is the one deliberate departure. The caption-above structure was the previous request; the reference is being applied as a *design* — surface, gold, best-value treatment, bars, footer CTAs — not as a replacement layout. If the reference layout is wanted wholesale, the caption `<p>` and the `sticky left-0` on the group bar come out and the rows go back to a grid with a label track.
+Pills are `min-h-9` (36px) at 12px. The 44px minimum is reserved for the close control, the per-column Enquire buttons and the share button — the actions, not the filters.
 
-#### One scroller, 46% cells, snapped
+#### 3. The comparison table
 
-```
-<div class="snap-x snap-mandatory overflow-x-auto">
-  <div class="sticky top-[var(--nav-h)] z-30 flex bg-[#141519]">  ← headers
-  <section>
-    <h3 class="sticky left-0 z-20 bg-[#1b1d22] …">               ← group bar
-    <p  class="sticky left-0 z-10 bg-[#141519] …">               ← metric caption
-    <div class="flex">
-      <div class="w-[46%] shrink-0 snap-start …">               ← value
-  <div class="flex">                                             ← footer CTAs
-    <div class="w-[46%] shrink-0 snap-start …">
-```
+**The same object the desktop card renders.** Sticky metric caption column, one column per property, `Best match` / `Pinned` micro-labels, gold winning values with no badge, score bars, RERA ticks, the data-availability row, and one Enquire CTA per column — all off the same `visibleRows`, `availability`, `showAvailability`, `formatValue`, `SCORE_METRICS` and `bestMatchId` the desktop table uses. A phone and a desktop are reading one comparison, not two renderings of it.
 
-- **One scroller** holds the header and every value row, so a swipe moves all the columns as a unit instead of each row drifting on its own.
-- **`w-[46%]`** is applied to the cells, not to a shared `grid-template-columns`. Every row is its own flex container, so the percentage resolves against the scrollport on each one. A shared track was what made the old label column eat a quarter of the width.
-- **`snap-x snap-mandatory`** on the container with **`snap-start`** on each cell: a swipe lands cleanly on a column rather than between two.
-- Borders live on the **cells**, not the row. The row element is 100% of the scrollport while its cells overflow it, so a `border-b` on the row would stop short of the last column.
+Removed with the card layout, because the table carries their content: the property-thumbnail carousel and its per-property "View property details" links, and the grouped metric cards with their `★ {first word}` winner tags. The columns carry the identity instead — micro-label, name, locality, the price row and the Enquire CTA.
 
-`columnTemplate`, `GRID_COLUMNS`, the `--cmp-cols` / `--cmp-cols-wide` variables and the `min-w-[32rem]` scroll content are all deleted — the grid template is gone with the label column.
+**Geometry.**
+
+| Element | Specification |
+|---|---|
+| Scrollport | `ila-search-scroll min-h-0 flex-1 overflow-auto overscroll-contain scroll-pl-[116px] snap-x` |
+| Column track | `grid w-max`, with `gridTemplateColumns: 116px repeat(N, minmax(0, max-content))` set inline from `compared.length` |
+| Caption column | `w-[116px] sticky left-0` — `w-52` on desktop, but it has to share the row with a phone-width value column |
+| Property column | `minmax(0, max-content)` — **content-sized**, bounded by `max-w-[220px]` on the header cell |
+| Cell padding | `px-3` |
+| Row floor | `min-h-[56px]` on the caption and the value cells, matching the desktop row |
+
+**One grid, not a stack of flex rows.** Every cell belongs to a single `w-max grid` whose tracks are declared once. That is what keeps a value in row 12 in the same column as the value in row 3 — a per-row `flex` container with content-sized children would size each row independently and the columns would visibly disagree from row to row. Because a grid row has no element of its own, each row is emitted as a `Fragment`, and `border-b` / `min-h-[56px]` move onto the cells.
+
+**The property tracks are `minmax(0, max-content)` — a column is exactly as wide as its widest cell needs.** They were `w-[86vw]`, which on a 390px phone is **335px to hold a value like `3` or `₹85 L`**: over 300px of empty cell to the right of every number, with the property name in the header the only thing that ever used the width. `max-content` measures the real content instead — the longest name, the longest formatted value, the score bar's own cap.
+
+Three guards keep a single long string from setting the width for every row under it:
+
+| Guard | On | Why |
+|---|---|---|
+| `max-w-[220px]` | **every property cell** — header, values, availability | `max-width` clamps a cell's max-content contribution. It is the single bound that stops one long string from widening its column: a long name, a `line-clamp-2` locality (whose max-content is its whole string), a full property name in the availability row. The CTA cell needs no bound — its label is `Enquire` |
+| `break-words` | property name, locality, availability name | `line-clamp-2` clips an overlong word rather than wrapping it, so a name with no spaces would otherwise be cut mid-word |
+| `max-w-[120px]` | score bar | Down from the desktop's 180px. A 3px bar has no business setting a content-sized column's width |
+
+**Text wraps to a second line rather than being clipped.** Nothing in this table carries `truncate` — not a value, not a locality, not a name. When a content-sized column is too narrow for what it holds, the line wraps and the row grows taller instead:
+
+| Element | Clamp |
+|---|---|
+| Property name (header) | `line-clamp-2 break-words` |
+| Locality (header) | `line-clamp-2 break-words` |
+| Availability property name | `line-clamp-2 break-words` |
+| Missing-field list | `line-clamp-2` |
+| Value | no clamp — wraps freely |
+| Metric caption | no clamp — the caption column is a fixed 116px and wraps as far as it needs |
+
+The locality and the availability name were the two that ellipsised. Both routinely outrun a content-sized column, and an ellipsis loses the half a visitor actually reads — "Shadnagar, Hyd…" — where a second line keeps all of it. The availability cell also became `flex-col` rather than `justify-between`, so when its name takes a second line the count moves under it instead of being squeezed into a one-digit-per-line column.
+
+**The CTA label is `Enquire`, not `Enquire on {name}`.** Desktop can afford the long form because its column is a fixed `w-64`. Here the column is `max-content`, and a `truncate`d label is `white-space: nowrap`, so its max-content is the full string — every column would be sized by its CTA rather than by its data. The property name is directly above in the header, and `aria-label="Enquire on {name}"` carries the full phrasing for a screen reader.
+
+**What was given up: the old "one property per swipe" guarantee.** At content width, two or three columns frequently fit a phone outright, and a table that fits needs no scrolling — which is the correct outcome, not a regression. Where the table still overflows (long names, five properties) the horizontal scroll and the snapping behave exactly as before. The earlier `86vw` sizing existed to *force* an overflow so a swipe was always available; that is no longer the goal, because the column no longer has empty space to swipe through.
+
+**`scroll-pl-[116px]` is what makes the sideways scroll land correctly.** Snapping a value cell with `snap-start` parks its left edge on the scrollport's left edge — which is *underneath* the sticky caption column, hiding the first 116px of every value. Scroll padding reserves exactly that column, so a snapped cell stops flush against the caption column instead of under it. The caption cell itself carries **no** `snap-start`, so the position that would hide the first property is not a stop the browser aims for; proximity snapping still lets the visitor rest anywhere.
+
+**`overscroll-contain`** because the dialog is `fixed` over a page that is still in the scroll tree. Without it, a fling reaching either end of the table scrolls the section behind, which reads as the dialog itself jumping.
+
+**`.ila-search-scroll`** rather than a bare overflow: the gold scrollbar is the only affordance saying there is more table to the right, and it is the same one the desktop card's scrollport uses, so the two surfaces scroll the same way.
+
+**No group headers.** The dialog renders `visibleRows`, the same flattened list as the desktop and tablet tables, so all three read identically. `groupedMetrics` still drives the category pills and `bestMatchId`; only the visible band is gone.
+
+#### 4. Share bar
+
+`shrink-0 border-t border-white/10 bg-[#17191e] px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]`, full-width `min-h-11` button reading `Copy shareable comparison link`.
+
+**Rendered only when the backend returned a `share_url`.** Otherwise it would be a strip of `#17191e` pinned under the table with no content in it, which on a full-screen dialog reads as a broken layout rather than as an absent feature.
+
+**The label is the confirmation.** The button owns `copiedShare`, so `Link copied` lands where the tap was. A toast would have needed a timer, an icon and its own stacking context.
+
+**There is no separate Enquire bar.** The gold CTA is the per-column button inside the table's own footer row, which travels with its property exactly as the desktop card's does — the same action available for all five properties, rather than one best-match-only shortcut duplicating a column that is already on screen.
 
 #### `overflow-x-clip`, not `overflow-hidden`
 
-On the table wrapper and on the section. `overflow: hidden` creates a scroll container, and every sticky layer above resolves against its nearest scrollport — so under `hidden` the pinned captions and the sticky header would have had nothing to resolve against and would not have moved. `clip` still rounds the corners horizontally and is not a scroll container.
+On the desktop results card and on the section below `lg`. `overflow: hidden` creates a scroll container, and every sticky layer above resolves against its nearest scrollport — so under `hidden` the pinned captions would have had nothing to resolve against and would not have moved. `clip` is not a scroll container.
 
-#### Group bars
+On the desktop card this is no longer doing any rounding — the panel is square. It is retained purely to stop the table's scrollport painting past the surface. On the section it is retained for the mobile branch, whose sticky Compare row resolves against it.
+
+#### Group bars — removed from all three tables
+
+The desktop, tablet and mobile-dialog tables render **rows only**: a metric caption and its values, with no group band. `Overview`, `Location & connectivity`, `Inventory & approvals` and `Growth & running cost` no longer appear inside any of them.
+
+The grouping is still computed. `groupedMetrics` groups by `MetricSpec.group` in canonical order, `filteredGroups` filters that by the active category pill, and `bestMatchId` tallies `best_property_id` across every row. All three render `filteredGroups.flatMap(({ rows }) => rows)`, which flattens the groups away while keeping the canonical group order and the backend order inside each group — so removing the visible heading changed no ordering and no filtering.
+
+The mobile dialog used to keep its own category section headers over the metric cards. Those cards are gone, and with them the headers: the dialog is a table now, and a group band inside a table is exactly the bar the other two tables had already dropped. The category pills are the only group-level control, on all three surfaces.
+
+### Adaptive height — filling the card from the data
+
+The results card is `flex-1` inside a column that spans both grid rows, so it fills the section's height rather than whatever the heading and the picker left over. A comparison that returns few metrics — or a category pill that narrows the table to three or four rows — would still leave a large area of bare `#141519` below the last row. Three layers now absorb it, and between them there is no case where the card shows dead surface:
+
+| Layer | Classes | What it does |
+|---|---|---|
+| Scrollport | `flex min-h-0 flex-1 flex-col overflow-auto` | Takes all height left by the header and footer bands, and **is** the results panel's vertical scroll. `overflow-auto`, not `overflow-x-auto`, because the rows both grow and scroll. |
+| Metric rows | `flex-1 min-h-[56px] max-h-[92px]` | Spread into the spare height. Floor at 56px, ceiling at 92px. A long table floors and scrolls; a short one breathes. |
+| Availability row | `flex-1 min-h-[64px] max-h-[160px]` | Takes whatever the metric rows could not use. |
+| CTA footer | `shrink-0` | Pinned to the card floor, so the bottom edge does not move as the row count changes. |
+
+`min-w-max` on the inner column keeps every row on one shared `w-52` + `w-64` track, which is what the sticky label column and the per-property cells rely on.
+
+The picker matches this: its card is `flex h-full min-h-0 flex-col` and its list is `min-h-0 flex-1 overflow-y-auto`, so it is the left column's vertical scroll. Both columns scroll independently and neither grows the section.
+
+**Why no dead space remains.** With 9+ rows the rows alone fill the height (`n × 56px` floors below the available height, and `flex-1` grows them back up to the 92px ceiling). With 8 rows or fewer, `showAvailability` is always true, so the availability row is present and shares the remainder. With zero rows — a pill landing on a group the backend returned nothing for — a full-width `flex-1` line reads `No metrics were returned for this category.`
+
+**Bounded by the section.** The "spare height" this fills is only the section's: it is capped at `104dvh` and the scrollport scrolls once the rows plus the header and footer bands exceed it. The rows never grow the card past the fold — they only distribute height that is already available.
+
+### The availability row
+
+A table row like any other, on the same `w-52` + `w-64` track, so it reads as part of the table rather than a footer bolted under it. Caption cell: **`Data availability`**. One cell per property, each carrying the property name, an `available/total` count, a proportion bar, and either the list of absent field labels or `Every metric returned a value`.
+
+It renders when **either** trigger fires:
+
+1. any compared property is missing a value on a visible row, or
+2. `visibleRows.length <= AVAILABILITY_ROW_THRESHOLD` (8) — roughly where stretching the rows alone stops covering the card.
+
+With a full table and no gaps there is nothing to explain, so the row stays out of the way rather than padding the card with "all available".
+
+**What it reports.** Nothing is substituted for a missing value and no score is inferred from a partial row. The count is a tally over `visibleRows` — not over `result.metrics` — so narrowing the category pills narrows the table and the denominator together, and the two can never disagree. A value counts as available only when it is neither `null`, `undefined` nor an empty string, the same test the table cell uses.
+
+**The bar is `#8a8f98`, not gold.** Unlike the score bars, which mark a row winner, this marks a data gap, and gold is reserved for the former. Both terms of the proportion are counted integers from the rows directly above, so unlike a bar against an invented maximum the proportion is exact.
+
+#### The retired group bars
 
 `bg-[#1b1d22]` with `text-[#c9a84c]`.
 
@@ -389,10 +578,10 @@ Two earlier attempts are worth recording: `bg-[#0f1114]` was the darkest element
 
 | Role | Value |
 |---|---|
-| Table card | `#141519` |
-| Group band | `#1b1d22` |
+| Table card | `#141519` — square, no border, no shadow, flush right/top/bottom |
+| Group band | `#1b1d22` — retired, no longer rendered in either table |
 | Hairline rule / cell divider | `rgba(242,240,234,0.08)` |
-| Card border | `rgba(242,240,234,0.12)` |
+| Card border | `rgba(242,240,234,0.12)` — retired everywhere. The desktop card has no border because the dark surface is the edge; the mobile dialog has none either, because a full-screen surface cannot have a border |
 | Property name | `#f2f0ea` |
 | Value | `#e8e6e1` |
 | Metric caption, locality | `#8a909e` |
@@ -400,7 +589,7 @@ Two earlier attempts are worth recording: `bg-[#0f1114]` was the darkest element
 | Best value, group bar, CTA | `#c9a84c` |
 | CTA ink | `#0f1114` |
 
-**Gold is reserved.** It appears only on the winning value in a row, the group bars, the best-match header label, the score bars for a winning score, the RERA tick, and the footer CTA. Any one of those uses is a claim about the data; using it for anything decorative would spend the accent.
+**Gold is reserved.** It appears only on the winning value in a row, the best-match header label, the score bars for a winning score, the RERA tick, and the footer CTA. Any one of those uses is a claim about the data; using it for anything decorative would spend the accent. The availability bar is the clearest case — it reports a data gap, not a winner, so it takes `#8a8f98`.
 
 The best value also gets `bg-[rgba(201,168,76,0.05)]` on its cell and the best-match column `bg-[rgba(201,168,76,0.08)]`. Both are far below the 4.5:1 contrast floor as a *text* background — they are behind 15px bold text, so they are decoration on top of the `#141519` card, not the surface the text is read against.
 
@@ -430,9 +619,25 @@ One gold "Enquire on {name}" button per column, on the **same snap track as the 
 
 `min-h-11`, so the button is a 44px touch target despite its 13px label. `max-w-[220px]` stops the text running the full 46% column width on a wide screen.
 
+The mobile dialog uses the same per-column footer, but the label is **`Enquire`**, not `Enquire on {name}` — see the table section above for why a `truncate`d label would otherwise size the column. `aria-label="Enquire on {name}"` keeps the full phrasing accessible. `min-h-11` is unchanged.
+
 #### Row height and type scale
 
 Every value cell is `min-h-[56px]` and `flex-col justify-center` — the bar and the tick need a second line under the number, which `items-center` on a single-line cell could not give. Side padding is `px-4` (16px), up from 12px to match the wider dark surface.
+
+This table is the **desktop card's** scale. The mobile dialog shares the same row floor, colours, treatments, `tabular-nums` and missing-value rules, and steps the type down one notch for a phone-width column:
+
+| Element | Desktop | Mobile dialog |
+|---|---|---|
+| Header micro-label | 10px | 9px |
+| Property name (header) | 15px | 14px |
+| Locality (header) | 12px | 11px — `line-clamp-2`, wraps rather than truncating |
+| Metric caption | 12px | 11px |
+| Value | 15px | 14px |
+| Value, missing | 12px | 12px |
+| Footer CTA | 13px | 12px, label `Enquire` |
+| Cell padding | `px-4` | `px-3` |
+| Property cell cap | `w-64` fixed | `max-w-[220px]` on a `max-content` track |
 
 | Element | Size | Weight / treatment |
 |---|---|---|
@@ -442,7 +647,8 @@ Every value cell is `min-h-[56px]` and `flex-col justify-center` — the bar and
 | Metric caption | 12px | `font-medium`, `#8a909e` |
 | Value | 15px | `font-semibold` `#e8e6e1`; `font-bold` `#c9a84c` when it is the best in the row |
 | Value, missing | 12px | `#6b7280`, no italic |
-| Group bar | 11px | `uppercase`, `tracking-[0.16em]`, `#c9a84c` on `#1b1d22` |
+| Group bar | — | Removed from all three tables; see above. Retired spec was 11px `uppercase`, `tracking-[0.16em]`, `#c9a84c` on `#1b1d22` |
+| Availability bar | 3px | `#8a8f98` on `white/10`, `aria-hidden`; deliberately not gold — it marks a gap, not a winner |
 | Footer CTA | 13px | `font-semibold`, `#0f1114` on `#c9a84c` |
 
 **The 12px "Best" badge is gone.** The reference shows the winning value as gold text and nothing else. On a dark card a filled gold pill next to every winning number was a second, louder mark for the same fact — and at 12px it was competing with the value itself. Gold text plus a 5%-opacity cell tint is one signal, not two.

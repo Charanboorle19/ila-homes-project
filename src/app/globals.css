@@ -205,6 +205,50 @@ body {
   background-color: rgba(36, 35, 31, 0.62);
 }
 
+.ila-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Custom luxury gold scrollbar for search results dialog & search containers */
+.ila-search-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(138, 109, 47, 0.6) transparent;
+}
+
+.ila-search-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.ila-search-scroll::-webkit-scrollbar-track,
+.ila-search-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.ila-search-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #c6a46c 0%, #8a6d2f 100%);
+  border-radius: 9999px;
+  box-shadow: 0 0 6px rgba(198, 164, 108, 0.35);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ila-search-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #dfc28d 0%, #a48135 100%);
+  box-shadow: 0 0 10px rgba(198, 164, 108, 0.65);
+}
+
+.ila-search-scroll::-webkit-scrollbar-thumb:active {
+  background: #6e5520;
+}
+
+.ila-search-scroll::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 /* Dark-surface counterpart to `.ila-scroll`, for the Find Your Plot results
    panel and its mobile sheet. Same shape — transparent track, floating pill
    thumb — with light-thumb colours so it reads against `#1c1f24`.
@@ -792,6 +836,54 @@ body {
   opacity: 0.8;
   background-image: radial-gradient(circle, #c9a84c 0.8px, transparent 0.8px);
   background-size: 25px 10px;
+  mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0) 75%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0) 75%
+  );
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+}
+
+/*
+ * Compare Properties results panel: the blueprint tile, shown only while no
+ * comparison is on screen (idle / loading / error).
+ *
+ * Same two-colour contract as `.growth-corridors-bg` above:
+ *   - the fill appears as `background-color` AND as the stop inside every
+ *     gradient that *erases* the line colour, because the gradients paint over
+ *     the fill rather than being composited with it. Changing one without the
+ *     other leaves a second, misaligned copy of the pattern on top.
+ *   - the line work is the section's own gold and nothing else.
+ *
+ * **The fill is `#eceef2`, the section surface**, not the source pattern's
+ * `#E5E5F7`. This panel sits directly on the section's background, so a
+ * different fill would read as a faint rectangle inside a larger one.
+ *
+ * **`opacity: 0.35`, not the source `0.8`.** The source is sized for a hero
+ * panel with no copy over it. Here the idle copy, the four feature cards and
+ * the loading text all sit on top, and the pattern has to stay a texture behind
+ * them rather than competing with them. Same reasoning as the drop to 0.16 on
+ * the dark Find Your Plot surface, and the same as `.growth-corridors-bg`'s
+ * 0.4 — matched to the surface, not carried across sections.
+ *
+ * The source's `#444CF7` becomes `#c9a84c`, and its `#444CF755` (alpha 0x55)
+ * becomes `#c9a84c33` (alpha 0x33). The blue is not in this section's palette
+ * and a blue grid behind gold-accented copy would read as a second accent.
+ */
+.compare-results-bg {
+  background-color: #eceef2;
+  opacity: 0.35;
+  background-image:
+    repeating-radial-gradient(circle at 0 0, transparent 0, #eceef2 10px),
+    repeating-linear-gradient(#c9a84c33, #c9a84c);
   mask-image: radial-gradient(
     ellipse at center,
     rgba(0, 0, 0, 0.7) 0%,

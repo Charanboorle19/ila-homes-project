@@ -2785,46 +2785,16 @@ export default function MapSection({
                 : "Tap a project pin to open its estate layout on the map."}
             </p>
           </div>
-          {!hideSearch && !searchOpen ? (
-            <button
-              type="button"
-              aria-label="Open search"
-              onClick={() => setSearchOpen(true)}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-black/15 bg-[#d9d2c7] text-[#171717] transition hover:bg-[#cfc3a8]"
-            >
-              <SearchIcon className="h-5 w-5" />
-            </button>
-          ) : null}
+          {/* Mobile search option removed upon user request */}
         </div>
 
         {!hideSearch && searchOpen ? (
           <div className="ila-map-search-panel--open mt-2 overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
-            <div className="flex items-center gap-2 border-b border-black/10 px-3">
-              <SearchIcon className="h-4 w-4 shrink-0 text-[#5c5348]" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                autoFocus
-                placeholder={
-                  activeProject
-                    ? "Search plot, facing or area"
-                    : "Search projects or plots"
-                }
-                className="min-w-0 flex-1 bg-transparent py-2.5 text-sm font-medium text-[#171717] outline-none placeholder:text-[#5c5348]/70"
-              />
-              {query ? (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => setQuery("")}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#4a453e] text-white transition hover:bg-[#171717]"
-                >
-                  <CloseIcon className="h-3 w-3" />
-                </button>
-              ) : null}
+            <div className="flex items-center justify-between border-b border-black/10 px-3 py-1.5">
+              <span className="text-xs font-semibold text-[#5c5348]">Filter Plots</span>
               <button
                 type="button"
-                aria-label="Close search"
+                aria-label="Close filters"
                 onClick={() => setSearchOpen(false)}
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#171717] text-white transition hover:bg-[#333333]"
               >
@@ -3078,34 +3048,10 @@ export default function MapSection({
           </button>
         ) : null}
 
-        {/* Search — desktop overlay (mobile search lives in the section header) */}
+        {/* Desktop overlay — status filters (search box removed upon user request) */}
         {!hideSearch ? (
           <div className="pointer-events-none absolute top-3 right-3 z-20 hidden flex-col items-end gap-2 md:flex sm:top-4 sm:right-4">
-            <div className="pointer-events-auto flex w-[min(20rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl border border-black/15 bg-[#eae4da]/95 shadow-[0_12px_32px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all focus-within:border-[#8a6d2f]/60 focus-within:shadow-[0_14px_36px_rgba(15,23,42,0.22)]">
-              <div className="flex items-center gap-2 border-b border-black/10 px-3.5 py-1">
-                <SearchIcon className="h-4 w-4 shrink-0 text-[#5c5348]" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder={
-                    activeProject
-                      ? "Search plot, facing or area"
-                      : "Search projects or plots"
-                  }
-                  className="min-w-0 flex-1 bg-transparent py-2 text-sm font-medium text-[#171717] outline-none placeholder:text-[#5c5348]/70"
-                />
-                {query ? (
-                  <button
-                    type="button"
-                    aria-label="Clear search"
-                    onClick={() => setQuery("")}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#4a453e] text-white transition hover:bg-[#171717]"
-                  >
-                    <CloseIcon className="h-3 w-3" />
-                  </button>
-                ) : null}
-              </div>
-
+            <div className="pointer-events-auto flex w-auto flex-col overflow-hidden rounded-2xl border border-black/15 bg-[#eae4da]/95 shadow-[0_12px_32px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all">
               <div className="grid grid-cols-3 divide-x divide-black/10">
                 {filters.map((item) => {
                   const active = filter === item.key;

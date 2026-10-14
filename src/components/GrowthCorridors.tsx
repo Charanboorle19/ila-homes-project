@@ -1726,38 +1726,30 @@ export default function GrowthCorridors() {
                               state lines that ran past two or three wrapped rows
                               and left every card far taller than its neighbours,
                               none of which helped a buyer decide. */}
-                          <p className="mt-2.5 flex items-center gap-1.5 text-[14px] leading-relaxed font-normal text-white/70">
-                            <PinIcon className="h-4 w-4 shrink-0 text-[#c9a84c]" />
-                            <span className="truncate">{localityOf(item)}</span>
+                          <p className="mt-2.5 flex items-start gap-1.5 text-[14px] leading-relaxed font-normal text-white/70">
+                            <PinIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#c9a84c]" />
+                            <span className="break-words">{localityOf(item)}</span>
                           </p>
 
-                          {/* Three teaser facts from the property's units, so the
-                              card answers "is there anything here, how big, how
-                              much" without a tap.
-
-                              Each value is single-line and self-describing --
-                              "128 plots", "200–1,558 sq yd", "From ₹12.3 L" --
-                              rather than a label above a number. A label row
-                              would add a second line the old count line did not
-                              have, and every card would grow by it. Loading
-                              holds the same one-line height so nothing jumps. */}
+                          {/* Three teaser facts from the property's units.
+                              Values wrap to the next line cleanly if the space is not enough. */}
                           {isSummaryLoading ? (
                             <div
-                              className="mt-4 grid grid-cols-3 gap-2"
+                              className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2"
                               aria-hidden
                             >
                               {[0, 1, 2].map((slot) => (
                                 <span
                                   key={slot}
-                                  className="h-4 w-full max-w-20 rounded-full bg-white/20 motion-safe:animate-pulse"
+                                  className="h-4 w-20 rounded-full bg-white/20 motion-safe:animate-pulse"
                                 />
                               ))}
                             </div>
                           ) : null}
 
                           {facts && !isSummaryLoading ? (
-                            <div className="mt-4 grid grid-cols-3 gap-2">
-                              <p className="min-w-0 text-[13px] leading-snug">
+                            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] leading-snug">
+                              <p className="min-w-0">
                                 <span className="font-bold tabular-nums text-[#c9a84c]">
                                   {facts.availableCount}
                                 </span>
@@ -1765,10 +1757,10 @@ export default function GrowthCorridors() {
                                   {facts.availableCount === 1 ? "plot" : "plots"}
                                 </span>
                               </p>
-                              <p className="min-w-0 truncate text-[13px] font-semibold text-white">
+                              <p className="min-w-0 font-semibold text-white break-words">
                                 {sizeLabel ?? "Size on request"}
                               </p>
-                              <p className="min-w-0 truncate text-[13px] font-semibold text-white">
+                              <p className="min-w-0 font-semibold text-white break-words">
                                 {facts.priceFrom !== null
                                   ? `From ${formatPrice(facts.priceFrom)}`
                                   : "Price on request"}

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import type { GalleryItem, PropertyRecord } from "@/data/properties";
 import { isPropertyUuid } from "@/services/propertiesService";
 import ShareButton from "@/components/PropertyDetail/ShareButton";
@@ -43,6 +43,42 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
     const [imageLoaded, setImageLoaded] = useState(false);
     const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
+    const touchStartX = useRef<number | null>(null);
+    const touchStartY = useRef<number | null>(null);
+
+    const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+      touchStartX.current = e.touches[0].clientX;
+      touchStartY.current = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+      if (touchStartX.current === null || touchStartY.current === null) return;
+      if (!gallery || gallery.length <= 1) return;
+
+      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+      const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+
+      touchStartX.current = null;
+      touchStartY.current = null;
+
+      // Minimum swipe threshold and ensure it is predominantly horizontal
+      const minSwipeDistance = 40;
+      if (
+        Math.abs(deltaX) >= minSwipeDistance &&
+        Math.abs(deltaX) > Math.abs(deltaY) * 1.2
+      ) {
+        if (deltaX < 0) {
+          // Swipe left -> Next image
+          const nextIndex = (activeIndex + 1) % gallery.length;
+          onSelectGallery(gallery[nextIndex].id);
+        } else {
+          // Swipe right -> Previous image
+          const prevIndex = (activeIndex - 1 + gallery.length) % gallery.length;
+          onSelectGallery(gallery[prevIndex].id);
+        }
+      }
+    };
+
     useEffect(() => {
       setDescriptionExpanded(false);
     }, [property.id]);
@@ -56,8 +92,8 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
     }, [gallery]);
 
     // API properties publish structured facts (plot-size range, project area,
-    // plot count) rather than the static catalogue's facing/dimensions, so the
-    // spec row is built from whichever set the record carries.
+    // plot count, or dynamic table_content) rather than the static catalogue's facing/dimensions,
+    // so the spec row is built from whichever set the record carries.
     const specs =
       property.specs && property.specs.length > 0
         ? property.specs
@@ -68,17 +104,24 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
             { label: "Road", value: property.roadWidth },
           ];
     const specOrder = [
-      "Plot size",
-      "Plot size (sq ft)",
+      "Area(acres)",
+      "Project area (acres)",
       "Project area",
+      "Total plots",
+      "Available Plots",
       "Plots",
+      "Approx. plot size (sq ft)",
+      "Plot size (sq ft)",
+      "Plot size",
       "Configuration",
     ];
     const orderedSpecs = [...specs].sort((a, b) => {
       const aIndex = specOrder.indexOf(a.label);
       const bIndex = specOrder.indexOf(b.label);
-      return (aIndex < 0 ? specOrder.length : aIndex) -
-        (bIndex < 0 ? specOrder.length : bIndex);
+      if (aIndex === -1 && bIndex === -1) return 0;
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
     });
 
     return (
@@ -97,7 +140,11 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
 
           <div className="pd-hero__grid">
             <div className="pd-hero__gallery">
-              <div className="pd-hero__stage">
+              <div
+                className="pd-hero__stage"
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+              >
                 {(imagesLoading || (!imageLoaded && activeImage && imageErrorId !== activeImage.id)) && (
                   <div className="pd-hero__stage-loading" role="status" aria-label="Loading image">
                     <span className="ila-loader ila-loader--sm" aria-hidden="true" />
@@ -167,19 +214,28 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
 
             <div className="pd-hero__copy">
               <div className="pd-hero__badges pd-hero__badges--ordered">
-                <span className="pd-hero__badge pd-hero__badge--trust">
-                  <span aria-hidden="true">✓</span>
-                  {property.approval} Approved
-                </span>
+                {property.approval && property.approval !== "—" && property.approval !== "Approval on request" ? (
+                  <span className="pd-hero__badge pd-hero__badge--trust">
+                    <span aria-hidden="true">✓</span>
+                    {property.approval} Approved
+                  </span>
+                ) : null}
                 {property.reraRegistered ? (
                   <span className="pd-hero__badge pd-hero__badge--trust">
                     <span aria-hidden="true">✓</span>
                     RERA Registered
                   </span>
                 ) : null}
-                <span className="pd-hero__badge pd-hero__badge--status">
-                  {property.possession}
-                </span>
+                {property.propertyType && property.propertyType !== "—" ? (
+                  <span className="pd-hero__badge pd-hero__badge--status">
+                    {property.propertyType}
+                  </span>
+                ) : null}
+                {property.possession && property.possession !== "—" ? (
+                  <span className="pd-hero__badge pd-hero__badge--status">
+                    {property.possession}
+                  </span>
+                ) : null}
               </div>
 
               <div className="pd-hero__identity">
@@ -253,9 +309,11 @@ const PropertyHero = forwardRef<HTMLElement, PropertyHeroProps>(
               </dl>
 
               <div className="pd-hero__description pd-hero__desc--ordered">
-                <p className={descriptionExpanded ? "is-expanded" : ""}>
+                <div
+                  className={`pd-hero__desc-text${descriptionExpanded ? " is-expanded" : ""}`}
+                >
                   {property.description}
-                </p>
+                </div>
                 <button
                   type="button"
                   className="pd-hero__read-more"

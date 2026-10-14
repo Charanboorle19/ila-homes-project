@@ -227,18 +227,18 @@ export default function PlotsWithPulse() {
     <section
       data-section="compare_plots"
       id="plots-pulse"
-      className="relative w-full overflow-hidden bg-[#eceef2]"
+      className="relative w-full overflow-hidden bg-gradient-to-b from-[#fbf7eb] via-[#fefaf0] to-[#f6f0db] border-t border-[#8A6A1F]/15"
       aria-labelledby="plots-pulse-heading"
       style={{ ["--gc-gold" as string]: GOLD }}
     >
-      {/* Decorative blueprint background grid identical to Growth Corridors */}
+      {/* Decorative blueprint background grid with soft gold lines */}
       <div
         aria-hidden="true"
-        className="growth-corridors-bg pointer-events-none absolute inset-0 z-0 h-full w-full"
+        className="growth-corridors-bg pointer-events-none absolute inset-0 z-0 h-full w-full opacity-35"
       />
 
-      <div className="content-slot relative w-full px-6 py-16 sm:px-10 sm:py-24 lg:flex lg:flex-col lg:justify-center lg:pt-10 lg:pb-6 xl:pt-12">
-        {/* Two-column header layout matching Growth Corridors rhythm */}
+      <div className="content-slot relative w-full px-4 pt-7 pb-10 sm:px-10 sm:py-24 lg:flex lg:flex-col lg:justify-center lg:pt-10 lg:pb-6 xl:pt-12">
+        {/* Two-column header layout matching rhythm */}
         <header className="lg:flex lg:items-end lg:justify-between lg:gap-12 lg:shrink-0">
           <div className="max-w-xl">
             <p className="text-[10px] font-bold tracking-[0.22em] text-[#8A6A1F] uppercase">
@@ -246,57 +246,57 @@ export default function PlotsWithPulse() {
             </p>
             <h2
               id="plots-pulse-heading"
-              className="mt-3 text-[24px] font-semibold tracking-[-0.01em] text-balance text-[#0f1114] lg:text-[32px]"
+              className="mt-1.5 text-[22px] font-semibold tracking-[-0.01em] text-balance text-[#0f1114] sm:mt-3 sm:text-[24px] lg:text-[32px]"
             >
               See what others are looking at right now
             </h2>
-            <p className="mt-3 text-[13px] leading-relaxed text-[#4a5060]">
+            <p className="mt-2 text-[12.5px] leading-relaxed text-[#525866] sm:mt-3 sm:text-[13px]">
               Live activity on each plot — who&apos;s interested, when it was last visited, and how it&apos;s appreciated.
             </p>
           </div>
 
-          <div className="mt-6 flex flex-col items-start gap-2 sm:items-end lg:mt-0 lg:shrink-0">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#8A6A1F]/30 bg-[#8A6A1F]/10 px-3.5 py-1.5 text-[11px] font-semibold tracking-wide text-[#8A6A1F]">
+          <div className="mt-3.5 flex flex-wrap items-center gap-2 sm:mt-6 sm:flex-col sm:items-end lg:mt-0 lg:shrink-0">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#8A6A1F]/30 bg-[#8A6A1F]/10 px-3 py-1 text-[10.5px] font-semibold tracking-wide text-[#8A6A1F] shadow-xs sm:px-3.5 sm:py-1.5 sm:text-[11px]">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#22c55e] opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#22c55e]"></span>
               </span>
               Live Demand Signal
             </div>
-            <p className="text-[11px] text-[#8a909e]">
+            <p className="text-[10.5px] text-[#7d8391] sm:text-[11px]">
               Provisional demo estimates &middot; Updates dynamically
             </p>
           </div>
         </header>
 
         {loading ? (
-          <p className="mt-8 inline-flex items-center gap-2 text-sm text-[#4a5060]">
+          <p className="mt-6 inline-flex items-center gap-2 text-sm text-[#525866] sm:mt-8">
             <span className="ila-loader ila-loader--sm" aria-hidden />
             Loading properties&hellip;
           </p>
         ) : null}
 
         {!loading && error ? (
-          <p className="mt-8 text-sm text-[#4a5060]" role="alert">
+          <p className="mt-6 text-sm text-rose-600 sm:mt-8" role="alert">
             {error}
           </p>
         ) : null}
 
         {!loading && !error && !plots.length ? (
-          <p className="mt-8 text-sm text-[#4a5060]" role="status">
+          <p className="mt-6 text-sm text-[#525866] sm:mt-8" role="status">
             No properties are currently available.
           </p>
         ) : null}
 
         {plots.length > 0 ? (
           <>
-            {/* Carousel navigation bar matching Growth Corridors */}
-            <div className="mt-6 flex items-center justify-between gap-3">
-              <p className="text-[13px] font-medium text-[#4a5060]">
+            {/* Carousel navigation bar */}
+            <div className="mt-4 flex items-center justify-between gap-3 sm:mt-6">
+              <p className="text-[12px] font-medium text-[#525866] sm:text-[13px]">
                 {plots.length} {plots.length === 1 ? "plot tracked" : "plots tracked"}
               </p>
               <div className="flex items-center gap-3">
-                <p className="text-[13px] font-medium tabular-nums text-[#4a5060]">
+                <p className="text-[12px] font-medium tabular-nums text-[#525866] sm:text-[13px]">
                   {activeCardIndex + 1} / {plots.length}
                 </p>
                 <div className="hidden items-center gap-2 lg:flex">
@@ -305,7 +305,7 @@ export default function PlotsWithPulse() {
                     onClick={() => scrollCards(-1)}
                     disabled={cardScroll.atStart}
                     aria-label="Previous plots"
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 bg-white text-[#0f1114] transition hover:border-[#8A6A1F] hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-35"
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 bg-white text-[#0f1114] shadow-xs transition hover:border-[#8A6A1F] hover:bg-[#fbf7eb] disabled:cursor-not-allowed disabled:opacity-35"
                   >
                     <ArrowIcon className="h-3.5 w-3.5 rotate-180" />
                   </button>
@@ -314,7 +314,7 @@ export default function PlotsWithPulse() {
                     onClick={() => scrollCards(1)}
                     disabled={cardScroll.atEnd}
                     aria-label="Next plots"
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 bg-white text-[#0f1114] transition hover:border-[#8A6A1F] hover:bg-white/60 disabled:cursor-not-allowed disabled:opacity-35"
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-black/15 bg-white text-[#0f1114] shadow-xs transition hover:border-[#8A6A1F] hover:bg-[#fbf7eb] disabled:cursor-not-allowed disabled:opacity-35"
                   >
                     <ArrowIcon className="h-3.5 w-3.5" />
                   </button>
@@ -325,20 +325,20 @@ export default function PlotsWithPulse() {
             {/* Horizontal snap carousel row matching Growth Corridors track */}
             <div
               ref={cardRowRef}
-              className="-mx-6 mt-6 flex snap-x snap-mandatory items-stretch gap-6 overflow-x-auto px-6 pb-4 scrollbar-none scroll-pl-6 scroll-pr-6 sm:mx-0 sm:px-0 sm:scroll-pl-0 sm:scroll-pr-0 lg:mt-8 lg:min-h-0 lg:flex-none"
+              className="-mx-4 mt-3.5 flex snap-x snap-mandatory items-stretch gap-3.5 overflow-x-auto px-4 pb-2 scrollbar-none scroll-pl-4 scroll-pr-4 sm:-mx-6 sm:mt-6 sm:gap-6 sm:px-6 sm:pb-4 sm:scroll-pl-6 sm:scroll-pr-6 lg:mx-0 lg:mt-8 lg:px-0 lg:min-h-0 lg:flex-none lg:scroll-pl-0 lg:scroll-pr-0"
             >
               {plots.map((plot, index) => (
                 <article
                   key={plot.id}
-                  className="group relative flex w-[82vw] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white text-left shadow-[0_4px_20px_rgba(15,17,20,0.04)] transition duration-300 hover:-translate-y-1 hover:border-[#8A6A1F]/50 hover:shadow-[0_16px_36px_rgba(15,17,20,0.08)] sm:w-[48vw] lg:w-auto lg:min-w-[21rem] lg:flex-1 lg:flex-basis-0 xl:min-w-[23rem]"
+                  className="group relative flex w-[88vw] max-w-[21.5rem] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-[#8A6A1F]/20 bg-white text-left shadow-[0_4px_18px_rgba(30,22,10,0.06)] transition duration-300 hover:-translate-y-1 hover:border-[#8A6A1F]/50 hover:shadow-[0_16px_36px_rgba(30,22,10,0.12)] sm:w-[48vw] sm:max-w-none lg:w-auto lg:min-w-[21rem] lg:flex-1 lg:flex-basis-0 xl:min-w-[23rem]"
                 >
-                  {/* Card Media Header (Inset landscape image with live viewing badge, not full-bleed card) */}
-                  <div className="relative h-44 w-full shrink-0 overflow-hidden bg-[#eef0f4]">
+                  {/* Card Media Header */}
+                  <div className="relative h-40 w-full shrink-0 overflow-hidden bg-[#eef0f4] sm:h-44">
                     <Image
                       src={plot.image}
                       alt={plot.name}
                       fill
-                      sizes="(min-width: 1024px) 33vw, 80vw"
+                      sizes="(min-width: 1024px) 33vw, (min-width: 640px) 48vw, 88vw"
                       unoptimized={typeof plot.image === "string"}
                       priority={index === 0}
                       className="object-cover transition duration-700 ease-out group-hover:scale-105"
@@ -350,15 +350,15 @@ export default function PlotsWithPulse() {
                     <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/40 to-transparent pointer-events-none" />
 
                     {/* Status badge top-left */}
-                    <div className="absolute left-3 top-3">
-                      <span className="inline-flex items-center rounded-full bg-[#0f1114]/80 px-2.5 py-1 text-[10px] font-bold tracking-wider text-white uppercase backdrop-blur-md">
+                    <div className="absolute left-2.5 top-2.5 sm:left-3 sm:top-3">
+                      <span className="inline-flex items-center rounded-full bg-[#0f1114]/85 px-2.5 py-0.5 text-[9.5px] font-bold tracking-wider text-white uppercase backdrop-blur-md sm:py-1 sm:text-[10px]">
                         {plot.status}
                       </span>
                     </div>
 
                     {/* Live viewing pulse indicator top-right */}
-                    <div className="absolute right-3 top-3">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/60 bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 shadow-xs backdrop-blur-md">
+                    <div className="absolute right-2.5 top-2.5 sm:right-3 sm:top-3">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-white/95 px-2.5 py-0.5 text-[10.5px] font-semibold text-emerald-800 shadow-xs backdrop-blur-md sm:py-1 sm:text-[11px]">
                         <span className="relative flex h-2 w-2">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
@@ -369,37 +369,37 @@ export default function PlotsWithPulse() {
                   </div>
 
                   {/* Card Content Body */}
-                  <div className="flex flex-1 flex-col p-5">
+                  <div className="flex flex-1 flex-col p-4 sm:p-5">
                     {/* Location */}
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#8A6A1F]">
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#8A6A1F] sm:text-[11px]">
                       <PinIcon className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">{plot.location}</span>
                     </div>
 
                     {/* Property title */}
-                    <h3 className="mt-1 text-[17px] font-bold tracking-tight text-[#0f1114] transition-colors group-hover:text-[#8A6A1F] truncate">
+                    <h3 className="mt-1 text-[16px] font-bold tracking-tight text-[#0f1114] transition-colors group-hover:text-[#8A6A1F] truncate sm:text-[17px]">
                       {plot.name}
                     </h3>
 
                     {/* Meta description */}
-                    <p className="mt-0.5 text-[12px] text-[#6b7280] truncate">
+                    <p className="mt-0.5 text-[11.5px] text-[#6b7280] truncate sm:text-[12px]">
                       {plot.meta}
                     </p>
 
                     {/* Price banner */}
-                    <div className="mt-3 flex items-baseline justify-between border-b border-black/[0.06] pb-3">
+                    <div className="mt-2.5 flex items-baseline justify-between border-b border-black/[0.06] pb-2.5 sm:mt-3 sm:pb-3">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8a909e]">
                         Guide Price
                       </span>
-                      <span className="text-[19px] font-bold tracking-tight text-[#0f1114]">
+                      <span className="text-[17px] font-bold tracking-tight text-[#0f1114] sm:text-[19px]">
                         {plot.price}
                       </span>
                     </div>
 
                     {/* Live Activity signals box */}
-                    <div className="mt-3 rounded-xl border border-black/[0.04] bg-[#f8f9fb] p-3 space-y-2">
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="flex items-center gap-1.5 text-[#4a5060]">
+                    <div className="mt-2.5 rounded-xl border border-[#8A6A1F]/15 bg-[#faf8f2] p-2.5 space-y-1.5 sm:mt-3 sm:p-3 sm:space-y-2">
+                      <div className="flex items-center justify-between text-[10.5px] sm:text-[11px]">
+                        <span className="flex items-center gap-1.5 text-[#525866]">
                           <FlameIcon className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                           <span>Enquiries today</span>
                         </span>
@@ -407,8 +407,8 @@ export default function PlotsWithPulse() {
                           {plot.enquiries} enquiries
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[11px]">
-                        <span className="flex items-center gap-1.5 text-[#4a5060]">
+                      <div className="flex items-center justify-between text-[10.5px] sm:text-[11px]">
+                        <span className="flex items-center gap-1.5 text-[#525866]">
                           <ClockIcon className="h-3.5 w-3.5 text-blue-500 shrink-0" />
                           <span>Last active viewing</span>
                         </span>
@@ -419,17 +419,17 @@ export default function PlotsWithPulse() {
                     </div>
 
                     {/* Comparison percentage bars */}
-                    <div className="mt-3 space-y-2 pt-1">
+                    <div className="mt-2.5 space-y-1.5 pt-0.5 sm:mt-3 sm:space-y-2 sm:pt-1">
                       <BarRow label="Appreciation" value={plot.appreciation} />
                       <BarRow label="Connectivity" value={plot.connectivity} />
                       <BarRow label="Infra Growth" value={plot.infra} />
                     </div>
 
                     {/* Direct Property Details CTA */}
-                    <div className="mt-5 pt-1">
+                    <div className="mt-4 pt-0.5 sm:mt-5 sm:pt-1">
                       <Link
                         href={`/properties/${plot.id}`}
-                        className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#8A6A1F]/30 bg-[#8A6A1F]/5 text-[12px] font-bold tracking-[0.02em] text-[#0f1114] transition hover:bg-[#8A6A1F] hover:text-white active:scale-[0.99]"
+                        className="flex h-9.5 w-full items-center justify-center gap-2 rounded-xl border border-[#8A6A1F]/30 bg-[#8A6A1F]/5 text-[11.5px] font-bold tracking-[0.02em] text-[#0f1114] transition hover:bg-[#8A6A1F] hover:text-white active:scale-[0.99] sm:h-10 sm:text-[12px]"
                       >
                         <span>View property details</span>
                         <ArrowIcon className="h-3.5 w-3.5" />

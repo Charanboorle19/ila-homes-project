@@ -209,12 +209,17 @@ function buildGeoJson(
       : offsetFrom(origin, item.distanceKm, step * index + 24);
 
     return {
+      id: item.id,
       type: "Feature",
       geometry: {
         type: "LineString",
         coordinates: [origin, coords],
       },
-      properties: { horizon },
+      properties: {
+        id: item.id,
+        itemId: item.id,
+        horizon,
+      },
     };
   });
 
@@ -278,6 +283,8 @@ export default function FutureNeighbourhoodMap({
   const hoveredMapItemRef = useRef<string | null>(null);
   const popupRef = useRef<Popup | null>(null);
   const readyRef = useRef(false);
+  const destinationMarkerRef = useRef<Marker | null>(null);
+  const plotLabelMarkerRef = useRef<Marker | null>(null);
 
   const resetMapView = () => {
     const map = mapRef.current;
@@ -363,6 +370,11 @@ export default function FutureNeighbourhoodMap({
   }, []);
 
   const origin: [number, number] = property.coordinates;
+
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   const geo = useMemo(
     () => buildGeoJson(items, origin, horizon),
@@ -460,12 +472,70 @@ export default function FutureNeighbourhoodMap({
       .addTo(map);
   };
 
-  const focusMapItem = (item: NeighbourhoodItem | NearbyPlaceItem) => {
-    setSelectedItemId(item.id);
-    document.querySelector(".pd-future__map")?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
+  const [activeItem, setActiveItem] = useState<(NeighbourhoodItem | NearbyPlaceItem) | null>(null);
+  const [isFullView, setIsFullView] = useState(false);
+
+  const updateMapFeatureHighlights = (selectedId: string | null) => {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+
+    itemsRef.current.forEach((it) => {
+      const isSelected = selectedId === it.id;
+      const isDimmed = selectedId !== null && !isSelected;
+
+      map.setFeatureState(
+        { source: ITEMS_SOURCE, id: it.id },
+        { selected: isSelected, dimmed: isDimmed },
+      );
+
+      map.setFeatureState(
+        { source: LINKS_SOURCE, id: it.id },
+        { selected: isSelected, dimmed: isDimmed },
+      );
     });
+  };
+
+  const resetToOverview = () => {
+    setActiveItem(null);
+    setSelectedItemId(null);
+    popupRef.current?.remove();
+    updateMapFeatureHighlights(null);
+
+    // Remove any active destination marker on map
+    if (destinationMarkerRef.current) {
+      destinationMarkerRef.current.remove();
+      destinationMarkerRef.current = null;
+    }
+
+    const map = mapRef.current;
+    if (!map || geo.points.features.length === 0) return;
+    const bounds = new LngLatBounds(origin, origin);
+    for (const feature of geo.points.features) {
+      bounds.extend(feature.geometry.coordinates as [number, number]);
+    }
+    map.fitBounds(bounds, { padding: 64, maxZoom: 14, duration: 700 });
+  };
+
+  const focusMapItem = (item: NeighbourhoodItem | NearbyPlaceItem) => {
+    // If the same item is clicked again, deselect it and reset to overview
+    if (selectedItemId === item.id) {
+      resetToOverview();
+      return;
+    }
+
+    setSelectedItemId(item.id);
+    setActiveItem(item);
+    popupRef.current?.remove();
+
+    if (!isFullView) {
+      document.querySelector(".pd-future__map")?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+
+    // Highlight the selected item & line, reduce opacity of other connected items on the map
+    updateMapFeatureHighlights(item.id);
 
     const map = mapRef.current;
     if (!map) return;
@@ -478,19 +548,42 @@ export default function FutureNeighbourhoodMap({
         ? (item.coordinates as [number, number])
         : origin;
 
+    // Remove existing destination marker if present
+    if (destinationMarkerRef.current) {
+      destinationMarkerRef.current.remove();
+      destinationMarkerRef.current = null;
+    }
+
+    // Create landmark destination badge marker indicating destination
+    const destEl = document.createElement("div");
+    destEl.className = "pd-future__destination-label";
+    const destDot = document.createElement("span");
+    destDot.className = "pd-future__destination-badge";
+    destDot.setAttribute("aria-hidden", "true");
+    const destText = document.createElement("span");
+    destText.textContent = item.name;
+    destEl.appendChild(destDot);
+    destEl.appendChild(destText);
+
+    destinationMarkerRef.current = new Marker({
+      element: destEl,
+      anchor: "bottom",
+      offset: [0, -14],
+    })
+      .setLngLat(targetCoords)
+      .addTo(map);
+
+    // Zoom the map so both the plot origin and this landmark destination are framed properly in view
     const bounds = new LngLatBounds(origin, origin);
     bounds.extend(targetCoords);
+
     map.fitBounds(bounds, {
-      padding: 90,
-      maxZoom: 14.5,
+      padding: isDesktopList
+        ? { top: 90, bottom: 90, left: 110, right: 110 }
+        : { top: 70, bottom: 70, left: 60, right: 60 },
+      maxZoom: 15,
       duration: 800,
     });
-
-    /* Opened straight away rather than on `moveend`. A MapLibre popup re-anchors
-       to its coordinate on every move, so it travels with the camera and lands
-       where the pin does — deferring it to `moveend` just delays a popup the
-       visitor can already see. */
-    openPopup(targetCoords, item.name, cardSubtitle(item));
   };
 
   // Create the map once.
@@ -584,6 +677,7 @@ export default function FutureNeighbourhoodMap({
       map.addSource(LINKS_SOURCE, {
         type: "geojson",
         data: geo.links,
+        promoteId: "id",
       });
 
       map.addLayer({
@@ -595,9 +689,26 @@ export default function FutureNeighbourhoodMap({
           "line-join": "round",
         },
         paint: {
-          "line-color": "#b9a47c",
-          "line-width": 1.5,
-          "line-opacity": 0.4,
+          "line-color": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#dc2626",
+            "#b9a47c",
+          ],
+          "line-width": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            3.0,
+            1.5,
+          ],
+          "line-opacity": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            0.95,
+            ["boolean", ["feature-state", "dimmed"], false],
+            0.12,
+            0.4,
+          ],
           "line-dasharray": [2, 2],
         },
       });
@@ -612,13 +723,15 @@ export default function FutureNeighbourhoodMap({
           "circle-radius": [
             "case",
             ["boolean", ["feature-state", "selected"], false],
-            20,
+            18,
             ["boolean", ["feature-state", "hover"], false],
-            16,
-            13,
+            14,
+            10,
           ],
           "circle-color": [
             "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#dc2626",
             ["==", ["get", "horizon"], "2029"],
             "#c6a46c",
             "#1f5c45",
@@ -626,10 +739,12 @@ export default function FutureNeighbourhoodMap({
           "circle-opacity": [
             "case",
             ["boolean", ["feature-state", "selected"], false],
-            0.42,
+            0.4,
+            ["boolean", ["feature-state", "dimmed"], false],
+            0.06,
             ["boolean", ["feature-state", "hover"], false],
             0.32,
-            0.25,
+            0.2,
           ],
         },
       });
@@ -639,31 +754,53 @@ export default function FutureNeighbourhoodMap({
         type: "circle",
         source: ITEMS_SOURCE,
         paint: {
-          "circle-radius": isDesktop ? 14 : [
+          "circle-radius": [
             "case",
             ["boolean", ["feature-state", "selected"], false],
-            10,
+            isDesktop ? 13 : 11,
             ["boolean", ["feature-state", "hover"], false],
-            9,
-            7,
+            isDesktop ? 11 : 9,
+            isDesktop ? 9 : 7.5,
           ],
-          "circle-color": isDesktop ? "#1f5c45" : [
+          "circle-color": [
             "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#dc2626",
             ["==", ["get", "horizon"], "2029"],
             "#c6a46c",
             "#1f5c45",
           ],
-          "circle-stroke-color": isDesktop ? "#ffffff" : [
+          "circle-opacity": [
             "case",
+            ["boolean", ["feature-state", "selected"], false],
+            1.0,
+            ["boolean", ["feature-state", "dimmed"], false],
+            0.22,
+            1.0,
+          ],
+          "circle-stroke-color": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#ffffff",
             ["boolean", ["feature-state", "hover"], false],
-            "#c6a46c",
+            "#dc2626",
             "#ffffff",
           ],
-          "circle-stroke-width": isDesktop ? 2 : [
+          "circle-stroke-width": [
             "case",
-            ["boolean", ["feature-state", "hover"], false],
-            4,
+            ["boolean", ["feature-state", "selected"], false],
             2.5,
+            ["boolean", ["feature-state", "hover"], false],
+            2,
+            1.5,
+          ],
+          "circle-stroke-opacity": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            1.0,
+            ["boolean", ["feature-state", "dimmed"], false],
+            0.22,
+            1.0,
           ],
         },
       });
@@ -674,14 +811,32 @@ export default function FutureNeighbourhoodMap({
         source: ITEMS_SOURCE,
         layout: {
           "text-field": ["to-string", ["get", "number"]],
-          "text-size": isDesktop ? 14 : 11,
+          "text-size": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            isDesktop ? 11 : 9.5,
+            isDesktop ? 9.5 : 8,
+          ],
           "text-font": ["Open Sans Bold"],
           "text-allow-overlap": true,
         },
         paint: {
           "text-color": "#ffffff",
-          "text-halo-color": "#1f5c45",
-          "text-halo-width": 1,
+          "text-halo-color": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#b91c1c",
+            "#1f5c45",
+          ],
+          "text-halo-width": 0.8,
+          "text-opacity": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            1.0,
+            ["boolean", ["feature-state", "dimmed"], false],
+            0.22,
+            1.0,
+          ],
         },
       });
 
@@ -690,36 +845,44 @@ export default function FutureNeighbourhoodMap({
         type: "circle",
         source: ORIGIN_SOURCE,
         paint: {
-          "circle-radius": 21,
-          "circle-color": "#c6a46c",
-          "circle-opacity": 0.18,
+          "circle-radius": 16,
+          "circle-color": "#1f5c45",
+          "circle-opacity": 0.2,
           "circle-stroke-width": 2,
-          "circle-stroke-color": "#c6a46c",
+          "circle-stroke-color": "#1f5c45",
         },
       });
 
-      if (isDesktop) {
-        const plotLabel = document.createElement("span");
-        plotLabel.className = "pd-future__plot-label";
-        plotLabel.textContent = "Your plot";
-        plotLabelMarker = new Marker({
-          element: plotLabel,
-          anchor: "left",
-          offset: [18, 0],
-        })
-          .setLngLat(origin)
-          .addTo(map);
-      }
+      // Plot origin marker pill with green dot indicator
+      const plotLabel = document.createElement("div");
+      plotLabel.className = "pd-future__plot-label";
+      const plotDot = document.createElement("span");
+      plotDot.className = "pd-future__plot-badge";
+      plotDot.setAttribute("aria-hidden", "true");
+      const plotText = document.createElement("span");
+      plotText.textContent = "Your plot";
+      plotLabel.appendChild(plotDot);
+      plotLabel.appendChild(plotText);
+
+      plotLabelMarker = new Marker({
+        element: plotLabel,
+        anchor: "bottom",
+        offset: [0, -14],
+      })
+        .setLngLat(origin)
+        .addTo(map);
+
+      plotLabelMarkerRef.current = plotLabelMarker;
 
       map.addLayer({
         id: "future-origin-dot",
         type: "circle",
         source: ORIGIN_SOURCE,
         paint: {
-          "circle-radius": 11,
-          "circle-color": "#c6a46c",
-          "circle-stroke-width": 3,
-          "circle-stroke-color": "#6f5424",
+          "circle-radius": 8.5,
+          "circle-color": "#1f5c45",
+          "circle-stroke-width": 2.5,
+          "circle-stroke-color": "#ffffff",
         },
       });
 
@@ -728,12 +891,34 @@ export default function FutureNeighbourhoodMap({
           layers: ["future-item-dot", "future-origin-dot"],
         })[0];
         if (!feature) return;
-        const properties = feature.properties as { name?: string; meta?: string; label?: string };
-        openPopup(
-          [event.lngLat.lng, event.lngLat.lat],
-          properties.name ?? properties.label ?? "Plot",
-          properties.meta,
-        );
+
+        if (feature.layer.id === "future-origin-dot") {
+          map.flyTo({
+            center: origin,
+            zoom: 15.5,
+            essential: true,
+            duration: 800,
+          });
+          openPopup(
+            origin,
+            property.neighbourhood.mapLabel,
+            "Project Location",
+          );
+          return;
+        }
+
+        const featureId = feature.properties?.id ?? feature.id;
+        const matchedItem = itemsRef.current.find((it) => it.id === featureId);
+        if (matchedItem) {
+          focusMapItem(matchedItem);
+        } else {
+          const properties = feature.properties as { name?: string; meta?: string; label?: string };
+          openPopup(
+            [event.lngLat.lng, event.lngLat.lat],
+            properties.name ?? properties.label ?? "Landmark",
+            properties.meta,
+          );
+        }
       };
       map.on("click", "future-item-dot", showPopup);
       map.on("click", "future-origin-dot", showPopup);
@@ -751,6 +936,8 @@ export default function FutureNeighbourhoodMap({
       mapRef.current = null;
       if (hintTimer) window.clearTimeout(hintTimer);
       plotLabelMarker?.remove();
+      destinationMarkerRef.current?.remove();
+      destinationMarkerRef.current = null;
       map.remove();
     };
     // The map is created once; data updates are handled by the effect below.
@@ -769,18 +956,7 @@ export default function FutureNeighbourhoodMap({
         itemsSource?.setData(geo.points);
         linksSource?.setData(geo.links);
 
-        if (selectedMapItemRef.current) {
-          map.removeFeatureState({
-            source: ITEMS_SOURCE,
-            id: selectedMapItemRef.current,
-          });
-        }
-        if (selectedItemId) {
-          map.setFeatureState(
-            { source: ITEMS_SOURCE, id: selectedItemId },
-            { selected: true },
-          );
-        }
+        updateMapFeatureHighlights(selectedItemId);
         selectedMapItemRef.current = selectedItemId;
 
         /* `setData` above replaced every feature, so any hover state went with
@@ -795,13 +971,15 @@ export default function FutureNeighbourhoodMap({
         if (geo.points.features.length === 0) return;
 
         // Frame the plot plus every landmark, using the same coordinates that
-        // were just pushed into the source.
-        const bounds = new LngLatBounds(origin, origin);
-        for (const feature of geo.points.features) {
-          bounds.extend(feature.geometry.coordinates as [number, number]);
-        }
+        // were just pushed into the source. Only reset view if no landmark is currently selected.
+        if (!selectedItemId) {
+          const bounds = new LngLatBounds(origin, origin);
+          for (const feature of geo.points.features) {
+            bounds.extend(feature.geometry.coordinates as [number, number]);
+          }
 
-        map.fitBounds(bounds, { padding: 64, maxZoom: 14, duration: 600 });
+          map.fitBounds(bounds, { padding: 64, maxZoom: 14, duration: 600 });
+        }
       } catch (err) {
         console.warn("[neighbourhood map] data update error", err);
       }
@@ -891,16 +1069,65 @@ export default function FutureNeighbourhoodMap({
         ) : null}
 
         <div className="pd-future__layout">
-          <div className="pd-future__map">
+          <div className={`pd-future__map${isFullView ? " pd-future__map--fullscreen" : ""}`}>
             <div
               ref={containerRef}
               className="pd-future__canvas"
               role="application"
               aria-label={`Map of ${property.neighbourhood.mapLabel} and nearby landmarks`}
             />
+
+            {/* Top map controls: Full View and Reset View */}
+            <div className="pd-future__map-controls">
+              <button
+                type="button"
+                className="pd-future__map-btn"
+                onClick={() => {
+                  const next = !isFullView;
+                  setIsFullView(next);
+                  setTimeout(() => mapRef.current?.resize(), 150);
+                }}
+                aria-label={isFullView ? "Exit full view" : "Full view"}
+                title={isFullView ? "Exit full view" : "Full view"}
+              >
+                {isFullView ? (
+                  <>
+                    <svg className="pd-future__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9L4 4m0 0h4m-4 0v4m11 7l5 5m0 0h-4m4 0v-4M9 15l-5 5m0 0h4m-4 0v-4m11-7l5-5m0 0h-4m4 0v4" />
+                    </svg>
+                    <span>Exit full view</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="pd-future__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                    <span>Full view</span>
+                  </>
+                )}
+              </button>
+
+              {(activeItem || selectedItemId) ? (
+                <button
+                  type="button"
+                  className="pd-future__map-btn pd-future__map-btn--reset"
+                  onClick={resetToOverview}
+                  aria-label="View all landmarks"
+                  title="View all landmarks"
+                >
+                  <svg className="pd-future__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>View all</span>
+                </button>
+              ) : null}
+            </div>
+
+            {/* Map overlay card has been removed so desktop & mobile keep a clean, unobstructed map view */}
+
             {showMapHint ? (
               <p className={`pd-future__map-hint is-${mapHint}`}>
-                {mapHint === "desktop" ? "Click to interact" : "Use two fingers to move the map"}
+                {mapHint === "desktop" ? "Click any marker to zoom in" : "Tap any marker to explore"}
               </p>
             ) : null}
             {mapFailed ? (
@@ -925,14 +1152,16 @@ export default function FutureNeighbourhoodMap({
                 </p>
               </li>
             ) : null}
-            {visibleItems.map((item, index) => {
-              const subtitle = cardSubtitle(item);
-              return (
-                <li
-                  key={item.id}
-                  className="pd-future__card"
+              {visibleItems.map((item, index) => {
+                const subtitle = cardSubtitle(item);
+                const isSelected = selectedItemId === item.id;
+                return (
+                  <li
+                    key={item.id}
+                  className={`pd-future__card${isSelected ? " is-selected" : ""}`}
                   role="button"
                   tabIndex={0}
+                  aria-pressed={isSelected}
                   onClick={() => focusMapItem(item)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {

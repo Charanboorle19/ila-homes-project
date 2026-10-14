@@ -210,7 +210,7 @@ Route/page: `generateStaticParams`, `generateMetadata`, `PropertyDetailPage`. Da
 
 ## 19. Hooks
 
-The page uses React `useEffect`, `useMemo`, `useRef`, `useState`, `useId`, and `forwardRef`. It uses `useTrackPropertyView` from `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\usePropertyView.ts`. Map sections use MapLibre lifecycle effects; `StickyBottomCta` uses `IntersectionObserver` through an effect. `ShareButton` uses `useEffect` (property-change reset, unmount timer cleanup), `useRef` (copy timer), and `useState`.
+The page uses React `useEffect`, `useMemo`, `useRef`, `useState`, `useId`, and `forwardRef`. It uses `useTrackPropertyView` from `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\usePropertyView.ts`. Map sections use MapLibre lifecycle effects; `StickyBottomCta` uses `IntersectionObserver` through an effect targeting the Lifestyle section (appearing once the user scrolls down to Lifestyle, and stepping aside when the final form is visible or field focused). `ShareButton` uses `useEffect` (property-change reset, unmount timer cleanup), `useRef` (copy timer), and `useState`.
 
 ## 20. State variables
 
@@ -227,7 +227,7 @@ The page uses React `useEffect`, `useMemo`, `useRef`, `useState`, `useId`, and `
 
 ## 21. Derived/normalized data
 
-`PropertyPageView` derives `gallery`, `similar`, `connectivityScore`, `activeImage`, and WhatsApp text. `PropertyHero` derives the spec row from `property.specs` or the fixed `Size/Facing/Dimensions/Road` fields. `PriceEmiFuture` derives effective down payment, percentage, principal, tenure months, monthly EMI, total interest/payment, future values, and amortization schedules. `FutureNeighbourhoodMap` derives display labels, horizon-filtered items, map GeoJSON, and demo distance from Gachibowli. `apiPropertyToRecord` supplies all API-to-record normalization.
+`PropertyPageView` derives `gallery`, `similar`, `connectivityScore`, `activeImage`, and WhatsApp text. `PropertyHero` derives the spec row from `property.specs` (which directly maps API `table_content` into dynamic specification cards including acreage, total/available plot counts, and square-foot plot size ranges) or falls back to standard dimensions. On mobile and touch screens, `PropertyHero`'s image stage supports horizontal touch swiping (left to advance, right to reverse) through `onTouchStart`/`onTouchEnd` handlers that call `onSelectGallery` across the normalized gallery items. `PriceEmiFuture` derives effective down payment, percentage, principal, tenure months, monthly EMI, total interest/payment, future values, and amortization schedules. `FutureNeighbourhoodMap` derives display labels, horizon-filtered items, map GeoJSON, and demo distance from Gachibowli. `apiPropertyToRecord` supplies all API-to-record normalization.
 
 ## 21a. Sticky-bar clearance
 

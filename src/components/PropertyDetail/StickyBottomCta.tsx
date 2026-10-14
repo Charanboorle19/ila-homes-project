@@ -17,7 +17,9 @@ const DISMISSED_KEY = "ila:sticky-cta-dismissed";
 
 type StickyBottomCtaProps = {
   property: PropertyRecord;
-  heroRef: RefObject<HTMLElement | null>;
+  heroRef?: RefObject<HTMLElement | null>;
+  /** The lifestyle section element; the bar appears after user scrolls to this section. */
+  lifestyleRef?: RefObject<HTMLElement | null>;
   /** The enquiry form this bar duplicates. */
   formRef: RefObject<HTMLElement | null>;
   siteVisitHref: string;
@@ -27,6 +29,7 @@ type StickyBottomCtaProps = {
 export default function StickyBottomCta({
   property,
   heroRef,
+  lifestyleRef,
   formRef,
   siteVisitHref,
   onScheduleVisit,
@@ -86,8 +89,30 @@ export default function StickyBottomCta({
     }
   }
 
+  /**
+   * Show sticky bar once user scrolls to the Lifestyle section.
+   * If lifestyleRef is not present, falls back to hero leaving the viewport.
+   */
   useEffect(() => {
-    const hero = heroRef.current;
+    const targetEl = lifestyleRef?.current;
+    if (targetEl) {
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          // Visible when user reaches the lifestyle section (it is intersecting or has been passed)
+          if (entry.isIntersecting || entry.boundingClientRect.top < window.innerHeight) {
+            setVisible(true);
+          } else {
+            setVisible(false);
+          }
+        },
+        { threshold: 0.05, rootMargin: "0px 0px -50px 0px" },
+      );
+
+      observer.observe(targetEl);
+      return () => observer.disconnect();
+    }
+
+    const hero = heroRef?.current;
     if (!hero) return undefined;
 
     const observer = new IntersectionObserver(
@@ -99,7 +124,7 @@ export default function StickyBottomCta({
 
     observer.observe(hero);
     return () => observer.disconnect();
-  }, [heroRef, property.id]);
+  }, [lifestyleRef, heroRef, property.id]);
 
   /**
    * The bar carries the same two actions as the enquiry form further down, so

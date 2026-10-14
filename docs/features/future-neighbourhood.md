@@ -117,7 +117,7 @@ The implementation does not create individual MapLibre `Marker` objects. It rend
 - `future-origin-halo`, `future-origin-dot`, and `future-origin-label` show the property origin.
 - `future-link-glow` and `future-link-line` draw white underlay and dashed amber connections from origin to each item.
 
-Current items use green (`#1f5c45`) circles; 2029 items use gold (`#c6a46c`). The origin is always gold. Labels are optional to avoid overlap. There is no confirmed marker click handler; place-card clicks perform map fitting instead.
+Current items use green (`#1f5c45`) circles; 2029 items use gold (`#c6a46c`). The property plot origin is indicated with green (`#1f5c45`) dot, halo, and "Your plot" badge. When a landmark is selected, it and its connecting route line are highlighted in vibrant red (`#dc2626`), and a red destination badge displays above the landmark, while unselected items and links are dimmed. Floating card overlays are omitted on both desktop and mobile to ensure a clear, unobstructed map view. Clicking an item smoothly frames both the plot origin and the landmark destination in view. Clicking the selected card again deselects it and restores the map to the full overview. Landmark card names and subtitles wrap onto multiple lines without truncation or ellipsis (`...`).
 
 ## 15. Property-specific behavior
 
@@ -129,6 +129,8 @@ The component state is:
 
 - `horizon: Horizon`, initially `"today"`.
 - `nearBy: boolean`, initially `false`.
+- `selectedItemId: string | null`, tracks the currently focused landmark (or `null` when deselected).
+- `isFullView: boolean`, toggles expanded map mode.
 - `mapFailed: boolean`, initially `false`.
 - `apiPlaces: ApiNearbyPlace[] | null`, initially `null`.
 - `isLoadingApi: boolean`, initially `false`.

@@ -1648,8 +1648,8 @@ export default function GrowthCorridors() {
                         key={item.id}
                         className={`group relative flex w-[80vw] min-h-64 shrink-0 snap-start flex-col overflow-hidden rounded-2xl border p-6 text-left transition duration-300 sm:w-[46vw] lg:w-auto lg:min-w-[20rem] lg:flex-1 lg:flex-basis-0 lg:min-h-0 lg:p-5 xl:min-w-[22rem] ${
                           isActive
-                            ? "border-[#c9a84c] bg-[#241f14]"
-                            : "border-white/15 bg-[#1b1d22] hover:-translate-y-1 hover:border-[#c9a84c]"
+                            ? "border-[#c9a84c] bg-[#14120c]"
+                            : "border-white/10 bg-[#0e1014] hover:-translate-y-1 hover:border-[#c9a84c]"
                         }`}
                       >
                         {/* Property cover image from GET /api/properties, used as the card
@@ -1685,7 +1685,7 @@ export default function GrowthCorridors() {
                             />
                             {/* Dark scrim keeps the card copy above 4.5:1 over
                                 any photo. */}
-                            <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/62 to-black/45" />
+                            <div className="absolute inset-0 bg-linear-to-t from-black/95 via-black/80 to-black/65" />
                           </div>
                         ) : null}
 
@@ -1699,7 +1699,7 @@ export default function GrowthCorridors() {
 
                         <div className="relative z-10 flex flex-1 flex-col">
                           <div className="flex items-start justify-between gap-3">
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#c9a84c] text-[11px] font-bold tabular-nums tracking-wide text-[#c9a84c]">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#c9a84c] text-[11px] font-extrabold tabular-nums tracking-wide text-[#c9a84c]">
                               {String(index + 1).padStart(2, "0")}
                             </span>
                             {/* The property type holds the pill slot. Still desktop-only: the
@@ -1707,7 +1707,7 @@ export default function GrowthCorridors() {
                             the action, and the pill competes with the enlarged
                             heading. */}
                             {item.property_type ? (
-                              <span className="hidden rounded-full bg-white/20 px-2.5 py-1 text-[9px] font-semibold tracking-[0.12em] text-white uppercase sm:inline-block">
+                              <span className="hidden rounded-full bg-white/25 px-2.5 py-1 text-[9px] font-bold tracking-[0.12em] text-white uppercase sm:inline-block">
                                 {item.property_type}
                               </span>
                             ) : null}
@@ -1718,7 +1718,7 @@ export default function GrowthCorridors() {
                               property reads as the card's anchor. Both sizes are
                               fixed rather than responsive: a ramp would make
                               the section heading the larger text again at `lg`. */}
-                          <h3 className="mt-4 min-h-[4rem] text-[26px] font-bold tracking-tight text-white line-clamp-2">
+                          <h3 className="mt-4 min-h-[4rem] text-[26px] font-extrabold tracking-tight text-white line-clamp-2">
                             {item.name}
                           </h3>
 
@@ -1726,7 +1726,7 @@ export default function GrowthCorridors() {
                               state lines that ran past two or three wrapped rows
                               and left every card far taller than its neighbours,
                               none of which helped a buyer decide. */}
-                          <p className="mt-2.5 flex items-start gap-1.5 text-[14px] leading-relaxed font-normal text-white/70">
+                          <p className="mt-2.5 flex items-start gap-1.5 text-[14px] leading-relaxed font-medium text-white/85">
                             <PinIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#c9a84c]" />
                             <span className="break-words">{localityOf(item)}</span>
                           </p>
@@ -1750,17 +1750,17 @@ export default function GrowthCorridors() {
                           {facts && !isSummaryLoading ? (
                             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] leading-snug">
                               <p className="min-w-0">
-                                <span className="font-bold tabular-nums text-[#c9a84c]">
+                                <span className="font-extrabold tabular-nums text-[#c9a84c]">
                                   {facts.availableCount}
                                 </span>
-                                <span className="ml-1 font-medium text-white/60">
+                                <span className="ml-1 font-semibold text-white/75">
                                   {facts.availableCount === 1 ? "plot" : "plots"}
                                 </span>
                               </p>
-                              <p className="min-w-0 font-semibold text-white break-words">
+                              <p className="min-w-0 font-bold text-white break-words">
                                 {sizeLabel ?? "Size on request"}
                               </p>
-                              <p className="min-w-0 font-semibold text-white break-words">
+                              <p className="min-w-0 font-bold text-white break-words">
                                 {facts.priceFrom !== null
                                   ? `From ${formatPrice(facts.priceFrom)}`
                                   : "Price on request"}
@@ -1780,12 +1780,12 @@ export default function GrowthCorridors() {
                             (facts.allEastFacing || facts.hasCorner) ? (
                               <>
                                 {facts.allEastFacing ? (
-                                  <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[12px] font-medium text-white/85">
+                                  <span className="inline-flex items-center rounded-full border border-white/25 bg-black/40 px-2 py-0.5 text-[12px] font-semibold text-white/90">
                                     East facing
                                   </span>
                                 ) : null}
                                 {facts.hasCorner ? (
-                                  <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-[12px] font-medium text-white/85">
+                                  <span className="inline-flex items-center rounded-full border border-white/25 bg-black/40 px-2 py-0.5 text-[12px] font-semibold text-white/90">
                                     Corner plot
                                   </span>
                                 ) : null}
@@ -1801,10 +1801,10 @@ export default function GrowthCorridors() {
                           <div className="mt-2 min-h-[1.25rem]">
                             {item.total_plots != null ? (
                               <p className="flex items-baseline gap-1.5 text-[13px]">
-                                <span className="font-bold text-[#c9a84c]">
+                                <span className="font-extrabold text-[#c9a84c]">
                                   {item.total_plots}
                                 </span>
-                                <span className="font-medium text-white/60">
+                                <span className="font-semibold text-white/75">
                                   {item.total_plots === 1 ? "plot" : "plots"}
                                 </span>
                               </p>

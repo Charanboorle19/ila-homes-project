@@ -26,19 +26,31 @@ import HomeReadyToVisit from "@/components/HomeReadyToVisit";
 export default function Home() {
   return (
     <>
+      {/* 1. Hero */}
       <Hero />
-      {/* Property and unit data is shown here only, from the API. */}
+      {/* 2. Map Section */}
       <MapSection />
-      <WhoWeAre />
+      {/* 3. Growth Corridors (plots by area) */}
       <GrowthCorridors />
+      {/* 4. Find Your Plot */}
       <FindYourPlot />
-      <CompareProperties />
-      <BuyingJourney />
-      <ShortlistShare />
-      <EmiAppreciation />
-      <FromTheField />
+      {/* 5. Plots with Pulse */}
       <PlotsWithPulse />
+      {/* 6. Who We Are */}
+      <WhoWeAre />
+      {/* 7. From The Field */}
+      <FromTheField />
+      {/* 8. EMI & Appreciation Calculator */}
+      <EmiAppreciation />
+      {/* 9. Compare Properties */}
+      <CompareProperties />
+      {/* 10. Shortlist & Share */}
+      <ShortlistShare />
+      {/* 11. Buying Journey */}
+      <BuyingJourney />
+      {/* 12. FAQ */}
       <Faq />
+      {/* 13. Home Ready To Visit */}
       <HomeReadyToVisit />
     </>
   );

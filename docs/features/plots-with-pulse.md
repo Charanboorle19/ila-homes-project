@@ -6,17 +6,17 @@ The homepage `PlotsWithPulse` section presents property cards with activity-styl
 
 ## 2. Where it appears
 
-It appears on the homepage render tree in `src/app/page.tsx`, rendered after `FromTheField` and before `Faq`.
+It appears on the homepage render tree in `src/app/page.tsx`, rendered after `FindYourPlot` and before `WhoWeAre`.
 
 ## 3. Homepage position
 
 The current homepage sequence around the feature is:
 
 ```text
-ShortlistShare → EmiAppreciation → FromTheField → PlotsWithPulse → Faq
+MapSection → GrowthCorridors → FindYourPlot → PlotsWithPulse → WhoWeAre
 ```
 
-The section uses `data-section="compare_plots"` and `id="plots-pulse"`.
+The section uses `data-section="compare_plots"`, `id="plots-pulse"`, and is styled with an inviting, premium light yellow gradient palette (`bg-gradient-to-b from-[#fbf7eb] via-[#fefaf0] to-[#f6f0db]`, subtle gold grid texture, crisp card surfaces, and rich `#8A6A1F` gold accents).
 
 ## 4. Component/file paths
 

@@ -18,15 +18,17 @@ The relevant order in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx
 
 1. `Hero`
 2. `MapSection`
-3. `WhoWeAre`
-4. `GrowthCorridors`
-5. `FindYourPlot`
-6. `BuyingJourney`
-7. `ShortlistShare`
+3. `GrowthCorridors`
+4. `FindYourPlot`
+5. `PlotsWithPulse`
+6. `WhoWeAre`
+7. `FromTheField`
 8. `EmiAppreciation`
-9. `FromTheField`
-10. `PlotsWithPulse`
-11. `Faq`
+9. `CompareProperties`
+10. `ShortlistShare`
+11. `BuyingJourney`
+12. `Faq`
+13. `HomeReadyToVisit`
 
 ## 4. Component and data paths
 

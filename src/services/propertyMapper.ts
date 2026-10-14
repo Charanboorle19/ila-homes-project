@@ -735,7 +735,9 @@ export function apiPropertyToRecord(
     text(property.price_label).replace(/\s+-\s+/g, " – ") ||
     (priceCeiling && priceCeiling > (priceFloor ?? priceValue)
       ? `${exactPrice(priceFloor ?? priceValue)} – ${exactPrice(priceCeiling)}`
-      : "");
+      : priceValue > 0
+        ? exactPrice(priceValue)
+        : "Price on request");
 
   const possessionParts = [
     titleCase(property.possession_status),
@@ -750,26 +752,56 @@ export function apiPropertyToRecord(
     : [];
   const lifestyle = amenitiesToLifestyle(amenities);
 
-  // Spec cells replace the static Size/Facing/Dimensions/Road row, which has
-  // nothing to show for a record that publishes neither facing nor dimensions.
+  // Spec cells replace the static Size/Facing/Dimensions/Road row.
+  // 1. If the API returns `table_content`, format its columns directly into specs.
   const specs: { label: string; value: string }[] = [];
-  if (sqYards !== "—") {
-    specs.push({ label: "Plot size", value: `${sqYards} sq yd` });
+
+  if (Array.isArray(property.table_content) && property.table_content.length > 0) {
+    for (const entry of property.table_content) {
+      if (!entry || !entry.column_name) continue;
+      const colName = entry.column_name.trim();
+      const val = entry.value;
+
+      let formattedVal = "";
+      if (val !== null && typeof val === "object" && ("min" in val || "max" in val)) {
+        const minVal = val.min != null ? Number(val.min) : undefined;
+        const maxVal = val.max != null ? Number(val.max) : undefined;
+        formattedVal = range(minVal, maxVal);
+      } else if (typeof val === "number") {
+        formattedVal = count(val);
+      } else if (typeof val === "string" && val.trim()) {
+        formattedVal = val.trim();
+      }
+
+      if (formattedVal && formattedVal !== "—") {
+        specs.push({
+          label: colName,
+          value: formattedVal,
+        });
+      }
+    }
   }
-  if (areaSqFt !== "—") {
-    specs.push({ label: "Plot size (sq ft)", value: `${areaSqFt} sq ft` });
-  }
-  if (projectAcres !== undefined) {
-    specs.push({ label: "Project area", value: `${count(projectAcres)} acres` });
-  }
-  if (totalPlots > 0) {
-    specs.push({ label: "Plots", value: count(totalPlots) });
-  }
-  if (text(property.configuration)) {
-    specs.push({
-      label: "Configuration",
-      value: titleCase(property.configuration),
-    });
+
+  // 2. Fall back to standard fields if table_content is empty
+  if (specs.length === 0) {
+    if (sqYards !== "—") {
+      specs.push({ label: "Plot size", value: `${sqYards} sq yd` });
+    }
+    if (areaSqFt !== "—") {
+      specs.push({ label: "Plot size (sq ft)", value: `${areaSqFt} sq ft` });
+    }
+    if (projectAcres !== undefined) {
+      specs.push({ label: "Project area", value: `${count(projectAcres)} acres` });
+    }
+    if (totalPlots > 0) {
+      specs.push({ label: "Plots", value: count(totalPlots) });
+    }
+    if (text(property.configuration)) {
+      specs.push({
+        label: "Configuration",
+        value: titleCase(property.configuration),
+      });
+    }
   }
 
   return {

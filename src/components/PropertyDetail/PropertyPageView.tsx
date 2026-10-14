@@ -36,6 +36,7 @@ export default function PropertyPageView({
   imagesLoading = false,
 }: PropertyPageViewProps) {
   const heroRef = useRef<HTMLElement | null>(null);
+  const lifestyleRef = useRef<HTMLDivElement | null>(null);
   /** The enquiry form, so the sticky bar can step aside while it is on screen. */
   const formRef = useRef<HTMLElement | null>(null);
 
@@ -122,7 +123,9 @@ export default function PropertyPageView({
 
       <LifeStageMatch property={property} />
       <FutureNeighbourhoodMap property={property} />
-      <Lifestyle key={property.id} property={property} />
+      <div ref={lifestyleRef} className="scroll-mt-24">
+        <Lifestyle key={property.id} property={property} />
+      </div>
       <div id="affordability-financing" className="scroll-mt-24">
         <AffordabilityFinancing property={property} />
       </div>
@@ -137,6 +140,7 @@ export default function PropertyPageView({
       <StickyBottomCta
         property={property}
         heroRef={heroRef}
+        lifestyleRef={lifestyleRef}
         formRef={formRef}
         siteVisitHref="#next-step"
         onScheduleVisit={scrollToNextStep}

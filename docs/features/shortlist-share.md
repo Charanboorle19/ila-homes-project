@@ -16,17 +16,19 @@ The feature appears on the homepage route `/` as the `ShortlistShare` section. I
 
 1. `Hero`
 2. `MapSection`
-3. `WhoWeAre`
-4. `GrowthCorridors`
-5. `FindYourPlot`
-6. `BuyingJourney`
-7. `ShortlistShare`
+3. `GrowthCorridors`
+4. `FindYourPlot`
+5. `PlotsWithPulse`
+6. `WhoWeAre`
+7. `FromTheField`
 8. `EmiAppreciation`
-9. `FromTheField`
-10. `PlotsWithPulse`
-11. `Faq`
+9. `CompareProperties`
+10. `ShortlistShare`
+11. `BuyingJourney`
+12. `Faq`
+13. `HomeReadyToVisit`
 
-Therefore, Shortlist / WhatsApp Share appears immediately after the homepage Buying Guide (`BuyingJourney`) and before `EmiAppreciation`.
+Shortlist / WhatsApp Share appears between `CompareProperties` and `BuyingJourney`, styled with a sleek dark palette (`#14171c` canvas, `#1b1e24` and `#1c2026` card surfaces, `#c9a84c` gold accents, and `#f7f4ee` text).
 
 ## 4. Component/file paths
 

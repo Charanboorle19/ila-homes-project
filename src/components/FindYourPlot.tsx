@@ -487,7 +487,7 @@ function MatchCard({
         <span className="sr-only">View {match.label}</span>
       </Link>
 
-      <div className="pointer-events-none relative flex flex-1 items-center gap-4 px-5 py-3">
+      <div className="pointer-events-none relative flex flex-1 items-center gap-3 px-3.5 py-3 sm:gap-4 sm:px-5">
         {/* The thumbnail slot is ALWAYS rendered, at a fixed 56px, whether or not
             there is an image.
 
@@ -525,7 +525,7 @@ function MatchCard({
           {/* The micro-label pair carries both the rank and the state, so the
               gold alone is never the claim — the same rule the compare table's
               "Best match" / "Pinned" labels follow. */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-bold tracking-[0.14em] text-[#6b7280] tabular-nums uppercase">
               {label}
             </span>
@@ -536,19 +536,12 @@ function MatchCard({
             ) : null}
           </div>
 
-          <h3 className="mt-0.5 truncate text-[15px] font-bold tracking-tight text-[#f2f0ea]">
+          <h3 className="mt-0.5 text-[14px] font-bold tracking-tight text-[#f2f0ea] break-words sm:text-[15px]">
             {match.label}
           </h3>
 
           {/* Both fields are always rendered, so every row starts and ends its
-              text in the same place.
-
-              `localityName` is null when the property has no `location_id`, or
-              when its locality falls outside the 100 rows fetched. `formatPrice`
-              already answers "Price on request" for a null or zero price, so
-              the price side is never empty once the property record has loaded.
-              Before it loads both read as unavailable rather than the whole
-              line disappearing, which is what shifted the rows around. */}
+              text in the same place. */}
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px]">
             <span className="text-[#8a909e]">
               {localityName ?? (
@@ -566,9 +559,9 @@ function MatchCard({
           {/* Only rendered when more than one criterion was picked; with one,
               the headline already is that criterion's score. */}
           {match.breakdown.length > 0 ? (
-            <ul className="mt-1 flex flex-wrap gap-x-3 text-[11px] leading-snug text-[#6b7280]">
+            <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-snug text-[#6b7280]">
               {match.breakdown.map((entry) => (
-                <li key={entry.label} className="truncate">
+                <li key={entry.label} className="break-words">
                   {entry.label}{" "}
                   <span className="font-semibold tabular-nums text-[#8a909e]">
                     {entry.score}/10
@@ -581,29 +574,26 @@ function MatchCard({
 
         {/* The score, right-aligned over its own proportion bar. Gold on the top
             match and neutral grey on the rest, matching the compare table's
-            score bars.
-
-            The bar is `aria-hidden`: the figure above it is the accessible
-            value, and a second announcement of the same number helps nobody. */}
-        <div className="flex w-24 shrink-0 flex-col items-end">
+            score bars. */}
+        <div className="flex w-16 shrink-0 flex-col items-end sm:w-20">
           {match.badge ? (
             <>
               <span
-                className={`text-[15px] font-bold tabular-nums ${
+                className={`text-[14px] font-bold tabular-nums sm:text-[15px] ${
                   isTop ? "text-[#c6a46c]" : "text-[#e8e6e1]"
                 }`}
               >
                 {match.badge}
               </span>
-              <span className="text-[11px] text-[#8a909e]">match</span>
+              <span className="text-[10px] text-[#8a909e] sm:text-[11px]">match</span>
             </>
           ) : (
-            <span className="text-[12px] text-[#6b7280]">Unscored</span>
+            <span className="text-[11px] text-[#6b7280] sm:text-[12px]">Unscored</span>
           )}
 
           <div
             aria-hidden="true"
-            className="mt-2 h-[3px] w-full overflow-hidden rounded-full bg-white/10"
+            className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-white/10"
           >
             <div
               className={`h-full rounded-full transition-all duration-500 ${
@@ -614,22 +604,20 @@ function MatchCard({
           </div>
         </div>
 
-        {/* The only control on the row, and 44px on its longest axis.
-            `pointer-events-auto` takes clicks back from the wrapper above;
-            `relative z-10` keeps it above the stretched link visually. */}
+        {/* The favourite button */}
         <button
           type="button"
           aria-pressed={isSaved}
           aria-label={isSaved ? `Remove ${match.label} from saved` : `Save ${match.label}`}
           disabled={isSaving}
           onClick={() => onFavoriteToggle(match.id)}
-          className={`pointer-events-auto relative z-10 flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full border transition disabled:cursor-default disabled:opacity-70 ${
+          className={`pointer-events-auto relative z-10 flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-full border transition sm:h-11 sm:w-11 disabled:cursor-default disabled:opacity-70 ${
             isSaved
               ? "border-[#c6a46c] bg-[#c6a46c] text-[#1c1f24]"
               : "border-[rgba(242,240,234,0.15)] bg-white/5 text-[#8a909e] hover:border-[#c6a46c] hover:text-[#c6a46c]"
           }`}
         >
-          <HeartIcon filled={isSaved} className="h-5 w-5" />
+          <HeartIcon filled={isSaved} className="h-4 w-4 sm:h-5 sm:w-5" />
         </button>
       </div>
     </article>
@@ -715,14 +703,14 @@ function ResultsHeader({
           scrolls rather than wrapping, and `-mx-5 px-5` bleeds it to the band's
           edges so a long criterion list never detaches from it. */}
       {criteria.length > 0 ? (
-        <div className="-mx-5 flex w-full items-center gap-1.5 overflow-x-auto px-5 pt-1 scrollbar-none">
+        <div className="flex w-full flex-wrap items-center gap-1.5 pt-1">
           <span className="mr-1 shrink-0 text-[10px] font-bold tracking-[0.16em] text-[#6b7280] uppercase">
             Criteria
           </span>
           {criteria.map((name) => (
             <span
               key={name}
-              className="shrink-0 rounded-full bg-[#c6a46c] px-3 py-1 text-[11px] font-semibold whitespace-nowrap text-[#0f1114]"
+              className="rounded-full bg-[#c6a46c] px-2.5 py-0.5 text-[11px] font-semibold text-[#0f1114]"
             >
               {name}
             </span>
@@ -1732,7 +1720,7 @@ export default function FindYourPlot() {
             role="dialog"
             aria-modal="true"
             aria-label="Your plot matches"
-            className="animate-sheet-up ila-scroll-dark absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-[rgba(242,240,234,0.12)] bg-[#1c1f24] px-4 pt-3 pb-6 shadow-[0_-16px_40px_rgba(0,0,0,0.35)]"
+            className="animate-sheet-up ila-scroll-dark absolute inset-x-0 bottom-0 max-h-[85vh] w-full min-w-0 overflow-x-hidden overflow-y-auto rounded-t-2xl border-t border-[rgba(242,240,234,0.12)] bg-[#1c1f24] px-3.5 pt-3 pb-6 shadow-[0_-16px_40px_rgba(0,0,0,0.35)] sm:px-4"
           >
             <div className="relative mb-3 flex items-center justify-center">
               <span className="h-1 w-10 rounded-full bg-white/20" aria-hidden />

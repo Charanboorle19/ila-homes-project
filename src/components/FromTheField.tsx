@@ -2,8 +2,11 @@
 
 import Image, { type StaticImageData } from "next/image";
 import { useEffect, useState } from "react";
-import reelFallbackThumb from "@/app/assets/plots-pulse/mansanpally.jpg";
 import defaultProfile from "@/app/assets/about-panel/hero-property.jpg";
+import plotKokapet from "@/app/assets/plots-pulse/kokapet.jpg";
+import plotMansanpally from "@/app/assets/plots-pulse/mansanpally.jpg";
+import plotNallagandla from "@/app/assets/plots-pulse/nallagandla.jpg";
+import plotHero from "@/app/assets/Hero-image.png";
 import {
   fetchActiveTenantReels,
   type TenantReel,
@@ -77,6 +80,38 @@ function ReelGlyphIcon() {
       <rect x="2" y="2" width="20" height="20" rx="4" />
       <path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" />
     </svg>
+  );
+}
+
+const REEL_FALLBACK_IMAGES: StaticImageData[] = [
+  plotMansanpally,
+  plotKokapet,
+  plotNallagandla,
+  plotHero,
+];
+
+function ReelPlaceholderCard({
+  index = 0,
+  title,
+  location,
+}: {
+  index?: number;
+  title?: string;
+  location?: string;
+}) {
+  const image = REEL_FALLBACK_IMAGES[index % REEL_FALLBACK_IMAGES.length];
+
+  return (
+    <div className="from-field__placeholder-canvas" aria-hidden="true">
+      <Image
+        className="from-field__thumb"
+        src={image}
+        alt=""
+        fill
+        sizes="(max-width: 980px) 72vw, 20vw"
+        draggable={false}
+      />
+    </div>
   );
 }
 
@@ -189,7 +224,7 @@ export default function FromTheField({
               ) : null}
 
               {!reelLoading && !reelError &&
-                reels.map((reel) => {
+                reels.map((reel, index) => {
                   const title = reel.title || "Latest ILA Homes reel";
                   return (
                     <a
@@ -201,14 +236,19 @@ export default function FromTheField({
                       role="listitem"
                       aria-label={`Watch ${title} on Instagram`}
                     >
-                      <Image
-                        className="from-field__thumb"
-                        src={reel.thumbnail_url || reelFallbackThumb}
-                        alt=""
-                        fill
-                        sizes="(max-width: 1100px) 14vw, 18vw"
-                        draggable={false}
-                      />
+                      {reel.thumbnail_url ? (
+                        <Image
+                          className="from-field__thumb"
+                          src={reel.thumbnail_url}
+                          alt=""
+                          fill
+                          sizes="(max-width: 1100px) 14vw, 18vw"
+                          draggable={false}
+                          unoptimized={reel.thumbnail_url.startsWith("http")}
+                        />
+                      ) : (
+                        <ReelPlaceholderCard index={index} title={title} location={reel.location} />
+                      )}
                       {reel.duration ? (
                         <span className="from-field__duration">
                           {reel.duration}
@@ -337,7 +377,7 @@ export default function FromTheField({
               role="list"
               aria-label="Ground walkthrough reels"
             >
-              {reels.map((reel) => {
+              {reels.map((reel, index) => {
                 const title = reel.title || "Walkthrough reel";
                 return (
                   <a
@@ -349,14 +389,19 @@ export default function FromTheField({
                     role="listitem"
                     aria-label={`Watch ${title} on Instagram`}
                   >
-                    <Image
-                      className="from-field__mobile-reel-thumb"
-                      src={reel.thumbnail_url || reelFallbackThumb}
-                      alt=""
-                      fill
-                      sizes="72vw"
-                      draggable={false}
-                    />
+                    {reel.thumbnail_url ? (
+                      <Image
+                        className="from-field__mobile-reel-thumb"
+                        src={reel.thumbnail_url}
+                        alt=""
+                        fill
+                        sizes="72vw"
+                        draggable={false}
+                        unoptimized={reel.thumbnail_url.startsWith("http")}
+                      />
+                    ) : (
+                      <ReelPlaceholderCard index={index} title={title} location={reel.location} />
+                    )}
                     <div className="from-field__mobile-reel-overlay">
                       <div className="from-field__mobile-reel-top">
                         <span className="from-field__post-reel-badge">
@@ -401,14 +446,22 @@ export default function FromTheField({
               rel="noopener noreferrer"
               aria-label="Watch the latest ILA Homes walkthrough reel on Instagram"
             >
-              <Image
-                className="from-field__mobile-reel-thumb"
-                src={reels[0].thumbnail_url || reelFallbackThumb}
-                alt=""
-                fill
-                sizes="(max-width: 980px) 92vw, 420px"
-                draggable={false}
-              />
+              {reels[0].thumbnail_url ? (
+                <Image
+                  className="from-field__mobile-reel-thumb"
+                  src={reels[0].thumbnail_url}
+                  alt=""
+                  fill
+                  sizes="(max-width: 980px) 92vw, 420px"
+                  draggable={false}
+                  unoptimized={reels[0].thumbnail_url.startsWith("http")}
+                />
+              ) : (
+                <ReelPlaceholderCard
+                  title={reels[0].title || "Latest ILA Homes reel"}
+                  location={reels[0].location}
+                />
+              )}
               <div className="from-field__mobile-reel-overlay">
                 <div className="from-field__mobile-reel-top">
                   <span className="from-field__post-reel-badge">

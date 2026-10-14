@@ -143,6 +143,10 @@ export type ApiProperty = {
     south: number;
   } | null;
   metadata: Record<string, unknown> | null;
+  table_content?: Array<{
+    column_name: string;
+    value: string | number | { min?: number | null; max?: number | null } | null;
+  }> | null;
 };
 
 export type ApiPropertyDocument = {

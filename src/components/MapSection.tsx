@@ -28,6 +28,7 @@ import {
   estatePlaceholderFromProperty,
   propertyAnchor,
 } from "@/data/projects/fromApi";
+import { layoutCordsToBounds } from "@/data/projects/layoutRasters";
 import { getPropertyById, type PropertyRecord } from "@/data/properties";
 import {
   fetchProperties,
@@ -1227,12 +1228,12 @@ export default function MapSection({
       const effectiveTifUrl = tifUrl ?? (previewIsTiff ? layoutPreviewUrl : null);
       const effectivePreviewUrl = previewIsTiff ? null : layoutPreviewUrl;
 
-      let imageUrl = effectiveTifUrl ?? effectivePreviewUrl;
+      let imageUrl: string | null = effectiveTifUrl ?? effectivePreviewUrl;
       let useTiff = Boolean(effectiveTifUrl);
       if (!imageUrl) return;
 
       for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const currentImageUrl = imageUrl;
+        const currentImageUrl: string | null = imageUrl;
         if (!currentImageUrl) return;
         let raster = useTiff
           ? await loadLayoutRaster({

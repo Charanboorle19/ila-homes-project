@@ -1869,18 +1869,56 @@ export default function MapSection({
   }, []);
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    if (mapFullscreen) {
-      document.body.style.overflow = "hidden";
+    const onFullscreenChange = () => {
+      const isFs = Boolean(
+        document.fullscreenElement ||
+          (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement,
+      );
+      setMapFullscreen(isFs);
+      window.requestAnimationFrame(() => {
+        applyInteractionsRef.current();
+        mapRef.current?.resize();
+      });
+    };
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+    };
+  }, []);
+
+  const toggleNativeFullscreen = () => {
+    const el = sectionRef.current;
+    if (!el) return;
+
+    if (!document.fullscreenElement) {
+      if (el.requestFullscreen) {
+        void el.requestFullscreen().catch(() => setMapFullscreen(true));
+      } else if ((el as unknown as { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen) {
+        void (el as unknown as { webkitRequestFullscreen: () => Promise<void> }).webkitRequestFullscreen();
+      } else {
+        setMapFullscreen(true);
+      }
     } else {
-      document.body.style.overflow = previousOverflow;
+      if (document.exitFullscreen) {
+        void document.exitFullscreen().catch(() => setMapFullscreen(false));
+      } else if ((document as unknown as { webkitExitFullscreen?: () => Promise<void> }).webkitExitFullscreen) {
+        void (document as unknown as { webkitExitFullscreen: () => Promise<void> }).webkitExitFullscreen();
+      } else {
+        setMapFullscreen(false);
+      }
     }
+  };
+
+  useEffect(() => {
     const id = window.requestAnimationFrame(() => {
       applyInteractionsRef.current();
       mapRef.current?.resize();
     });
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.cancelAnimationFrame(id);
     };
   }, [mapFullscreen]);
@@ -1907,10 +1945,10 @@ export default function MapSection({
         zoom: 11.4,
         pitch: 0,
         attributionControl: { compact: true },
-        dragRotate: false,
-        pitchWithRotate: false,
-        touchPitch: false,
-        cooperativeGestures: isMobileScreen,
+        dragRotate: true,
+        pitchWithRotate: true,
+        touchPitch: true,
+        cooperativeGestures: false,
       });
     } catch (error) {
       console.error("Unable to initialize the developments map", error);
@@ -2000,49 +2038,13 @@ export default function MapSection({
 
     const applyMobileInteractions = () => {
       clearMobileTouchListeners();
-      const isMobile = mobileQuery.matches;
-      const fullscreen = mapFullscreenRef.current;
-
-      if (isMobile && !fullscreen) {
-        // Embedded map on mobile: cooperative gestures handles 2-finger panning & pinch zoom,
-        // allowing single-finger vertical page scroll through the map canvas.
-        map.cooperativeGestures?.enable();
-        map.scrollZoom.enable();
-        map.dragPan.enable();
-        map.touchZoomRotate.enable();
-        map.touchZoomRotate.disableRotation();
-        map.dragRotate.disable();
-        map.touchPitch.disable();
-        setMobileTouchAction(true);
-        return;
-      }
-
-      // Fullscreen (expanded): full free map interaction (scroll zoom + drag pan)
-      if (fullscreen) {
-        map.cooperativeGestures?.disable();
-        map.scrollZoom.enable();
-        map.dragPan.enable();
-        map.touchZoomRotate.enable();
-        map.dragRotate.disable();
-        map.touchPitch.disable();
-        if (isMobile) {
-          map.touchZoomRotate.disableRotation();
-        } else {
-          map.touchZoomRotate.enableRotation();
-        }
-        setMobileTouchAction(false);
-        return;
-      }
-
-      // Embedded on desktop: prevent scroll/touchpad from capturing page scroll,
-      // require clicking maximize / fullscreen button to interact freely.
+      // Unrestricted full interaction on both desktop and mobile:
       map.cooperativeGestures?.disable();
-      map.scrollZoom.disable();
+      map.scrollZoom.enable();
       map.dragPan.enable();
       map.touchZoomRotate.enable();
-      map.dragRotate.disable();
-      map.touchPitch.disable();
       map.touchZoomRotate.enableRotation();
+      map.dragRotate.enable();
       setMobileTouchAction(false);
     };
 
@@ -2759,8 +2761,8 @@ export default function MapSection({
         mapFullscreen
           ? "fixed inset-0 z-50 flex w-full flex-col overflow-hidden bg-neutral-200"
           : className
-            ? `relative flex w-full flex-col overflow-hidden bg-[#ebe6de] md:bg-neutral-200 ${className}`
-            : "relative flex h-[calc(100svh-var(--nav-h))] w-full flex-col overflow-hidden bg-[#ebe6de] md:h-[calc(100dvh-var(--nav-h))] md:bg-neutral-200"
+            ? `relative flex w-full flex-col overflow-hidden bg-neutral-200 ${className}`
+            : "relative flex h-[calc(100vh-var(--nav-h))] min-h-[calc(100vh-var(--nav-h))] w-full flex-col overflow-hidden bg-neutral-200"
       }
       aria-label="ILA Homes developments map"
       aria-busy={remoteStatus === "loading"}
@@ -2839,10 +2841,12 @@ export default function MapSection({
         className={
           mapFullscreen
             ? "ila-map-frame ila-map-frame--fullscreen relative min-h-0 flex-1 overflow-hidden bg-neutral-200"
-            : "ila-map-frame relative mx-2 mb-2 min-h-72 flex-1 overflow-hidden rounded-xl border border-black/10 bg-neutral-200 shadow-[0_12px_36px_rgba(15,23,42,0.14)] md:absolute md:inset-3 md:m-0 md:min-h-0 md:rounded-xl"
+            : singlePropertyId
+              ? "ila-map-frame relative mx-2 mb-2 min-h-72 flex-1 overflow-hidden rounded-xl border border-black/10 bg-neutral-200 shadow-[0_12px_36px_rgba(15,23,42,0.14)] md:absolute md:inset-3 md:m-0 md:min-h-0 md:rounded-xl"
+              : "ila-map-frame relative h-full min-h-[400px] flex-1 overflow-hidden bg-neutral-200 md:absolute md:inset-0 md:m-0"
         }
       >
-        <div ref={mapContainerRef} className="absolute inset-0 h-full w-full" />
+        <div ref={mapContainerRef} className="absolute inset-0 h-full w-full min-h-full" />
 
         {mapError ? (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#ebe6de]/95 px-6 text-center">
@@ -2891,7 +2895,7 @@ export default function MapSection({
           <button
             type="button"
             aria-label="Exit fullscreen map"
-            onClick={() => setMapFullscreen(false)}
+            onClick={toggleNativeFullscreen}
             className="pointer-events-auto absolute top-3 left-3 z-30 flex items-center gap-2 rounded-lg bg-[#171717] px-3 py-2.5 text-xs font-semibold tracking-[0.12em] text-white uppercase shadow-[0_8px_24px_rgba(15,23,42,0.28)] transition hover:bg-[#333333]"
           >
             ← Back
@@ -2912,19 +2916,7 @@ export default function MapSection({
           </div>
         ) : null}
 
-        {/* Desktop zoom / touchpad hint: indicates using the maximize button when scrolling while embedded */}
-        {!mapFullscreen && desktopScrollHint ? (
-          <div
-            className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-40 hidden md:flex items-center gap-2 rounded-full border border-black/15 bg-neutral-900/90 px-4 py-2 text-xs font-semibold text-white shadow-xl backdrop-blur-sm animate-map-hint-fade"
-            role="status"
-          >
-            <span>Tap the maximize button</span>
-            <span className="flex h-5 w-5 items-center justify-center rounded bg-white/20 text-[10px]">
-              ⤢
-            </span>
-            <span>to freely zoom and interact</span>
-          </div>
-        ) : null}
+
 
         {!hideDetails && panelOpen ? (
           <aside className="pointer-events-none absolute inset-y-0 left-0 z-20 hidden w-88 flex-col py-3 pl-3 md:flex sm:py-4">
@@ -3349,10 +3341,8 @@ export default function MapSection({
             <button
               type="button"
               aria-label="Open map fullscreen"
-              title="Maximize map to interact freely"
-              onClick={() => {
-                setMapFullscreen(true);
-              }}
+              title="Maximize map to full screen"
+              onClick={toggleNativeFullscreen}
               className="pointer-events-auto ila-fullscreen-hint flex h-10 w-10 items-center justify-center rounded-lg border border-black/15 bg-[#d9d2c7] text-[#171717] shadow-[0_8px_20px_rgba(15,23,42,0.14)] transition hover:bg-[#cfc3a8]"
             >
               <ExpandIcon className="h-4 w-4" />

@@ -1,10 +1,10 @@
 # Wishlist / Favourites feature
 
-This document describes the current Wishlist / Favourites-related implementation only. The codebase currently contains separate API favourites, Property Details local-storage wishlist flags, and homepage Shortlist / WhatsApp Share state. They are documented separately below and must not be treated as one shared store.
+This document describes the current Wishlist / Favourites-related implementation only. The codebase currently contains separate API favourites, Property Details local-storage wishlist flags, and `ShortlistShare` state. They are documented separately below and must not be treated as one shared store.
 
 ## 1. Feature purpose
 
-The current implementation lets a visitor save API-backed properties as favourites from the Property List, mark a Property Details record as being in a local wishlist, or mark it as interested. The homepage `ShortlistShare` section separately lets a visitor select API property UUIDs and share tracked property links through WhatsApp.
+The current implementation lets a visitor save API-backed properties as favourites from the Property List, mark a Property Details record as being in a local wishlist, or mark it as interested. The `ShortlistShare` component separately lets a visitor select API property UUIDs and share tracked property links through WhatsApp; it was a homepage section and is currently unmounted (see `docs\features\shortlist-share.md` §2).
 
 There is no single Wishlist page, no confirmed cross-feature favourites route, and no unified client-side store combining these behaviors.
 
@@ -14,7 +14,7 @@ The API-backed favourite control appears on each card in the `/properties` catal
 
 The local-storage Wishlist and Interested controls appear in the final CTA section of each Property Details page at `/properties/{propertyId}`. They are rendered by `PropertyFinalCta`.
 
-The separate Shortlist / WhatsApp Share section appears on the homepage `/`, with root `id="shortlist-share"` and `aria-label="Shortlist and share"`.
+The separate Shortlist / WhatsApp Share component is **not currently mounted**. It previously appeared on the homepage `/` with root `id="shortlist-share"` and `aria-label="Shortlist and share"`; `/` now renders `MapSection` alone.
 
 No favourite control is confirmed in `MapSection` or the map `PropertySheet`.
 
@@ -266,7 +266,7 @@ Property Enquiry uses WhatsApp and email links with separate `ENQUIRY_CLICK` and
 
 ## 27. Relationship with Shortlist / Share
 
-The homepage `ShortlistShare` feature is separate from both API favourites and Property Details Wishlist. It selects API property UUIDs, starts with no pinned properties, creates one tracked share per selected property, and sends the resulting links to WhatsApp.
+The `ShortlistShare` feature is separate from both API favourites and Property Details Wishlist. It selects API property UUIDs, starts with no pinned properties, creates one tracked share per selected property, and sends the resulting links to WhatsApp. It is currently unmounted.
 
 It does not read or write `ila-wishlist-{id}` / `ila-interested-{id}`, does not call the favourites API, and does not synchronize with `PropertiesList`, `MapSection`, or Property Details. Wishlist and Shortlist are not the same system in the current implementation.
 
@@ -334,7 +334,7 @@ ShortlistShare depends on React hooks, Next.js `Image`, static image assets, `fe
 
 ## 35. Important constraints
 
-- Preserve the distinction between API favourites, Property Details localStorage Wishlist/Interested flags, and homepage Shortlist / WhatsApp Share.
+- Preserve the distinction between API favourites, Property Details localStorage Wishlist/Interested flags, and `ShortlistShare` / WhatsApp Share.
 - Treat the API favourite entity as the API property UUID sent in `property_id`; do not document the homepage shortlist selection as the same entity.
 - Preserve the API routes and visitor header: `GET /api/favorites`, `POST /api/favorites` with `{ property_id }`, `DELETE /api/favorites/{id}`, and `X-Visitor-Code`.
 - Preserve localStorage key formats `ila-wishlist-{id}` and `ila-interested-{id}` and values `"1"` / `"0"` when describing the Property Details implementation.

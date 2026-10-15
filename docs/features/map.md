@@ -2,12 +2,12 @@
 
 ## 1. Feature purpose
 
-The project has two MapLibre-based map experiences on the home page (`/`):
+The project has two MapLibre-based map components:
 
 - `MapSection` displays API-backed properties, property pins, and selectable estate/plot layouts.
 - `GrowthCorridors` displays API-backed locations/localities and lets the visitor inspect a location and its properties.
 
-The home page renders them in this order: `MapSection`, then `GrowthCorridors` (`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx`).
+**Only `MapSection` is rendered on the home page (`/`)**, and it is the only section that route contains (`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx`). `GrowthCorridors` still exists in the source but is no longer imported by the homepage; everything documented about it below describes the component as it stands, not a live part of `/`.
 
 ## 2. User interaction / flow
 
@@ -239,7 +239,7 @@ The separate catalogue at `/properties` renders `PropertiesList` and does not sh
 
 `MapSection` has its own `query` state for filtering the visible property/plot panel. It is not connected to the homepage hero search state.
 
-`Hero` (`src/components/Hero.tsx`) accepts a typed query, tracks `PROPERTY_SEARCH`, and scrolls to `#projects` or navigates to `/#projects`. `scrollToProjects` looks up `PROJECTS_ANCHOR_ID` with `document.getElementById` and calls `scrollIntoView({ behavior: "smooth", block: "start" })`; it returns `false` when the element is absent so `onSearch`/`onViewMap` fall back to `router.push("/#projects")`. The target exists: `MapSection` renders `id="projects"` on its root `<section>`, and it is the only such id on `/`.
+`Hero` (`src/components/Hero.tsx`) accepts a typed query, tracks `PROPERTY_SEARCH`, and scrolls to `#projects` or navigates to `/#projects`. `scrollToProjects` looks up `PROJECTS_ANCHOR_ID` with `document.getElementById` and calls `scrollIntoView({ behavior: "smooth", block: "start" })`; it returns `false` when the element is absent so `onSearch`/`onViewMap` fall back to `router.push("/#projects")`. The target exists: `MapSection` renders `id="projects"` on its root `<section>`, and it is the only such id on `/`. **`Hero` is no longer mounted on `/`, so nothing on the homepage triggers that scroll; the `id` and the anchor links in `Navbar`/`Footer` still resolve.**
 
 ## 17. How the map connects to Locations
 
@@ -249,10 +249,10 @@ The selected location's `slug` is sent as `location_slug` to the properties endp
 
 ## 18. Related pages and routes
 
-- `/` — renders `MapSection` and `GrowthCorridors`.
+- `/` — renders `MapSection` only. `GrowthCorridors` is not mounted here.
 - `/properties` — renders the live `PropertiesList` catalogue.
 - `/properties/{propertyId}` — renders `PropertyPageView` for local static ids or `ApiPropertyView` for API UUIDs.
-- `/#projects` — hero search fallback target; resolved to the `MapSection` root section, which carries `id="projects"`.
+- `/#projects` — hero search fallback target; resolved to the `MapSection` root section, which carries `id="projects"`. It is now the only fragment target on `/`. The `#contact` links the desktop sidebar CTA and the plot read-out render use no longer have a target, because `FindYourPlot` — which carried `id="contact"` — is no longer mounted.
 - `/api/properties`, `/api/properties/{id}`, `/api/properties/{id}/units`, and `/api/locations` — remote API paths consumed by the map.
 
 ## 19. External services/integrations

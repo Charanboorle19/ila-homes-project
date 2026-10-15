@@ -1,6 +1,6 @@
 # Buying Guide feature
 
-This document describes the current homepage Buying Guide implementation only. In source, the feature is named `BuyingJourney`; “Buying Guide” refers to the same homepage section. The separate Property Details component `BuyingJourneySteps` is documented only where its relationship to this feature is relevant.
+This document describes the current Buying Guide implementation only. In source, the feature is named `BuyingJourney`; “Buying Guide” refers to the same component. The separate Property Details component `BuyingJourneySteps` is documented only where its relationship to this feature is relevant. The component is currently unmounted — see §2.
 
 ## 1. Feature purpose
 
@@ -8,11 +8,11 @@ The feature explains the plot-purchase process from selecting a plot through sit
 
 ## 2. Where it appears
 
-The feature appears on the homepage route `/` as the `BuyingJourney` section. It is not a separate confirmed route or API-backed catalogue.
+**The feature is not currently mounted anywhere.** It appeared on the homepage route `/` as the `BuyingJourney` section; `/` now renders `MapSection` alone (`src/app/page.tsx`). It is not a separate confirmed route or API-backed catalogue.
 
 ## 3. Homepage position
 
-`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` renders the relevant homepage sequence as:
+There is no current position. `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` previously rendered this sequence:
 
 1. `Hero`
 2. `MapSection`
@@ -26,13 +26,13 @@ The feature appears on the homepage route `/` as the `BuyingJourney` section. It
 10. `PlotsWithPulse`
 11. `Faq`
 
-Therefore, the Buying Guide appears immediately after Find Your Plot and before Shortlist Share.
+The Buying Guide therefore used to appear immediately after Find Your Plot and before Shortlist Share. Only entry 2 (`MapSection`) remains mounted.
 
 ## 4. Component/file paths
 
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\BuyingJourney.tsx` — homepage component, static step data, state, hooks, interaction logic, and markup.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\BuyingJourney.css` — homepage Buying Journey styles, responsive layouts, transitions, and CSS classes.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — homepage import and render position.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\BuyingJourney.tsx` — component, static step data, state, hooks, interaction logic, and markup.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\BuyingJourney.css` — Buying Journey styles, responsive layouts, transitions, and CSS classes.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — previously the homepage import and render position; the import and render were removed.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\step-1.png` through `step-5.png` — desktop step images.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\assets\step-lan-1.png` through `step-lan-5.png` — mobile step images.
 
@@ -40,9 +40,9 @@ The older handoff file `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\
 
 ## 5. Component names
 
-The homepage component is the default export `BuyingJourney` from `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\BuyingJourney.tsx`.
+The component is the default export `BuyingJourney` from `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\BuyingJourney.tsx`.
 
-The source also defines the internal `StepId` and `Step` types and the `STEPS` constant. `BuyingJourneySteps` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\BuyingJourneySteps.tsx` is a separate Property Details component, not this homepage feature.
+The source also defines the internal `StepId` and `Step` types and the `STEPS` constant. `BuyingJourneySteps` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\BuyingJourneySteps.tsx` is a separate Property Details component, not this feature, and it is still rendered there.
 
 ## 6. Props
 
@@ -216,15 +216,15 @@ There is no user-facing reset button. Selecting a step changes the active state;
 
 ## 23. Relationship with Find Your Plot
 
-`FindYourPlot` is rendered immediately before `BuyingJourney` on `/`. Find Your Plot recommends static property layouts; BuyingJourney explains a general purchase process. BuyingJourney does not read Find Your Plot state, props, results, or selection, and no direct callback or link connects the two components.
+`FindYourPlot` used to be rendered immediately before `BuyingJourney` on `/`; neither is mounted there now. Find Your Plot recommends API-matched properties; BuyingJourney explains a general purchase process. They were never connected: BuyingJourney does not read Find Your Plot state, props, results, or selection, and no direct callback or link connects the two components.
 
 ## 24. Relationship with Property Details
 
-The homepage BuyingJourney does not import or render Property Details components and has no property id prop. Property Details has a separate `BuyingJourneySteps` component with five different compact step records (`Enquire`, `Site Visit`, `Legal Verification`, `Book & Pay`, and `Registration`). The two components are not connected by state or navigation in the inspected source.
+The `BuyingJourney` component does not import or render Property Details components and has no property id prop. Property Details has a separate `BuyingJourneySteps` component with five different compact step records (`Enquire`, `Site Visit`, `Legal Verification`, `Book & Pay`, and `Registration`). The two components are not connected by state or navigation in the inspected source.
 
 ## 25. Relationship with Property Enquiry
 
-The homepage BuyingJourney has no enquiry form, enquiry handler, enquiry route, enquiry link, WhatsApp link, mailto link, or enquiry analytics attribute. Its copy mentions the buying process but does not submit or initiate an enquiry. Any relationship to Property Enquiry is UNKNOWN — needs verification beyond this component.
+BuyingJourney has no enquiry form, enquiry handler, enquiry route, enquiry link, WhatsApp link, mailto link, or enquiry analytics attribute. Its copy mentions the buying process but does not submit or initiate an enquiry. Any relationship to Property Enquiry is UNKNOWN — needs verification beyond this component.
 
 ## 26. Desktop behavior
 
@@ -274,11 +274,11 @@ Direct dependencies are React hooks (`useEffect`, `useRef`, `useState`), Next.js
 
 ## 33. Important constraints
 
-- Preserve the homepage component name `BuyingJourney` and its default export path unless the homepage integration is intentionally changed.
+- Preserve the component name `BuyingJourney` and its default export path unless the integration is intentionally changed. The component is currently unmounted (§2).
 - Preserve the five-step static data contract and the `StepId` values `select`, `inspect`, `legal`, `agreement`, and `register` when referring to existing state or assets.
 - Preserve the 3000 ms auto-advance and cyclic navigation behavior as current implementation details.
 - Preserve the `max-width: 980px` relationship between CSS layout switching and the `MOBILE_QUERY` media query.
 - Keep desktop and mobile image mappings aligned: `step-1.png` through `step-5.png` and `step-lan-1.png` through `step-lan-5.png`.
 - Do not treat the explanatory step copy as a confirmed contractual, legal, financial, or registration promise without separate verification.
-- Do not conflate this homepage `BuyingJourney` with Property Details `BuyingJourneySteps`.
+- Do not conflate this `BuyingJourney` with Property Details `BuyingJourneySteps`.
 - This documentation task creates only `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\buying-guide.md`; application code is intentionally unchanged.

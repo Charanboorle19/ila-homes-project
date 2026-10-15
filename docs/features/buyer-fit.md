@@ -1,6 +1,6 @@
 # Buyer Fit feature
 
-This document describes the current Buyer Fit implementation only. In source, the feature is implemented by `LifeStageMatch` and is rendered inside the Property Details page. It is separate from the homepage `FindYourPlot` component: Buyer Fit is property-specific, while Find Your Plot uses static homepage recommendation data.
+This document describes the current Buyer Fit implementation only. In source, the feature is implemented by `LifeStageMatch` and is rendered inside the Property Details page. It is separate from the `FindYourPlot` component, which was a homepage section and is currently unmounted: Buyer Fit is property-specific, while Find Your Plot matches properties against the tenant's API feature list.
 
 ## 1. Feature purpose
 
@@ -40,7 +40,7 @@ It accepts no callbacks, API client, selected goal, score, or result props. `Pro
 
 The displayed data comes from `property.lifeStageMatch[goal]`, where each entry contains `score`, `reason`, and optional `pending` or `unavailable` flags. For local/static properties, this data is present in the static `PropertyRecord`. For API UUID properties, it is populated from the separate life-stage-fit request and mapped into the same record shape.
 
-Buyer Fit is therefore API-backed for API properties, but not exclusively API-backed: local/static property records use static data. It is not a static homepage recommendation feature.
+Buyer Fit is therefore API-backed for API properties, but not exclusively API-backed: local/static property records use static data. It is not a property-recommendation feature.
 
 ## 7. API endpoints and parameters
 
@@ -169,7 +169,7 @@ The surrounding Property Details page independently emits property-view lifecycl
 
 ## 25. Relationship with Find Your Plot
 
-Buyer Fit and Find Your Plot are separate implementations. `FindYourPlot` is a homepage `/` component using static `propertyLayouts`, life-stage data, preference tags, and its own matching logic. Buyer Fit is `LifeStageMatch` inside `/properties/{propertyId}` and uses the current property's `lifeStageMatch` record, with API fit data for API properties.
+Buyer Fit and Find Your Plot are separate implementations. `FindYourPlot` was a homepage `/` component using the API feature list and its own matching logic; it is currently unmounted. Buyer Fit is `LifeStageMatch` inside `/properties/{propertyId}` and uses the current property's `lifeStageMatch` record, with API fit data for API properties.
 
 No shared Buyer Fit/Find Your Plot state, callback, result handoff, formula, endpoint, or synchronization is confirmed. Buyer Fit does not reuse Find Your Plot's preference scoring or ranking.
 
@@ -231,7 +231,7 @@ The feature depends on React hooks, the `PropertyRecord`/life-stage types, the s
 
 ## 35. Important constraints
 
-- Preserve the distinction between property-specific Buyer Fit and homepage Find Your Plot; do not claim shared matching or scoring logic without new code evidence.
+- Preserve the distinction between property-specific Buyer Fit and Find Your Plot; do not claim shared matching or scoring logic without new code evidence.
 - Preserve the four goal ids, labels, descriptions, and the initial `family` selection unless the current UI contract intentionally changes.
 - Preserve `GET /api/properties/{propertyId}/life-stage-fit` and the UUID path parameter for API properties.
 - Preserve the `PropertyRecord.lifeStageMatch` shape and the pending/unavailable distinction; do not present missing data as a genuine 0% fit.

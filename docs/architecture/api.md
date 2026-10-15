@@ -4,7 +4,7 @@ This document describes the API architecture currently implemented in the reposi
 
 ## 1. API architecture purpose
 
-The application uses a browser-oriented service layer over an external ILA API. The service layer provides property catalogue/detail data, units and plot geometry, locations, documents, Buyer Fit, nearby places, property features and feature-based property matching, the active tenant Instagram reel, tracked property shares, public lead creation, public site-visit booking, anonymous visitor/session identity, favourites, and analytics. Static property records remain a separate source for local property ids and fallback presentation; the homepage `ShortlistShare` component now uses the API property list directly.
+The application uses a browser-oriented service layer over an external ILA API. The service layer provides property catalogue/detail data, units and plot geometry, locations, documents, Buyer Fit, nearby places, property features and feature-based property matching, the active tenant Instagram reel, tracked property shares, public lead creation, public site-visit booking, anonymous visitor/session identity, favourites, and analytics. Static property records remain a separate source for local property ids and fallback presentation; `ShortlistShare` uses the API property list directly, and is currently unmounted.
 
 The application also exposes one same-origin Next.js route, `/api/layout-image`, which proxies validated presigned S3 layout images for browser/MapLibre use.
 
@@ -105,7 +105,7 @@ The detail endpoint is the `GET /api/properties/{id}` operation above. It is not
 ### `GET /api/locations`
 
 - **Path parameters:** none.
-- **Query parameters:** `page` and `per_page`; `fetchLocations` clamps both to at least 1 and the homepage starts with `page=1&per_page=20`.
+- **Query parameters:** `page` and `per_page`; `fetchLocations` clamps both to at least 1 and `GrowthCorridors` — the locations consumer, which is currently unmounted — starts with `page=1&per_page=20`.
 - **Request body:** none.
 - **Required headers:** common `apiFetch` headers.
 - **Response:** `{ success?: boolean, data?: { items?: LocationRecord[]; total?: number; page?: number; per_page?: number } }`.
@@ -157,7 +157,7 @@ The detail endpoint is the `GET /api/properties/{id}` operation above. It is not
 - **Response:** `{ success?: boolean, data?: PropertyFeature[] }`. Only `active = true` rows, already ordered by `sort_order` then `name`, so no client-side filtering or sorting is applied.
 - **Feature shape:** `id`, `key`, `name`, `description` (`string | null`), `active`, `sort_order`, `created_at`, `updated_at`. Only `key`, `name` and `description` are read by the UI. Use `key` when submitting to the matching endpoint — never the display name.
 - **Transformation:** `fetchActiveFeatures` in `featuresService.ts` returns `response.data ?? []`.
-- **Consumer:** the `FindYourPlot` homepage section, whose preference chips are these rows.
+- **Consumer:** the `FindYourPlot` section, whose preference chips are these rows. That component is currently unmounted, so nothing on `/` calls this endpoint at runtime.
 
 ### `POST /api/match-properties`
 
@@ -171,7 +171,7 @@ The detail endpoint is the `GET /api/properties/{id}` operation above. It is not
 - **Empty selection:** an empty array returns no matches rather than all properties. `findPropertiesByFeatures` short-circuits this locally and returns `{ items: [], total: 0 }` without a request.
 - **Summary data only:** no image, price, plot size or location is included. Fetching the full property per result is an N+1 and is not done.
 - **Transformation:** `findPropertiesByFeatures` in `featuresService.ts` returns `response.data ?? { items: [], total: 0 }`. The consumer treats `total: 0` as a valid empty result and renders an explanatory empty state rather than an error.
-- **Consumer:** the `FindYourPlot` homepage section.
+- **Consumer:** the `FindYourPlot` section, which is currently unmounted.
 - **Errors:** `{ success: false, error: { code, message } }`, converted by `apiFetch` into `ApiError`. Documented statuses are `404`, `422` and `500`. No per-endpoint error codes are enumerated.
 
 ### `GET /api/properties/{property_id}/feature-scores`
@@ -254,7 +254,7 @@ No direct `POST /api/events` call was found in the current source; the tracker c
 - **Required headers:** common `apiFetch` headers plus `X-Visitor-Code`.
 - **Response:** `{ success?: boolean, data?: { share_id?: string; tracking_token?: string; tracking_url?: string; share_type?: string } }`.
 - **Transformation:** `createPropertyShare` in `shareService.ts` returns `response.data` and throws when `tracking_token` is absent. `buildShareUrl` turns the token into `{origin}/property/{tracking_token}/view`; the returned `tracking_url` field is not used for display.
-- **Consumers:** `ShareButton` in the property detail hero and `ShortlistShare` on the homepage. `ShortlistShare` calls the batch helper to create one share for each selected API property UUID.
+- **Consumers:** `ShareButton` in the property detail hero, and `ShortlistShare`, which is currently unmounted. `ShortlistShare` calls the batch helper to create one share for each selected API property UUID.
 - **Errors:** missing visitor code throws before the request. The response's relative `tracking_url` value is `/api/shares/{token}`, which suggests a read path exists, but that is a path only — see the entry below.
 
 ### `POST /api/leads`
@@ -385,7 +385,7 @@ The application depends on the external ILA API configured by `NEXT_PUBLIC_API_U
 - Keep anonymous visitor identity (`visitor_code` cookie / `X-Visitor-Code`) distinct from optional bearer-token authentication and from tenant identity. `POST /api/shares` requires that visitor code; `GET /api/shares/{tracking_token}` must not, because share recipients are normally different visitors.
 - Keep the tracked share route on the existing property pipeline. Do not introduce a second property-detail data model, mapper, or view, and do not render property content taken directly from the share response.
 - Do not prefetch or cache `GET /api/shares/{tracking_token}` until it is confirmed whether reading it records the share as viewed.
-- Keep API favourites distinct from Property Details localStorage wishlist flags and homepage in-memory shortlist state.
+- Keep API favourites distinct from Property Details localStorage wishlist flags and the `ShortlistShare` in-memory shortlist state.
 - Keep documents and Buyer Fit independent from the main detail request and retain their current partial-failure behavior.
 - Public lead creation must not send `assigned_to`; the backend answers `403 FORBIDDEN`. Send optional values as `null` rather than empty strings, and only send `property_id` when it is an active property UUID — a catalogue slug would fail with `404 PROPERTY_NOT_FOUND`.
 - Keep `POST /api/leads` and `POST /api/site-visits` as alternatives in the property detail form. The site-visit endpoint already creates or reuses the visitor's lead for the property, so submitting both for one interaction would duplicate the enquiry.

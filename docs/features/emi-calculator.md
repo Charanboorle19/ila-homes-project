@@ -1,6 +1,6 @@
 # EMI Calculator feature
 
-This document describes the EMI calculator as it now stands. There is **one** implementation, `PriceEmiFuture`, used on both the property detail page and the homepage EMI section ("Calculate Your EMI Before You Buy").
+This document describes the EMI calculator as it now stands. There is **one** implementation, `PriceEmiFuture`, used on the property detail page and by the `EmiAppreciation` shell ("Calculate Your EMI Before You Buy"). The shell is **currently unmounted** — `/` renders only `MapSection` — so the calculator is live only on `/properties/{propertyId}`.
 
 ## 1. Feature purpose
 
@@ -8,20 +8,22 @@ The calculator provides an illustrative plot-financing estimate with the heading
 
 ## 2. One implementation, two surfaces
 
-| Surface | Component | Property source |
-|---|---|---|
-| `/properties/{propertyId}` | `PriceEmiFuture` inside `PropertyPageView` | `property.price` from the route's own record |
-| `/` (homepage) | `EmiAppreciation` → `PriceEmiFuture` | `GET /api/properties`, chosen by the visitor |
+| Surface | Component | Property source | Status |
+|---|---|---|---|
+| `/properties/{propertyId}` | `PriceEmiFuture` inside `PropertyPageView` | `property.price` from the route's own record | Mounted |
+| `/` (homepage) | `EmiAppreciation` → `PriceEmiFuture` | `GET /api/properties`, chosen by the visitor | **Not mounted** |
 
-`EmiAppreciation` is now a **shell**: it fetches the property list, renders a picker, and delegates the entire calculator to `PriceEmiFuture`. It contains no EMI arithmetic, no loan inputs and no appreciation maths.
+`EmiAppreciation` is a **shell**: it fetches the property list, renders a picker, and delegates the entire calculator to `PriceEmiFuture`. It contains no EMI arithmetic, no loan inputs and no appreciation maths.
 
 This replaced a second, parallel calculator that had drifted. The homepage version had been pinned to a fixed 8.5% rate and 20-year tenure with only a down-payment slider, and priced six hard-coded demo plots. Reusing the real component means the two surfaces cannot disagree about a formula, a clamp bound or a zero-rate case.
 
 ## 3. Homepage position
 
-`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` renders `<EmiAppreciation />` after `<ShortlistShare />` and before `<FromTheField />`:
+There is no current position. `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` previously rendered `<EmiAppreciation />` after `<ShortlistShare />` and before `<FromTheField />`:
 
 `Hero → MapSection → WhoWeAre → GrowthCorridors → FindYourPlot → BuyingJourney → ShortlistShare → EmiAppreciation → FromTheField → PlotsWithPulse → Faq`.
+
+Only `MapSection` from that sequence is still mounted on `/`. Everything this document says about "the homepage shell", "the homepage picker", and "the homepage section" therefore describes a component that is present in the source but not rendered; the shared `PriceEmiFuture` behaviour still applies on the property detail page.
 
 ## 4. Property Details location
 
@@ -32,8 +34,8 @@ This replaced a second, parallel calculator that had drifted. The homepage versi
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PriceEmiFuture.tsx` — the calculator: controls, summary, donut chart, amortization schedule, future-value projection, print and reset.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PropertyDetail.css` — the calculator's only stylesheet rules (see §5a).
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertyDetail\PropertyPageView.tsx` — Property Details integration.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\EmiAppreciation.tsx` — homepage shell: property fetch, picker, locked placeholder. No calculator logic.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\EmiAppreciation.css` — homepage shell styles only.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\EmiAppreciation.tsx` — shell: property fetch, picker, locked placeholder. No calculator logic. Currently unmounted.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\EmiAppreciation.css` — shell styles only.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\propertyUtils.ts` — `formatInr` and `futureValue`.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` — `fetchProperties`, `PropertyListItem`, `formatPrice`.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\WhatsAppBudgetModal.tsx` — budget CTA modal.
@@ -47,7 +49,7 @@ The calculator is almost entirely styled with Tailwind utilities in the JSX. Onl
 - `.pd-emi__card`, in a shared box-shadow group alongside other lifted surfaces.
 - `.pd-emi__controls-scroll` and its scrollbar pseudo-elements.
 
-One rule in that group — `::-webkit-scrollbar-thumb:hover { background-color: var(--pd-gold) }` — depends on a `--pd-gold` variable that is normally defined by `.property-page`. The homepage section defines `--pd-gold: #c6a46c` on itself so that hover state resolves rather than silently falling back to nothing. This is the only inherited dependency.
+One rule in that group — `::-webkit-scrollbar-thumb:hover { background-color: var(--pd-gold) }` — depends on a `--pd-gold` variable that is normally defined by `.property-page`. The `EmiAppreciation` shell defines `--pd-gold: #c6a46c` on itself so that hover state resolves rather than silently falling back to nothing. This is the only inherited dependency.
 
 ## 6. Props
 
@@ -68,7 +70,7 @@ The prop type was narrowed from the full `PropertyRecord` to the two fields the 
 
 ## 7. Input fields
 
-All calculator inputs live in `PriceEmiFuture` and appear on both surfaces:
+All calculator inputs live in `PriceEmiFuture` and are shared by both surfaces:
 
 - Purchase price — state `purchasePrice`.
 - Down payment, percentage mode — state `downPaymentPct`, percentage slider.
@@ -77,7 +79,7 @@ All calculator inputs live in `PriceEmiFuture` and appear on both surfaces:
 - Loan tenure — text input with a years/months unit toggle; state `tenureValue` and `tenureUnit`.
 - Yearly/monthly amortization and expand/collapse — presentation controls, not loan inputs.
 
-There is **no purchase-price input on the homepage shell** beyond the calculator's own; the shell only chooses which property seeds it.
+There is **no purchase-price input on the `EmiAppreciation` shell** beyond the calculator's own; the shell only chooses which property seeds it.
 
 ## 8. Default values
 
@@ -200,12 +202,12 @@ The homepage picker is a `role="group"` labelled by `emi-picker-label`, with `ar
 
 ## 27. Important constraints
 
-- Do not reintroduce a second calculator. The homepage must delegate to `PriceEmiFuture`.
+- Do not reintroduce a second calculator. The `EmiAppreciation` shell must delegate to `PriceEmiFuture`.
 - Preserve the zero-rate branch. Removing it reintroduces an `Infinity` EMI.
 - Preserve `ANNUAL_APPRECIATION = 0.11` and the two future-value milestones.
 - Preserve `initialPrice` derivation and its `50_00_000` fallback.
-- Preserve the analytics event names `EMI_PROPERTY_SELECT` and `EMI_CALCULATOR_USE`. Note that `EMI_PROPERTY_SELECT` now carries `property_id` rather than `plot_id` on the homepage.
-- Keep `--pd-gold` defined on the homepage section, or the calculator's scrollbar hover state resolves to nothing.
+- Preserve the analytics event names `EMI_PROPERTY_SELECT` and `EMI_CALCULATOR_USE`. Note that `EMI_PROPERTY_SELECT` carries `property_id` rather than `plot_id`.
+- Keep `--pd-gold` defined on the `EmiAppreciation` section, or the calculator's scrollbar hover state resolves to nothing.
 - Do not treat appreciation projections as EMI calculations, guaranteed returns, or verified market data.
 
 ## 28. Verification checklist

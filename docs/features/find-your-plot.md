@@ -1,6 +1,6 @@
 # Find Your Plot feature
 
-This document describes the current homepage `FindYourPlot` implementation. It is based on the inspected TypeScript/React source and the confirmed API responses only. It does not describe the separate API-backed `MapSection` or `GrowthCorridors` search experiences.
+This document describes the current `FindYourPlot` implementation. It is based on the inspected TypeScript/React source and the confirmed API responses only. It does not describe the separate API-backed `MapSection` or `GrowthCorridors` search experiences. The component is currently unmounted — see §2.
 
 The section is now **entirely API-driven**. It holds no static catalogue, no hard-coded option list, and no locally invented scores. Every value it renders comes from `GET /api/features` or `POST /api/match-properties`.
 
@@ -10,11 +10,11 @@ The section is now **entirely API-driven**. It holds no static catalogue, no har
 
 ## 2. Where it appears
 
-The component is rendered on the homepage route `/`. In the current homepage order it appears after `GrowthCorridors` and before `BuyingJourney`.
+**`FindYourPlot` is not currently mounted anywhere.** It was a homepage section on `/`, previously sitting after `GrowthCorridors` and before `BuyingJourney`; `/` now renders `MapSection` alone (`src/app/page.tsx`). The component, its APIs, and its behaviour are unchanged — only the homepage integration was removed. This also means `id="contact"` is no longer rendered on `/`, so the `#contact` links used elsewhere (the `MapSection` sidebar CTA and plot read-out, `Footer`, `Navbar`) have no target on the homepage.
 
 ## 3. Exact homepage position
 
-The relevant order in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` is:
+There is no current position. The relevant order in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` was:
 
 1. `Hero`
 2. `MapSection`
@@ -30,12 +30,14 @@ The relevant order in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx
 12. `Faq`
 13. `HomeReadyToVisit`
 
+Only entry 2 (`MapSection`) remains mounted.
+
 ## 4. Component and data paths
 
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\FindYourPlot.tsx` — component, state, markup, responsive presentation, and result cards.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\featuresService.ts` — the feature APIs: `fetchActiveFeatures`, `findPropertiesByFeatures`, `fetchPropertyFeatureScores`, and their types.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\favoritesService.ts` — loads and updates the anonymous visitor's saved properties for the result-card favourite controls.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — homepage integration.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — previously the homepage integration; the import and render were removed, so the component is currently unmounted.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\globals.css` — global animation/style definitions. Exact ownership of every class used by this component is UNKNOWN — needs verification.
 
 **This component no longer imports from `@/data/propertyLayouts`.** See §9 for what was removed and why.
@@ -606,7 +608,7 @@ Matching that would mean restructuring the section into a screen-height grid the
 
 ### Section padding matches `GrowthCorridors`
 
-The container is `px-6 py-16 sm:px-10 sm:py-24`, identical to the localities section directly above it on the homepage. It was `px-6 py-10 sm:py-12` with no `sm` side step, so the section read as tighter than its neighbour at every breakpoint. Two adjacent sections with a 24px padding difference read as a seam, not as variation.
+The container is `px-6 py-16 sm:px-10 sm:py-24`, identical to the localities section that used to sit directly above it on the homepage (neither section is mounted there now). It was `px-6 py-10 sm:py-12` with no `sm` side step, so the section read as tighter than its neighbour at every breakpoint. Two adjacent sections with a 24px padding difference read as a seam, not as variation.
 
 `GrowthCorridors` overrides its own vertical padding at `lg` with `lg:pt-10 lg:pb-6 xl:pt-12`. That is **not** copied here: it exists because that section is sized to one screen with `lg:min-h-[calc(100svh-var(--nav-h))]`, so its padding is a leftover after the content fills the viewport. This section has no such constraint and its height follows its content.
 

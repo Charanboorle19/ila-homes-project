@@ -1,6 +1,6 @@
 # Locations / Growth Corridors feature
 
-This document describes the current homepage Locations implementation, whose React component is named `GrowthCorridors`. It documents verified behavior in the inspected source only; it does not describe a planned locations catalogue or a separate Locations route.
+This document describes the current Locations implementation, whose React component is named `GrowthCorridors`. It documents verified behavior in the inspected source only; it does not describe a planned locations catalogue or a separate Locations route. The component is currently unmounted — see §2.
 
 ## 1. Feature purpose
 
@@ -8,11 +8,11 @@ The feature presents API-backed Hyderabad localities/growth corridors, lets visi
 
 ## 2. Where it appears
 
-`GrowthCorridors` appears on the homepage route `/`. It is rendered after `MapSection` and `WhoWeAre`, and before `FindYourPlot`.
+**`GrowthCorridors` is not currently mounted anywhere.** It was a homepage section, previously rendered on `/` after `MapSection` and `WhoWeAre` and before `FindYourPlot`; `/` now renders `MapSection` alone (`src/app/page.tsx`). The component, service calls, and behaviour documented below are unchanged — only the homepage integration was removed.
 
 ## 3. Exact section position/order
 
-The homepage order in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` is:
+There is no current position. The homepage order in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` was:
 
 1. `Hero`
 2. `MapSection`
@@ -26,12 +26,14 @@ The homepage order in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx
 10. `PlotsWithPulse`
 11. `Faq`
 
+Only step 2 (`MapSection`) remains; every other entry above is no longer imported by that route.
+
 ## 4. Component/file paths
 
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\GrowthCorridors.tsx` — feature component, data loading, state, map, cards, and property exploration.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\locationsService.ts` — locations API types, request helper, pagination derivation, and coordinate validation.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` — locality property request and `PropertySummary` type.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — homepage placement.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — previously the homepage placement; the import and render were removed, so the component is currently unmounted.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\tracker.ts` — event transport used by the component.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\useClickTracking.ts` — delegated tracking for `data-track` attributes.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\apiClient.ts` — tenant-aware API wrapper used by the service helpers.

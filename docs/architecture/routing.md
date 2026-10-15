@@ -48,15 +48,15 @@ No nested route layout, template, loading file, error file, not-found file, or m
 **Main page:** `src/app/page.tsx`, default export `Home`
 **Layout:** Root layout from `src/app/layout.tsx`
 
-The page renders, in order, `Hero`, `MapSection`, `WhoWeAre`, `GrowthCorridors`, `FindYourPlot`, `CompareProperties`, `BuyingJourney`, `ShortlistShare`, `EmiAppreciation`, `FromTheField`, `PlotsWithPulse`, `Faq`, and `HomeReadyToVisit`.
+The page renders one section: `MapSection`. The components `Hero`, `WhoWeAre`, `GrowthCorridors`, `FindYourPlot`, `CompareProperties`, `BuyingJourney`, `ShortlistShare`, `EmiAppreciation`, `FromTheField`, `PlotsWithPulse`, `Faq`, and `HomeReadyToVisit` still exist under `src/components` but are no longer imported or rendered by this route.
 
 - **Dynamic parameters:** None.
 - **Query parameters:** None are read or written by the page implementation.
-- **How users reach it:** The logo in `Navbar`, the `Home` breadcrumb in `PropertyHero`, direct navigation to `/`, and links such as `/#projects`, `/#about`, `/#faq`, and `/#contact`.
-- **Navigation behavior:** The page is a single long document. Internal fragment links scroll to section ids when those ids exist. The hero search uses `useRouter().push("/#projects")` only when it cannot find an in-document `#projects` element.
-- **Data/API dependencies:** `MapSection`, `GrowthCorridors`, and related client components fetch API data. The page itself does not fetch route data on the server.
-- **Loading/error/not-found:** No route-level loading, error, or not-found file exists. Individual client sections own their loading/error states. `MapSection` and `GrowthCorridors` have client-managed request states; exact copy for every state is `UNKNOWN — needs verification`.
-- **Route-specific logic:** The homepage search tracks a non-empty query, filters are local UI state, and homepage sections use fragment ids including `contact`, `services`, `buying-journey`, `shortlist-share`, `emi-appreciation`, and `faq`.
+- **How users reach it:** The logo in `Navbar`, the `Home` breadcrumb in `PropertyHero`, direct navigation to `/`, and links such as `/#projects`. `Footer` still links to `/#faq`, `/#about`, and `/#contact`, but no element with those ids is rendered on `/`, so those fragments have no target.
+- **Navigation behavior:** The page is a single short document containing the map section. `MapSection` renders `id="projects"` on its root `<section>`, so `/#projects` still resolves.
+- **Data/API dependencies:** `MapSection` fetches API data. The page itself does not fetch route data on the server.
+- **Loading/error/not-found:** No route-level loading, error, or not-found file exists. `MapSection` owns its client-managed request states; exact copy for every state is `UNKNOWN — needs verification`.
+- **Route-specific logic:** `MapSection` owns its own plot filters and search query as local UI state. The previous section fragment ids — `contact`, `services`, `buying-journey`, `shortlist-share`, `emi-appreciation`, and `faq` — are no longer rendered on `/`.
 
 ## 4. Property listing route
 
@@ -137,15 +137,14 @@ These are internal API request parameters and are not documented as browser page
 
 ## 9. Hash / anchor navigation
 
-The application uses fragment navigation inside the homepage and property-detail UI. Confirmed targets include:
+The application uses fragment navigation inside the property-detail UI and a single fragment target on the homepage. Confirmed targets include:
 
-- Homepage sections: `#about`, `#projects` (referenced by code; the exact target in the current rendered source is `UNKNOWN — needs verification`), `#services`, `#contact`, and `#faq`.
-- Other rendered homepage section ids include `#buying-journey`, `#shortlist-share`, and `#emi-appreciation`.
-- Property/map links use `#contact` for enquiry-oriented navigation.
+- Homepage: `#projects`, which `MapSection` renders as the id of its root `<section>`.
+- Property/map links use `#contact` for enquiry-oriented navigation. **No `id="contact"` is rendered on `/` any more** — `FindYourPlot` used to carry it and is no longer mounted — so this fragment has no target on the homepage. The map's `PropertySheet` also links to `#brochure` (no target anywhere in the current render tree) and to `/properties/{id}#affordability-financing`, which does resolve on the property detail page.
+- `Footer` links to `/#faq`, `/#about`, and `/#contact`; none of those ids is rendered on `/` any more, because `Faq`, `WhoWeAre`, and `FindYourPlot` are no longer part of the homepage.
 - `LegalDocuments` links to `#document-build-rules`; the target is `UNKNOWN — needs verification`.
-- Property popup links refer to `#brochure` and `#loan-calculator`; corresponding rendered targets are `UNKNOWN — needs verification`.
 
-The homepage hero first calls `document.getElementById("projects")?.scrollIntoView({ behavior: "smooth", block: "start" })`; if absent, it calls `router.push("/#projects")`. Fragment links do not create separate routes or query state.
+`Hero` — the component that used to call `document.getElementById("projects")?.scrollIntoView({ behavior: "smooth", block: "start" })` and fall back to `router.push("/#projects")` — is no longer rendered on `/`. Fragment links do not create separate routes or query state.
 
 ## 10. Internal navigation patterns
 
@@ -153,8 +152,8 @@ Internal navigation is implemented with:
 
 - `next/link` for page paths such as `/`, `/properties`, and `/properties/{id}`.
 - Plain anchors for some fragment links, especially in `Footer` and detail sections.
-- Programmatic router navigation from the homepage hero search fallback.
-- Browser scrolling for an already-rendered homepage anchor.
+- Programmatic router navigation from the hero search fallback in `Hero.tsx`, which is no longer mounted on `/`.
+- Browser scrolling for an already-rendered homepage anchor (`#projects`, supplied by `MapSection`).
 
 There is no shared route registry or central navigation service.
 
@@ -172,7 +171,7 @@ Exact behavior when mail clients, popup windows, sharing, or clipboard APIs are 
 
 ## 12. Navigation components
 
-- `Navbar` is a client component mounted by the root layout. It links to `/`, `/properties`, and homepage fragments. Its mobile menu is local state and closes after link selection.
+- `Navbar` is a client component mounted by the root layout. It links to `/properties` and to homepage fragments `#about`, `#projects`, `#services`, and `#contact`. Only `#projects` has a target on `/` now that the homepage renders just `MapSection`; the other three resolve nowhere. Its mobile menu is local state and closes after link selection.
 - `Footer` is mounted by the root layout. It uses `next/link` for `/properties` and plain anchors for `/#projects`, `/#faq`, `/#about`, and `/#contact`.
 - `PropertyHero` provides breadcrumbs to `/` and `/properties` and renders external WhatsApp/mailto actions.
 - `PropertiesList` renders property-detail `Link` elements and separate favourite buttons.
@@ -187,7 +186,7 @@ No route-specific layout exists. All confirmed page routes are wrapped by the si
 
 No App Router `loading.tsx` file exists.
 
-- `/`: loading states are owned by client sections that fetch data, especially `MapSection` and `GrowthCorridors`.
+- `/`: loading states are owned by client sections that fetch data — now only `MapSection`.
 - `/properties`: `PropertiesList` initially uses `loading` state and renders a status message.
 - `/properties/[propertyId]`: `ApiPropertyView` renders `Loading property…` while the API property request is pending. Documents and life-stage fit load independently and do not block the main property render once it arrives.
 - `/property/[trackingToken]/view`: the route renders its own `Loading property…` while the tracking token resolves, then delegates to `ApiPropertyView`, which owns the property/Buyer Fit loading states from that point.
@@ -201,7 +200,7 @@ Exact visual loading behavior for every client subsection is `UNKNOWN — needs 
 
 No App Router `error.tsx` file exists.
 
-- `/`: client sections catch or represent their own API/map errors. The page has no single route-level error boundary confirmed in source.
+- `/`: `MapSection` catches or represents its own API/map errors. The page has no single route-level error boundary confirmed in source.
 - `/properties`: `PropertiesList` represents list-load failure in client state; favourite failures are shown separately and do not fail the route.
 - `/properties/[propertyId]`: invalid API ids and failed API property loads render an in-page unavailable state rather than throwing to a route error boundary. Documents and life-stage-fit failures are isolated from the main property view.
 - `/property/[trackingToken]/view`: a failed or unresolved token renders an in-page unavailable state using the same classes and copy as `ApiPropertyView`'s own error state, with a link back to `/properties`. Aborted token requests are ignored.
@@ -221,19 +220,19 @@ For `/properties/[propertyId]`, a non-local id is treated as a possible API UUID
 
 - `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/properties/page.tsx`, and `src/app/properties/[propertyId]/page.tsx` do not declare `"use client"` and are server components by default.
 - `src/app/property/[trackingToken]/view/page.tsx` **does** declare `"use client"`. It is the only page route that is a client component, because its token request must run where tenant resolution uses the browser hostname, and because it unwraps `params` with React `use` before rendering the shared `ApiPropertyView`.
-- `Navbar`, `Hero`, `PropertiesList`, `ApiPropertyView`, `PropertyPageView`, and many interactive child components declare `"use client"`.
+- `Navbar`, `PropertiesList`, `ApiPropertyView`, `PropertyPageView`, and many interactive child components declare `"use client"`. `Hero` also declares it, though it is no longer mounted on `/`.
 - Server page components select the route and compose the tree; client components perform browser navigation, API requests requiring browser tenant context, scrolling, local state, and interactive error/loading presentation.
 - The Route Handler is server-side and runs the upstream image proxy logic.
 
 ## 18. Programmatic navigation
 
-The confirmed Next.js programmatic navigation is in `Hero.tsx`:
+The only confirmed Next.js programmatic navigation is in `Hero.tsx`:
 
 ```ts
 router.push("/#projects");
 ```
 
-It is used only when the current document does not contain an element with id `projects`. The same component otherwise uses `scrollIntoView` without changing the URL. No confirmed use of `router.replace`, `router.back`, `router.prefetch`, redirect helpers, or the `scroll` option exists in application source.
+It is used only when the current document does not contain an element with id `projects`. The same component otherwise uses `scrollIntoView` without changing the URL. **`Hero` is no longer rendered on `/`** (see §3), so this navigation is currently dormant: nothing in the mounted tree triggers it, and `id="projects"` is still supplied by `MapSection`. No confirmed use of `router.replace`, `router.back`, `router.prefetch`, redirect helpers, or the `scroll` option exists in application source.
 
 `ScrollToTop` (see §27) is the only other code that moves scroll position on a route change.
 
@@ -302,18 +301,18 @@ Confirmed routing-related dependencies and project facilities are:
 
 - Next.js `16.3.8` App Router.
 - `next/link` for internal links.
-- `next/navigation` `useRouter` for the homepage search fallback.
+- `next/navigation` `useRouter` for the hero search fallback (in `Hero.tsx`, no longer mounted on `/`).
 - React client components and browser history/scroll APIs.
 - Next `Image` for navigation-adjacent images and configured remote image handling.
 - The internal API client/services for data needed by listing/detail views, including `fetchSharePropertyId` for the tracked share route.
-- `maplibre-gl` and external map resources for map sections reached from the homepage, not for route resolution.
+- `maplibre-gl` and external map resources for the `MapSection` map on the homepage, not for route resolution.
 
 ## 26. Known issues
 
 - There is no custom route-level `loading.tsx`, `error.tsx`, or `not-found.tsx` handling.
 - Property detail failures use an in-page unavailable state rather than a confirmed Next.js 404 response.
-- The hero and several feature documents reference `#projects`, but the exact rendered target is `UNKNOWN — needs verification`.
-- Other fragment targets referenced by popup/detail links, including `#brochure`, `#loan-calculator`, and `#document-build-rules`, are `UNKNOWN — needs verification` in the current inspected render tree.
+- The hero and several feature documents reference `#projects`; the target is confirmed — `MapSection` renders `id="projects"` — but the component that scrolls to it (`Hero`) is no longer mounted on `/`.
+- `Footer` links to `/#faq`, `/#about`, and `/#contact`, and the map's `PropertySheet` and plot read-out link to `#contact` and `#brochure`. None of these ids is rendered on `/` now that `Faq`, `WhoWeAre`, and `FindYourPlot` are no longer part of the homepage, so those fragments have no target. `#loan-calculator` and `#document-build-rules` remain `UNKNOWN — needs verification` in the current inspected render tree.
 - Page routes do not use URL query state for search, filters, or catalogue pagination.
 - API-backed property detail loading is client-side after the page route resolves, so the initial route page can show a loading state.
 - `/property/[trackingToken]/view` is a client page route and the only route that is; it therefore has no `generateMetadata`, so a shared link carries no route-level title or description.
@@ -337,15 +336,15 @@ The mechanism is documented in the same file's note on `scroll`. Next.js walks t
 
 On a conventional site — a handful of short pages — that walk resolves to the window and lands correctly.
 
-This homepage is a **single very long document** with many independently scrollable regions:
+This homepage **was** a single very long document with many independently scrollable regions. The table below is the composition that produced the bug; since `/` was reduced to `MapSection` alone (see §3), only the MapLibre frame row still applies:
 
-| Region | Scroll container |
-|---|---|
-| FindYourPlot results panel | `.ila-scroll-dark` |
-| CompareProperties metric table | `.ila-search-scroll` |
-| GrowthCorridors card carousel | `overflow-x-auto` snap row |
-| GrowthCorridors / MapSection map frames | MapLibre containers |
-| Mobile results sheet | `overflow-y-auto` dialog |
+| Region | Scroll container | Still on `/`? |
+|---|---|---|
+| FindYourPlot results panel | `.ila-scroll-dark` | No |
+| CompareProperties metric table | `.ila-search-scroll` | No |
+| GrowthCorridors card carousel | `overflow-x-auto` snap row | No |
+| GrowthCorridors / MapSection map frames | MapLibre containers | MapSection only |
+| Mobile results sheet | `overflow-y-auto` dialog | No |
 
 Tapping a property card from inside one of those regions let the scroll target resolve against the section rather than the document, so the destination route opened at whatever offset that section was sitting at. This was the reported symptom: navigating to `/properties` or `/properties/{id}` from a scrolled section landed mid-page.
 
@@ -372,7 +371,7 @@ Three decisions in that shape:
 
 ### What this does not change
 
-- **Same-page fragment scrolling is untouched.** `Hero`'s `scrollIntoView`, and every in-document anchor, still behave as before — the effect does not run when the pathname is unchanged.
+- **Same-page fragment scrolling is untouched.** `Hero`'s `scrollIntoView` (in the component itself, which is no longer mounted on `/`), and every in-document anchor, still behave as before — the effect does not run when the pathname is unchanged.
 - **Browser back/forward still restores position**, because that is browser and App Router behaviour rather than anything this component overrides.
 - **Scroll positions *within* a section's own scroller are not reset** by this. `ScrollToTop` moves the window only; it does not reach into `.ila-scroll-dark` or `.ila-search-scroll`. If a preserved inner scroll offset is ever reported, that is a separate concern.
 - Whether `cacheComponents` is enabled is **false** — `next.config.ts` does not set it — so Next.js's `<Activity>`-based route preservation and its scroll-position side effect are **not** in play here. That guide's behaviour must not be assumed for this project.

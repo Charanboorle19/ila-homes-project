@@ -389,14 +389,32 @@ function TrendIcon({ className = "" }: { className?: string }) {
   );
 }
 
-export default function CompareProperties() {
+export type ComparePropertiesProps = {
+  initialSelectedIds?: string[];
+  isModalOpen?: boolean;
+  onCloseModal?: () => void;
+  modalOnly?: boolean;
+};
+
+export default function CompareProperties({
+  initialSelectedIds,
+  isModalOpen,
+  onCloseModal,
+  modalOnly = false,
+}: ComparePropertiesProps = {}) {
   const [properties, setProperties] = useState<PropertyListItem[]>([]);
   const [listStatus, setListStatus] = useState<Status>("loading");
   /** `location_id` -> locality name, for the card's location line. */
   const [locationNames, setLocationNames] = useState<Record<string, string>>({});
 
   /** Selection order is the comparison order, and the backend preserves it. */
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>(initialSelectedIds ?? []);
+
+  useEffect(() => {
+    if (initialSelectedIds && initialSelectedIds.length > 0) {
+      setSelectedIds(initialSelectedIds);
+    }
+  }, [initialSelectedIds]);
 
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [compareStatus, setCompareStatus] = useState<Status>("idle");
@@ -404,6 +422,47 @@ export default function CompareProperties() {
   const compareAbort = useRef<AbortController | null>(null);
 
   const [mobileModalOpen, setMobileModalOpen] = useState(false);
+
+  // Sync external isModalOpen prop and trigger comparison if opened
+  useEffect(() => {
+    if (typeof isModalOpen === "boolean") {
+      setMobileModalOpen(isModalOpen);
+      const effectiveIds = initialSelectedIds && initialSelectedIds.length > 0 ? initialSelectedIds : selectedIds;
+      if (isModalOpen && effectiveIds.length >= 2) {
+        const ids = normalizeCompareIds(effectiveIds);
+        if (canCompare(ids)) {
+          compareAbort.current?.abort();
+          const controller = new AbortController();
+          compareAbort.current = controller;
+          setCompareStatus("loading");
+          setCompareError(null);
+
+          compareProperties(ids, controller.signal)
+            .then((comparison) => {
+              if (controller.signal.aborted) return;
+              setResult(comparison);
+              setCompareStatus("ready");
+              setMobileModalOpen(true);
+            })
+            .catch((error: unknown) => {
+              if (controller.signal.aborted) return;
+              setCompareStatus("error");
+              setCompareError(
+                error instanceof Error
+                  ? error.message
+                  : "Comparison is unavailable right now. Please try again shortly.",
+              );
+            });
+        }
+      }
+    }
+  }, [isModalOpen, initialSelectedIds, selectedIds]);
+
+  const handleCloseModal = useCallback(() => {
+    setMobileModalOpen(false);
+    onCloseModal?.();
+  }, [onCloseModal]);
+
   const [activeCategory, setActiveCategory] = useState<"all" | MetricSpec["group"]>("all");
   const [copiedShare, setCopiedShare] = useState(false);
 
@@ -564,9 +623,7 @@ export default function CompareProperties() {
       if (controller.signal.aborted) return;
       setResult(comparison);
       setCompareStatus("ready");
-      if (typeof window !== "undefined" && window.innerWidth < 1024) {
-        setMobileModalOpen(true);
-      }
+      setMobileModalOpen(true);
 
       trackEvent({
         event_type: "PROPERTY_COMPARE",
@@ -696,6 +753,298 @@ export default function CompareProperties() {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const atMax = selectedIds.length >= COMPARE_MAX_IDS;
   const canRun = canCompare(selectedIds) && compareStatus !== "loading";
+
+  // Modal-only mode: only display the comparison popup dialog and blur loading animation,
+  // without rendering the full static section block.
+  if (modalOnly) {
+    if (!mobileModalOpen && compareStatus === "idle") {
+      return null;
+    }
+
+    return (
+      <Fragment>
+        {/* Loading overlay with blurred background and loader animation */}
+        {compareStatus === "loading" && (
+          <div
+            className="fixed inset-0 z-[250] flex flex-col items-center justify-center bg-black/70 backdrop-blur-md animate-fade-in"
+            aria-live="polite"
+            aria-label="Loading comparison data"
+          >
+            <span
+              className="ila-loader mb-4"
+              style={{ ["--ila-loader-color" as string]: GOLD, ["--ila-loader-size" as string]: "48px" }}
+              aria-hidden="true"
+            />
+            <p className="text-sm font-semibold tracking-wide text-white/90">
+              Comparing properties...
+            </p>
+          </div>
+        )}
+
+        {/* Comparison Popup Modal Dialog */}
+        {mobileModalOpen && compared.length > 0 && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Property comparison results"
+            className="fixed inset-0 z-[200] flex flex-col overflow-hidden bg-[#141519] text-white animate-fade-in"
+          >
+            {/* Header band */}
+            <div className="shrink-0 border-b border-white/10 bg-[#17191e] px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-[18px] leading-[1.25] font-bold tracking-tight text-white">
+                    Comparison Results
+                  </h3>
+                  <p className="mt-1 text-[12px] leading-snug text-[#8a909e]">
+                    Comparing <strong className="text-[#e8e6e1]">{compared.length}</strong> developments
+                    {bestMatchProperty ? (
+                      <span>
+                        {" "}· Top match: <strong className="text-[#c9a84c]">{bestMatchProperty.name}</strong>
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCloseModal}
+                  aria-label="Close comparison"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white/90 transition active:scale-95 hover:bg-white/15"
+                >
+                  <CloseIcon className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Category filter pills */}
+              <div className="-mx-4 mt-3 flex snap-x gap-2 overflow-x-auto px-4 pb-0.5 scrollbar-none">
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory("all")}
+                  className={`min-h-9 shrink-0 snap-start rounded-full px-3.5 text-[12px] font-semibold whitespace-nowrap transition ${
+                    activeCategory === "all"
+                      ? "bg-[#c9a84c] text-[#0f1114]"
+                      : "bg-white/10 text-white/75 active:bg-white/15"
+                  }`}
+                >
+                  All metrics
+                </button>
+                {(["overview", "location", "inventory", "growth"] as const).map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setActiveCategory(cat)}
+                    className={`min-h-9 shrink-0 snap-start rounded-full px-3.5 text-[12px] font-semibold whitespace-nowrap transition ${
+                      activeCategory === cat
+                        ? "bg-[#c9a84c] text-[#0f1114]"
+                        : "bg-white/10 text-white/75 active:bg-white/15"
+                    }`}
+                  >
+                    {GROUP_LABELS[cat]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* The table */}
+            <div className="ila-search-scroll min-h-0 flex-1 overflow-auto overscroll-contain scroll-pl-[116px] snap-x">
+              <div
+                className="grid w-max"
+                style={{
+                  gridTemplateColumns: `116px repeat(${compared.length}, minmax(0, max-content))`,
+                }}
+              >
+                <div className="sticky left-0 z-20 flex min-h-[56px] w-[116px] items-end border-r border-b border-white/10 bg-[#141519] px-3 py-3">
+                  <span className="text-[10px] font-bold tracking-[0.14em] text-[#6b7280] uppercase">
+                    Metric
+                  </span>
+                </div>
+
+                {compared.map((property) => {
+                  const isTop = bestMatchId === property.property_id;
+                  const locality = property.metrics.locality ?? property.metrics.location;
+
+                  return (
+                    <div
+                      key={property.property_id}
+                      className={`flex max-w-[220px] snap-start flex-col border-r border-b border-white/10 px-3 py-3 ${
+                        isTop ? "bg-[rgba(201,168,76,0.08)]" : ""
+                      }`}
+                    >
+                      <p
+                        className={`text-[9px] font-bold tracking-[0.14em] uppercase ${
+                          isTop ? "text-[#c9a84c]" : "text-[#6b7280]"
+                        }`}
+                      >
+                        {isTop ? "Best match" : "Pinned"}
+                      </p>
+                      <h4 className="mt-1 line-clamp-2 break-words text-[14px] leading-[1.25] font-bold tracking-tight text-[#f2f0ea]">
+                        {property.name}
+                      </h4>
+                      {locality ? (
+                        <p className="mt-1 line-clamp-2 break-words text-[11px] leading-[1.3] text-[#8a909e]">
+                          {locality}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+
+                {visibleRows.map(({ row, spec }) => (
+                  <Fragment key={row.key}>
+                    <div className="sticky left-0 z-10 flex min-h-[56px] w-[116px] items-center border-r border-b border-white/10 bg-[#141519] px-3 text-[11px] leading-[1.3] font-medium text-[#8a909e]">
+                      {spec.label}
+                    </div>
+
+                    {compared.map((property) => {
+                      const raw = row.values?.[property.property_id] ?? null;
+                      const isBest = row.best_property_id === property.property_id;
+                      const missing = raw === null || raw === undefined || raw === "";
+                      const score =
+                        !missing && SCORE_METRICS.has(row.key) && typeof raw === "number"
+                          ? raw
+                          : null;
+                      const verified =
+                        !missing &&
+                        row.key === "approval_status" &&
+                        typeof raw === "string" &&
+                        /rera/i.test(raw);
+
+                      return (
+                        <div
+                          key={property.property_id}
+                          className={`flex min-h-[56px] max-w-[220px] snap-start flex-col justify-center border-r border-b border-white/10 px-3 py-2.5 ${
+                            isBest && !missing ? "bg-[rgba(201,168,76,0.05)]" : ""
+                          }`}
+                        >
+                          <span
+                            className={`text-[14px] tabular-nums ${
+                              missing
+                                ? "text-[12px] text-[#6b7280]"
+                                : isBest
+                                  ? "font-bold text-[#c9a84c]"
+                                  : "font-semibold text-[#e8e6e1]"
+                            }`}
+                          >
+                            {formatValue(raw, spec)}
+                          </span>
+
+                          {score !== null ? (
+                            <div
+                              aria-hidden="true"
+                              className="mt-2 h-[3px] w-full max-w-[120px] overflow-hidden rounded-full bg-white/10"
+                            >
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  isBest ? "bg-[#c9a84c]" : "bg-[#8a8f98]"
+                                }`}
+                                style={{
+                                  width: `${Math.max(0, Math.min(100, score))}%`,
+                                }}
+                              />
+                            </div>
+                          ) : null}
+
+                          {verified ? (
+                            <p className="mt-1.5 text-[11px] font-semibold text-[#c9a84c]">
+                              <span>&#10003;</span> RERA Registered
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </Fragment>
+                ))}
+
+                {visibleRows.length === 0 ? (
+                  <div className="col-span-full flex min-h-[72px] items-center border-b border-white/10 px-3 text-[12px] text-[#8a909e]">
+                    No metrics were returned for this category.
+                  </div>
+                ) : null}
+
+                {showAvailability ? (
+                  <Fragment>
+                    <div className="sticky left-0 z-10 flex min-h-[72px] w-[116px] items-center border-r border-b border-white/10 bg-[#141519] px-3 text-[11px] leading-[1.3] font-medium text-[#8a909e]">
+                      Data availability
+                    </div>
+
+                    {availability.map(({ property, total, available, missing }) => {
+                      const percent = total === 0 ? 0 : (available / total) * 100;
+                      const complete = missing.length === 0;
+
+                      return (
+                        <div
+                          key={property.property_id}
+                          className="flex min-h-[72px] max-w-[220px] snap-start flex-col justify-center gap-1.5 border-r border-b border-white/10 px-3 py-2.5"
+                        >
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="line-clamp-2 break-words text-[11px] leading-[1.3] text-[#8a909e]">
+                              {property.name}
+                            </span>
+                            <span className="shrink-0 text-[12px] font-semibold tabular-nums text-[#e8e6e1]">
+                              {available}
+                              <span className="text-[#6b7280]">/{total}</span>
+                            </span>
+                          </div>
+
+                          <div
+                            aria-hidden="true"
+                            className="h-[3px] w-full overflow-hidden rounded-full bg-white/10"
+                          >
+                            <div
+                              className="h-full rounded-full bg-[#8a8f98] transition-all duration-500"
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+
+                          <p className="line-clamp-2 text-[10px] text-[#6b7280]">
+                            {complete
+                              ? "Every metric returned a value"
+                              : `Missing ${missing.join(", ")}`}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </Fragment>
+                ) : null}
+
+                <div className="sticky left-0 z-10 w-[116px] bg-[#141519] py-4" />
+                {compared.map((property) => (
+                  <div
+                    key={property.property_id}
+                    className="flex snap-start items-center bg-[#141519] px-3 py-4"
+                  >
+                    <Link
+                      href={`/properties/${property.property_id}`}
+                      aria-label={`Enquire on ${property.name}`}
+                      className="flex min-h-11 w-full items-center justify-center rounded-xl bg-[#c9a84c] px-3 text-[12px] font-semibold text-[#0f1114] transition hover:bg-[#d4b57e]"
+                    >
+                      Enquire
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Share bar */}
+            {result?.share_url ? (
+              <div className="shrink-0 border-t border-white/10 bg-[#17191e] px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+                <button
+                  type="button"
+                  onClick={copyShareUrl}
+                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 text-[12px] font-semibold text-white/85 transition active:bg-white/10"
+                >
+                  <span>
+                    {copiedShare ? "Link copied" : "Copy shareable comparison link"}
+                  </span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </Fragment>
+    );
+  }
 
   // The section uses `overflow-x-clip`, not `overflow-hidden`.
   //
@@ -1968,7 +2317,7 @@ export default function CompareProperties() {
           role="dialog"
           aria-modal="true"
           aria-label="Property comparison results"
-          className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#141519] text-white lg:hidden"
+          className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#141519] text-white"
         >
           {/* Header band.
 
@@ -2021,9 +2370,9 @@ export default function CompareProperties() {
                   band rather than as a hole in it. */}
               <button
                 type="button"
-                onClick={() => setMobileModalOpen(false)}
+                onClick={handleCloseModal}
                 aria-label="Close comparison"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white/90 transition active:scale-95"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white/90 transition active:scale-95 hover:bg-white/15"
               >
                 <CloseIcon className="h-5 w-5" />
               </button>

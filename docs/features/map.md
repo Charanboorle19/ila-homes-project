@@ -19,6 +19,7 @@ The project has two MapLibre-based map components:
 4. Opening a property layout loads the property detail and `GET /api/properties/{id}/units?limit=all`. Unit geometry is converted into plot polygons.
 5. A plot can be selected from the map or list. The plot selection shows its plot details and highlights the polygon.
 6. The visitor can filter plots by `all`, `available`, or `sold`, toggle layout imagery, and close the layout/property sheet (on-map search input option was removed from the map overlay).
+7. The quick action toolbar on the right side provides quick access to Wishlist, EMI Calculator, and Compare Properties. Clicking Compare activates pin selection mode to select properties across the map and launch the Compare Properties popup modal.
 
 ### Location/Development map (`GrowthCorridors`)
 

@@ -21,7 +21,7 @@ export default function Home() {
 
   return (
     <div className="relative flex-1 w-full h-[calc(100vh-var(--nav-h))] max-h-[calc(100vh-var(--nav-h))] overflow-hidden">
-      <MapSection className="h-full w-full" />
+      <MapSection className="h-full w-full" hideDetails={true} />
     </div>
   );
 }

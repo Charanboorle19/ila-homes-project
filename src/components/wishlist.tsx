@@ -11,6 +11,10 @@ import {
 } from "@/services/favoritesService";
 import { formatInr } from "@/lib/propertyUtils";
 import { getPropertyById } from "@/data/properties";
+import ShortlistPreviewModal from "@/components/ShortlistPreviewModal";
+import type { ShortlistPlot } from "@/components/ShortlistShare";
+import { createPropertyShares, buildShareUrl } from "@/services/shareService";
+import familyCommunityImg from "@/app/assets/Family Dreams Over a New Community.png";
 
 function CloseIcon({ className = "" }: { className?: string }) {
   return (
@@ -54,6 +58,26 @@ function PinIcon({ className = "" }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
       <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
+}
+
+function ShareIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
     </svg>
   );
 }
@@ -113,6 +137,113 @@ export default function Wishlist({
       void loadFavorites();
     }
   }, [isOpen, loadFavorites]);
+
+  // Bulk Share Selection state
+  const [isSelectingForShare, setIsSelectingForShare] = useState(false);
+  const [selectedShareIds, setSelectedShareIds] = useState<string[]>([]);
+
+  // Bulk Share Modal state
+  const [sharePreviewOpen, setSharePreviewOpen] = useState(false);
+  const [shareUrls, setShareUrls] = useState<string[]>([]);
+  const [shareLoading, setShareLoading] = useState(false);
+
+  // When clicking "Share", toggle into selection mode or prepare share
+  const handleStartShareSelection = () => {
+    if (!favorites.length) return;
+    setIsSelectingForShare(true);
+    // Pre-select all items by default for convenience
+    setSelectedShareIds(favorites.map((f) => f.property_id));
+  };
+
+  const handleCancelShareSelection = () => {
+    setIsSelectingForShare(false);
+    setSelectedShareIds([]);
+  };
+
+  const toggleSelectShareId = (propertyId: string) => {
+    setSelectedShareIds((prev) =>
+      prev.includes(propertyId)
+        ? prev.filter((id) => id !== propertyId)
+        : [...prev, propertyId],
+    );
+  };
+
+  const handleBulkShare = async () => {
+    const idsToShare = isSelectingForShare ? selectedShareIds : favorites.map((fav) => fav.property_id);
+    if (!idsToShare.length || shareLoading) return;
+    setShareLoading(true);
+
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+    try {
+      const shares = await createPropertyShares({
+        entityIds: idsToShare,
+        message: "Please review my shortlisted properties",
+      });
+      const generatedUrls = shares.map((share) =>
+        buildShareUrl(share.tracking_token!, origin),
+      );
+      setShareUrls(
+        generatedUrls.length > 0
+          ? generatedUrls
+          : idsToShare.map((id) => `${origin}/properties/${id}`),
+      );
+    } catch {
+      setShareUrls(idsToShare.map((id) => `${origin}/properties/${id}`));
+    } finally {
+      setShareLoading(false);
+      setSharePreviewOpen(true);
+      setIsSelectingForShare(false);
+    }
+  };
+
+  const handleConfirmShare = () => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const chosenFavorites = favorites.filter((fav) =>
+      selectedShareIds.length > 0 ? selectedShareIds.includes(fav.property_id) : true,
+    );
+
+    const sections = chosenFavorites.map((fav, idx) => {
+      const url = shareUrls[idx] || `${origin}/properties/${fav.property_id}`;
+      const local = getPropertyById(fav.property_id);
+      const loc = local?.location || "Prime Location, Hyderabad";
+      const priceText = fav.price_from ? `from ${formatInr(fav.price_from)}` : "Price on request";
+      return `*${fav.name}*\n📍 ${loc} · ${priceText}\n${url}`;
+    });
+
+    const text = [
+      "🏡 *My Shortlisted Properties via ILA Homes*",
+      "",
+      sections.join("\n\n"),
+      "",
+      "Open the links to review layouts, pricing & financing details.",
+    ].join("\n");
+
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    setSharePreviewOpen(false);
+  };
+
+  const chosenFavorites = favorites.filter((fav) =>
+    selectedShareIds.length > 0 ? selectedShareIds.includes(fav.property_id) : true,
+  );
+
+  const shortlistPlots: ShortlistPlot[] = chosenFavorites.map((fav) => {
+    const local = getPropertyById(fav.property_id);
+    const cover = local?.gallery?.[0]?.src || "/hero-image.png";
+    return {
+      id: fav.property_id,
+      name: fav.name,
+      location: local?.location || "Prime Location, Hyderabad",
+      meta: fav.price_from ? `From ${formatInr(fav.price_from)}` : "Price on request",
+      highlight: local?.popupSample?.description || "Verified development listed on ILA Homes.",
+      coverUrl: cover,
+      image: familyCommunityImg,
+    };
+  });
 
   const handleRemoveFavorite = async (e: React.MouseEvent, propertyId: string) => {
     e.stopPropagation();
@@ -179,15 +310,64 @@ export default function Wishlist({
             </div>
           </div>
 
-          <button
-            type="button"
-            aria-label="Close wishlist drawer"
-            onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f2ede4] text-[#454038] transition hover:bg-[#e6e0d4] hover:text-[#171717] active:scale-95"
-          >
-            <CloseIcon className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {favorites.length > 0 && !isSelectingForShare && (
+              <button
+                type="button"
+                aria-label="Share wishlist on WhatsApp"
+                title="Select properties to share"
+                onClick={handleStartShareSelection}
+                disabled={shareLoading}
+                className="flex h-7 items-center gap-1.5 rounded-lg border border-[#c6a46c]/40 bg-[#faf4e4] px-2 text-[11px] font-semibold text-[#8a6d34] transition hover:bg-[#c6a46c] hover:text-[#171717] active:scale-95 disabled:opacity-50"
+              >
+                <ShareIcon className="h-3.5 w-3.5" />
+                <span className="hidden xs:inline">Share</span>
+              </button>
+            )}
+
+            {isSelectingForShare && (
+              <button
+                type="button"
+                aria-label="Cancel share selection"
+                onClick={handleCancelShareSelection}
+                className="flex h-7 items-center rounded-lg border border-black/15 bg-white px-2 text-[11px] font-semibold text-[#5c5348] transition hover:bg-[#f0ece3] active:scale-95"
+              >
+                Cancel
+              </button>
+            )}
+
+            <button
+              type="button"
+              aria-label="Close wishlist drawer"
+              onClick={onClose}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f2ede4] text-[#454038] transition hover:bg-[#e6e0d4] hover:text-[#171717] active:scale-95"
+            >
+              <CloseIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
+
+        {/* Selection mode indicator banner */}
+        {isSelectingForShare && (
+          <div className="flex items-center justify-between border-b border-[#e6e0d4] bg-[#faf4e4] px-4 py-2 text-[11px]">
+            <span className="font-semibold text-[#8a6d34]">
+              {selectedShareIds.length} of {favorites.length} selected to share
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedShareIds.length === favorites.length) {
+                  setSelectedShareIds([]);
+                } else {
+                  setSelectedShareIds(favorites.map((f) => f.property_id));
+                }
+              }}
+              className="font-bold text-[#171717] underline underline-offset-2 transition hover:text-[#8a6d34]"
+            >
+              {selectedShareIds.length === favorites.length ? "Deselect all" : "Select all"}
+            </button>
+          </div>
+        )}
 
         {/* Content Body */}
         <div className="ila-scroll flex-1 overflow-y-auto overscroll-contain p-3.5">
@@ -221,13 +401,38 @@ export default function Wishlist({
                 const cover = getCoverImage(fav);
                 const local = getPropertyById(fav.property_id);
                 const locationText = local?.location || "Prime Location, Hyderabad";
+                const isSelected = selectedShareIds.includes(fav.property_id);
 
                 return (
                   <div
                     key={fav.property_id}
-                    className="group relative flex flex-col overflow-hidden rounded-xl border border-[#e5ddcd] bg-white shadow-xs transition hover:border-[#c6a46c]"
+                    onClick={() => {
+                      if (isSelectingForShare) {
+                        toggleSelectShareId(fav.property_id);
+                      }
+                    }}
+                    className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white shadow-xs transition ${
+                      isSelectingForShare
+                        ? isSelected
+                          ? "cursor-pointer border-[#c6a46c] ring-1.5 ring-[#c6a46c] bg-[#fdfbf7]"
+                          : "cursor-pointer border-[#e5ddcd] opacity-65 hover:opacity-100"
+                        : "border-[#e5ddcd] hover:border-[#c6a46c]"
+                    }`}
                   >
                     <div className="flex items-center gap-3 p-2.5">
+                      {/* Checkbox indicator when in share selection mode */}
+                      {isSelectingForShare && (
+                        <div
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${
+                            isSelected
+                              ? "border-[#c6a46c] bg-[#c6a46c] text-[#171717]"
+                              : "border-[#ded9cf] bg-white text-transparent"
+                          }`}
+                        >
+                          <CheckIcon className="h-3 w-3 stroke-[3]" />
+                        </div>
+                      )}
+
                       {/* Compact Thumbnail */}
                       <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-[#e8e4dc]">
                         <Image
@@ -261,15 +466,17 @@ export default function Wishlist({
                         </div>
                       </div>
 
-                      {/* Remove Button */}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${fav.name} from wishlist`}
-                        onClick={(e) => handleRemoveFavorite(e, fav.property_id)}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#9a9388] transition hover:bg-rose-50 hover:text-rose-600 active:scale-95"
-                      >
-                        <TrashIcon className="h-3.5 w-3.5" />
-                      </button>
+                      {/* Remove Button (hidden while selecting for share) */}
+                      {!isSelectingForShare && (
+                        <button
+                          type="button"
+                          aria-label={`Remove ${fav.name} from wishlist`}
+                          onClick={(e) => handleRemoveFavorite(e, fav.property_id)}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#9a9388] transition hover:bg-rose-50 hover:text-rose-600 active:scale-95"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
 
                     {/* Bottom CTA bar */}
@@ -295,18 +502,65 @@ export default function Wishlist({
 
         {/* Compact Footer */}
         {favorites.length > 0 && (
-          <div className="border-t border-[#e6e0d4] bg-white p-3">
-            <Link
-              href="#contact"
-              onClick={onClose}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-[11px] font-bold tracking-wider uppercase text-[#171717] shadow-sm transition active:scale-[0.99] hover:brightness-105"
-            >
-              <span>Enquire Shortlisted</span>
-              <ArrowRightIcon className="h-3 w-3" />
-            </Link>
+          <div className="flex items-center gap-2 border-t border-[#e6e0d4] bg-white p-3">
+            {isSelectingForShare ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleCancelShareSelection}
+                  className="flex h-10 w-24 items-center justify-center rounded-xl border border-black/15 bg-white text-[11px] font-bold uppercase tracking-wider text-[#5c5348] transition hover:bg-[#f2ede4] active:scale-[0.99]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkShare}
+                  disabled={selectedShareIds.length === 0 || shareLoading}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-[11px] font-bold tracking-wider uppercase text-[#171717] shadow-sm transition hover:brightness-105 active:scale-[0.99] disabled:opacity-40"
+                >
+                  <ShareIcon className="h-3.5 w-3.5" />
+                  <span>
+                    {shareLoading
+                      ? "Preparing…"
+                      : `Share (${selectedShareIds.length})`}
+                  </span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleStartShareSelection}
+                  disabled={shareLoading}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#c6a46c] bg-[#faf4e4] py-2.5 text-[11px] font-bold tracking-wider uppercase text-[#8a6d34] shadow-xs transition hover:bg-[#c6a46c] hover:text-[#171717] active:scale-[0.99] disabled:opacity-50"
+                >
+                  <ShareIcon className="h-3.5 w-3.5" />
+                  <span>Share ({favorites.length})</span>
+                </button>
+
+                <Link
+                  href="#contact"
+                  onClick={onClose}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-[11px] font-bold tracking-wider uppercase text-[#171717] shadow-sm transition active:scale-[0.99] hover:brightness-105"
+                >
+                  <span>Enquire</span>
+                  <ArrowRightIcon className="h-3 w-3" />
+                </Link>
+              </>
+            )}
           </div>
         )}
       </aside>
+
+      {/* Bulk WhatsApp Shortlist Preview Modal */}
+      <ShortlistPreviewModal
+        open={sharePreviewOpen}
+        onClose={() => setSharePreviewOpen(false)}
+        selectedPlots={shortlistPlots}
+        urls={shareUrls}
+        onConfirmShare={handleConfirmShare}
+        sharing={shareLoading}
+      />
     </div>
   );
 

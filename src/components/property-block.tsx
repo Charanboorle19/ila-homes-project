@@ -14,6 +14,10 @@ import {
   saveFavorite,
   removeFavorite,
 } from "@/services/favoritesService";
+import ShortlistPreviewModal from "@/components/ShortlistPreviewModal";
+import type { ShortlistPlot } from "@/components/ShortlistShare";
+import { createPropertyShares, buildShareUrl } from "@/services/shareService";
+import familyCommunityImg from "@/app/assets/Family Dreams Over a New Community.png";
 
 // SVG Icons tailored for the property block
 function CloseIcon({ className = "" }: { className?: string }) {
@@ -228,6 +232,11 @@ export default function PropertyBlock({
   // Active property ID for favorites API
   const activePropertyId = apiProperty?.id || property?.id || project?.id;
 
+  // Shortlist WhatsApp Preview Share Modal state
+  const [sharePreviewOpen, setSharePreviewOpen] = useState(false);
+  const [shareUrls, setShareUrls] = useState<string[]>([]);
+  const [shareLoading, setShareLoading] = useState(false);
+
   // Check if current property is saved in favorites
   useEffect(() => {
     let cancelled = false;
@@ -425,20 +434,45 @@ export default function PropertyBlock({
 
   // Handlers for quick actions
   const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: propertyName,
-          text: `Check out ${propertyName} in ${propertyLocation} starting from ${startingPrice}`,
-          url: window.location.href,
-        });
-      } catch {
-        // user cancelled
-      }
-    } else {
-      navigator.clipboard?.writeText(window.location.href);
-      alert("Link copied to clipboard!");
+    if (shareLoading) return;
+    setShareLoading(true);
+
+    const plotId = activePropertyId || project.id;
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+    try {
+      const shares = await createPropertyShares({
+        entityIds: [plotId],
+        message: `Please review ${propertyName}`,
+      });
+      const generatedUrls = shares.map((share) =>
+        buildShareUrl(share.tracking_token!, origin),
+      );
+      setShareUrls(generatedUrls.length > 0 ? generatedUrls : [`${origin}/properties/${plotId}`]);
+    } catch {
+      setShareUrls([`${origin}/properties/${plotId}`]);
+    } finally {
+      setShareLoading(false);
+      setSharePreviewOpen(true);
     }
+  };
+
+  const handleConfirmShare = () => {
+    const plotUrl = shareUrls[0] || `${window.location.origin}/properties/${activePropertyId || project.id}`;
+    const text = [
+      `🏡 *${propertyName}*`,
+      `📍 ${propertyLocation} · starting at ${startingPrice}`,
+      plotUrl,
+      "",
+      "Review layout, pricing & financing details on ILA Homes.",
+    ].join("\n");
+
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    setSharePreviewOpen(false);
   };
 
   const handleWhatsApp = () => {
@@ -446,6 +480,16 @@ export default function PropertyBlock({
       `Hello, I am interested in ${propertyName} in ${propertyLocation} (starting at ${startingPrice}). Please share more details.`,
     );
     window.open(`https://wa.me/?text=${text}`, "_blank");
+  };
+
+  const selectedShortlistPlot: ShortlistPlot = {
+    id: activePropertyId || project.id,
+    name: propertyName,
+    location: propertyLocation,
+    meta: `Starting at ${startingPrice} · ${plotSizeRange}`,
+    highlight: apiProperty?.description || property?.description || "Property details available from ILA Homes.",
+    coverUrl: galleryImages[0] || null,
+    image: familyCommunityImg,
   };
 
   const propertySlug = apiProperty?.slug || property?.id || project.id;
@@ -898,6 +942,16 @@ export default function PropertyBlock({
             document.body,
           )
         : null}
+
+      {/* 9. Shortlist Preview Modal for WhatsApp Sharing */}
+      <ShortlistPreviewModal
+        open={sharePreviewOpen}
+        onClose={() => setSharePreviewOpen(false)}
+        selectedPlots={[selectedShortlistPlot]}
+        urls={shareUrls}
+        onConfirmShare={handleConfirmShare}
+        sharing={shareLoading}
+      />
     </>
   );
 }

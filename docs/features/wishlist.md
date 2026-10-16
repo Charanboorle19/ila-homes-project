@@ -14,6 +14,8 @@ The API-backed favourite control appears on each card in the `/properties` catal
 
 The local-storage Wishlist and Interested controls appear in the final CTA section of each Property Details page at `/properties/{propertyId}`. They are rendered by `PropertyFinalCta`.
 
+The **Wishlist drawer** ([src/components/wishlist.tsx](file:///c:/Users/surya/Desktop/ILA-HOMES-PROJECT/src/components/wishlist.tsx)) is mounted globally on the homepage map and floating navigation, allowing visitors to review their saved properties, enter selection mode on click of "Share" to choose specific properties with checkboxes (including "Select all" / "Deselect all"), and trigger bulk WhatsApp sharing through [ShortlistPreviewModal](file:///c:/Users/surya/Desktop/ILA-HOMES-PROJECT/src/components/ShortlistPreviewModal.tsx).
+
 The separate Shortlist / WhatsApp Share component is **not currently mounted**. It previously appeared on the homepage `/` with root `id="shortlist-share"` and `aria-label="Shortlist and share"`; `/` now renders `MapSection` alone.
 
 No favourite control is confirmed in `MapSection` or the map `PropertySheet`.

@@ -8,7 +8,8 @@ This document describes the current `ShortlistShare` implementation only. It is 
 
 ## 2. Where it appears
 
-**The feature is not currently mounted anywhere.** It appeared on the homepage route `/` as the `ShortlistShare` section, whose root element has `id="shortlist-share"` and `aria-label="Shortlist and share"`; `/` now renders `MapSection` alone (`src/app/page.tsx`), so that id is no longer present. No separate feature route is confirmed.
+- The full `ShortlistShare` section was on `/` (currently unmounted on the homepage).
+- **PropertyBlock Share modal integration**: When "Share" is tapped on [PropertyBlock](file:///c:/Users/surya/Desktop/ILA-HOMES-PROJECT/src/components/property-block.tsx), it creates tracked share links and displays the WhatsApp preview modal dialog ([ShortlistPreviewModal](file:///c:/Users/surya/Desktop/ILA-HOMES-PROJECT/src/components/ShortlistPreviewModal.tsx)), allowing visitors to copy or directly share the selected property on WhatsApp.
 
 ## 3. Homepage position
 

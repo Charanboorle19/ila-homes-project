@@ -9,6 +9,10 @@ import {
   removeFavorite,
   type FavoriteItem,
 } from "@/services/favoritesService";
+import {
+  fetchProperties,
+  type PropertyListItem,
+} from "@/services/propertiesService";
 import { formatInr } from "@/lib/propertyUtils";
 import { getPropertyById } from "@/data/properties";
 import ShortlistPreviewModal from "@/components/ShortlistPreviewModal";
@@ -105,6 +109,8 @@ export default function Wishlist({
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  const [propertyCatalog, setPropertyCatalog] = useState<Record<string, PropertyListItem>>({});
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -112,8 +118,16 @@ export default function Wishlist({
   const loadFavorites = useCallback(async () => {
     setFavoritesLoading(true);
     try {
-      const items = await fetchFavorites();
-      setFavorites(items || []);
+      const [favItems, propsResult] = await Promise.all([
+        fetchFavorites(),
+        fetchProperties({ status: "ALL", page: 1, perPage: 100 }).catch(() => ({ items: [] })),
+      ]);
+      const catalogMap: Record<string, PropertyListItem> = {};
+      for (const p of propsResult.items) {
+        catalogMap[p.id] = p;
+      }
+      setPropertyCatalog(catalogMap);
+      setFavorites(favItems || []);
     } catch (e) {
       console.warn("[Wishlist] could not load favorites", e);
     } finally {
@@ -260,6 +274,10 @@ export default function Wishlist({
   };
 
   const getCoverImage = (item: FavoriteItem): string => {
+    if (item.cover_url) return item.cover_url;
+    if (item.image_url) return item.image_url;
+    const catProp = propertyCatalog[item.property_id];
+    if (catProp?.cover_url) return catProp.cover_url;
     const local = getPropertyById(item.property_id);
     return local?.gallery?.[0]?.src || "/hero-image.png";
   };
@@ -293,7 +311,7 @@ export default function Wishlist({
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-serif text-sm font-bold text-[#1a1917]">
+                <h2 className="text-sm font-bold tracking-tight text-[#1a1917]">
                   Your Wishlist
                 </h2>
                 {favorites.length > 0 && (
@@ -310,7 +328,7 @@ export default function Wishlist({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {favorites.length > 0 && !isSelectingForShare && (
               <button
                 type="button"
@@ -318,10 +336,10 @@ export default function Wishlist({
                 title="Select properties to share"
                 onClick={handleStartShareSelection}
                 disabled={shareLoading}
-                className="flex h-7 items-center gap-1.5 rounded-lg border border-[#c6a46c]/40 bg-[#faf4e4] px-2 text-[11px] font-semibold text-[#8a6d34] transition hover:bg-[#c6a46c] hover:text-[#171717] active:scale-95 disabled:opacity-50"
+                className="flex h-8 items-center gap-1.5 rounded-xl border border-[#25D366]/40 bg-[#128C7E]/10 px-3 text-xs font-bold text-[#128C7E] shadow-xs transition hover:bg-[#25D366] hover:text-white hover:border-[#25D366] active:scale-95 disabled:opacity-50"
               >
-                <ShareIcon className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline">Share</span>
+                <ShareIcon className="h-4 w-4" />
+                <span>Share</span>
               </button>
             )}
 
@@ -330,7 +348,7 @@ export default function Wishlist({
                 type="button"
                 aria-label="Cancel share selection"
                 onClick={handleCancelShareSelection}
-                className="flex h-7 items-center rounded-lg border border-black/15 bg-white px-2 text-[11px] font-semibold text-[#5c5348] transition hover:bg-[#f0ece3] active:scale-95"
+                className="flex h-8 items-center rounded-xl border border-black/15 bg-white px-3 text-xs font-semibold text-[#5c5348] transition hover:bg-[#f0ece3] active:scale-95"
               >
                 Cancel
               </button>
@@ -340,9 +358,9 @@ export default function Wishlist({
               type="button"
               aria-label="Close wishlist drawer"
               onClick={onClose}
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-[#f2ede4] text-[#454038] transition hover:bg-[#e6e0d4] hover:text-[#171717] active:scale-95"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-red-500/30 bg-red-50 text-red-600 shadow-xs transition hover:bg-red-600 hover:text-white hover:border-red-600 active:scale-95"
             >
-              <CloseIcon className="h-3.5 w-3.5" />
+              <CloseIcon className="h-4 w-4 stroke-[2.5]" />
             </button>
           </div>
         </div>
@@ -381,7 +399,7 @@ export default function Wishlist({
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f0ece3] text-[#a07c3c]">
                 <HeartIcon className="h-5 w-5" />
               </div>
-              <h3 className="mt-2.5 font-serif text-sm font-bold text-[#1a1917]">
+              <h3 className="mt-2.5 text-sm font-bold tracking-tight text-[#1a1917]">
                 Your wishlist is empty
               </h3>
               <p className="mt-1 max-w-[240px] text-[11px] text-[#7a7469]">
@@ -400,7 +418,12 @@ export default function Wishlist({
               {favorites.map((fav) => {
                 const cover = getCoverImage(fav);
                 const local = getPropertyById(fav.property_id);
-                const locationText = local?.location || "Prime Location, Hyderabad";
+                const catProp = propertyCatalog[fav.property_id];
+                const locationText =
+                  [catProp?.locality, catProp?.city].filter(Boolean).join(", ") ||
+                  catProp?.address ||
+                  local?.location ||
+                  "Prime Location, Hyderabad";
                 const isSelected = selectedShareIds.includes(fav.property_id);
 
                 return (
@@ -440,6 +463,7 @@ export default function Wishlist({
                           alt={fav.name}
                           fill
                           sizes="56px"
+                          unoptimized={cover.startsWith("http")}
                           className="object-cover"
                         />
                         <span className="absolute top-1 left-1 rounded-full bg-black/60 px-1 py-0.2 text-[7px] font-bold uppercase tracking-wider text-white">
@@ -449,7 +473,7 @@ export default function Wishlist({
 
                       {/* Info */}
                       <div className="min-w-0 flex-1">
-                        <h4 className="truncate font-serif text-xs font-bold text-[#171717] group-hover:text-[#8a6d34]">
+                        <h4 className="truncate text-xs font-bold tracking-tight text-[#171717] group-hover:text-[#8a6d34]">
                           {fav.name}
                         </h4>
                         <p className="mt-0.5 flex items-center gap-1 text-[10px] text-[#7a7469]">
@@ -532,9 +556,9 @@ export default function Wishlist({
                   type="button"
                   onClick={handleStartShareSelection}
                   disabled={shareLoading}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#c6a46c] bg-[#faf4e4] py-2.5 text-[11px] font-bold tracking-wider uppercase text-[#8a6d34] shadow-xs transition hover:bg-[#c6a46c] hover:text-[#171717] active:scale-[0.99] disabled:opacity-50"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#25D366]/40 bg-[#128C7E]/10 py-2.5 text-xs font-bold tracking-wider uppercase text-[#128C7E] shadow-xs transition hover:bg-[#25D366] hover:text-white hover:border-[#25D366] active:scale-[0.99] disabled:opacity-50"
                 >
-                  <ShareIcon className="h-3.5 w-3.5" />
+                  <ShareIcon className="h-4 w-4" />
                   <span>Share ({favorites.length})</span>
                 </button>
 

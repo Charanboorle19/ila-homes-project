@@ -8,6 +8,8 @@ export type FavoriteItem = {
   property_type: string;
   price_from: number;
   status: string;
+  cover_url?: string | null;
+  image_url?: string | null;
 };
 
 export type FavoritesResponse = {

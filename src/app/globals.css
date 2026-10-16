@@ -633,14 +633,6 @@ body.no-scroll::-webkit-scrollbar {
     0 8px 20px rgba(0, 0, 0, 0.45);
 }
 
-@keyframes ila-pin-bounce {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
-}
 
 /* Feature Tag Matching Highlight and Dimmed states */
 .ila-project-pin {
@@ -684,9 +676,42 @@ body.no-scroll::-webkit-scrollbar {
   filter: none;
 }
 
+/* Compare selection mode: available pins stay inviting with background halo animation */
+.ila-project-pin--compare-mode {
+  opacity: 0.86 !important;
+  filter: none !important;
+  z-index: 10 !important;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.ila-project-pin--compare-mode:hover {
+  opacity: 1 !important;
+}
+
+.ila-project-pin--compare-mode .ila-project-pin__anchor {
+  animation: ila-pin-bounce 2s ease-in-out infinite;
+}
+
+.ila-project-pin--compare-mode .ila-project-pin__halo {
+  background: rgba(198, 164, 108, 0.75);
+  box-shadow: 0 0 0 8px rgba(198, 164, 108, 0.45);
+  animation: ila-pin-halo-pulse 2s ease-out infinite;
+}
+
+.ila-project-pin--compare-mode .ila-project-pin__core {
+  box-shadow:
+    0 0 0 3px #111111,
+    0 0 16px rgba(198, 164, 108, 0.9),
+    0 8px 18px rgba(0, 0, 0, 0.45);
+}
+
+.ila-project-pin--compare-mode .ila-pin-tag {
+  opacity: 0.88 !important;
+}
+
 /* Compare selection mode: numbers and glowing selection indicator */
 .ila-project-pin--compare-selected {
-  z-index: 15 !important;
+  z-index: 20 !important;
   opacity: 1 !important;
 }
 
@@ -744,7 +769,101 @@ body.no-scroll::-webkit-scrollbar {
   }
 }
 
-/* Luxury hover tooltip on pin */
+/* Persistent Luxury Property Name Tag on Pointers */
+.ila-pin-tag {
+  position: absolute;
+  pointer-events: none;
+  z-index: 12;
+  width: max-content;
+  max-width: 140px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.ila-pin-tag__text {
+  display: block;
+  width: auto;
+  min-width: 60px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #171717;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1.5px solid rgba(198, 164, 108, 0.7);
+  border-radius: 999px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.18),
+    0 1px 3px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  text-align: center;
+  transition: all 0.22s ease;
+}
+
+/* When zoomed in or hovered: expand horizontally and wrap into up to 2 clean lines */
+.map--zoomed-in .ila-pin-tag,
+.ila-project-pin:hover .ila-pin-tag {
+  max-width: 190px;
+}
+
+.map--zoomed-in .ila-pin-tag__text,
+.ila-project-pin:hover .ila-pin-tag__text {
+  max-width: 190px;
+  white-space: normal;
+  border-radius: 10px;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+/* Placements relative to the pin anchor */
+.ila-project-pin--tag-top .ila-pin-tag {
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.ila-project-pin--tag-right .ila-pin-tag {
+  top: 10px;
+  left: calc(100% + 6px);
+}
+
+.ila-project-pin--tag-bottom .ila-pin-tag {
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.ila-project-pin--tag-left .ila-pin-tag {
+  top: 10px;
+  right: calc(100% + 6px);
+}
+
+/* Hover effect on pin: lift tag slightly and highlight with gold tint */
+.ila-project-pin:hover .ila-pin-tag__text {
+  background: #111111;
+  color: #ffffff;
+  border-color: #c6a46c;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* In dimmed state, soften tag slightly to preserve map readability */
+.ila-project-pin--dimmed .ila-pin-tag {
+  opacity: 0.7;
+}
+
+.ila-project-pin--highlighted .ila-pin-tag__text {
+  background: #c6a46c;
+  color: #111111;
+  border-color: #ffffff;
+  box-shadow: 0 0 12px rgba(198, 164, 108, 0.8);
+}
+
+
 .ila-pin-tooltip {
   position: absolute;
   bottom: calc(100% + 14px);
@@ -1276,3 +1395,153 @@ body.no-scroll::-webkit-scrollbar {
     height: 100% !important;
   }
 }
+
+/* Smooth Entrance Animations for Modals and Popups */
+@keyframes ila-modal-backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ila-modal-slide-up {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 640px) {
+  @keyframes ila-modal-slide-up {
+    0% {
+      opacity: 0;
+      transform: translateY(40px) scale(0.97);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+}
+
+@keyframes ila-banner-slide-down {
+  0% {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.92);
+  }
+  60% {
+    opacity: 0.95;
+    transform: translateY(2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ila-banner-animate {
+  animation: ila-banner-slide-down 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.ila-modal-backdrop {
+  animation: ila-modal-backdrop-fade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.ila-modal-content {
+  animation: ila-modal-slide-up 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.ila-modal-content .pd-section {
+  padding: 0 !important;
+}
+
+.ila-modal-content .pd-kicker {
+  color: #c6a46c !important;
+  font-weight: 700 !important;
+  font-size: 0.75rem !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.ila-modal-content #pd-emi-title {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.ila-modal-content .pd-section__lead {
+  color: #c8c1b2 !important;
+}
+
+/* ==========================================================================
+   Print / PDF Export Styles for Compare Properties Block
+   ========================================================================== */
+@media print {
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+
+  /* Reset body and html container when printing */
+  html,
+  body {
+    background: #141519 !important;
+    color: #ffffff !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 100% !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide everything on the page except the compare modal when it is active */
+  body:has(.ila-compare-modal) > *:not(main),
+  body:has(.ila-compare-modal) main > *:not([data-section="hero_map"]):not([data-section="compare_plots"]) {
+    display: none !important;
+  }
+
+  /* Hide map frame behind the modal */
+  body:has(.ila-compare-modal) .ila-map-frame {
+    display: none !important;
+  }
+
+  .ila-compare-modal {
+    position: static !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: #141519 !important;
+    color: #ffffff !important;
+    overflow: visible !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    z-index: 99999 !important;
+  }
+
+  .ila-compare-modal .ila-search-scroll {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    display: block !important;
+  }
+
+  .ila-compare-modal .grid {
+    display: grid !important;
+    width: 100% !important;
+  }
+
+  /* Force background colors and typography to render in full fidelity */
+  .ila-compare-modal * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+

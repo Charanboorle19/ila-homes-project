@@ -811,12 +811,7 @@ export default function FutureNeighbourhoodMap({
         source: ITEMS_SOURCE,
         layout: {
           "text-field": ["to-string", ["get", "number"]],
-          "text-size": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            isDesktop ? 11 : 9.5,
-            isDesktop ? 9.5 : 8,
-          ],
+          "text-size": isDesktop ? 10 : 8.5,
           "text-font": ["Open Sans Bold"],
           "text-allow-overlap": true,
         },

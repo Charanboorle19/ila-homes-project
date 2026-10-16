@@ -17,6 +17,8 @@ import {
 import ShortlistPreviewModal from "@/components/ShortlistPreviewModal";
 import type { ShortlistPlot } from "@/components/ShortlistShare";
 import { createPropertyShares, buildShareUrl } from "@/services/shareService";
+import PlotsWithPulse from "@/components/PlotsWithPulse";
+import HomeReadyToVisit from "@/components/HomeReadyToVisit";
 import familyCommunityImg from "@/app/assets/Family Dreams Over a New Community.png";
 
 // SVG Icons tailored for the property block
@@ -193,6 +195,7 @@ export type PropertyBlockProps = {
   onTabChange?: (tab: any) => void;
   onSelectPlot?: (plot: Plot) => void;
   onOpenCompare?: (propertyId?: string) => void;
+  onOpenEmi?: (propertyInfo: { id: string; name: string; price: number; location?: string }) => void;
 };
 
 /**
@@ -220,6 +223,7 @@ export default function PropertyBlock({
   apiProperty,
   onSelectPlot,
   onOpenCompare,
+  onOpenEmi,
 }: PropertyBlockProps) {
   // Gallery state
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -231,6 +235,49 @@ export default function PropertyBlock({
 
   // Active property ID for favorites API
   const activePropertyId = apiProperty?.id || property?.id || project?.id;
+
+  // Pulse ("See what others are viewing") modal popup state
+  const [pulseModalOpen, setPulseModalOpen] = useState(false);
+
+  // Site visit ("Next step") modal popup state
+  const [siteVisitModalOpen, setSiteVisitModalOpen] = useState(false);
+
+  // Touch drag state to automatically maximize on upward drag, and minimize on downward drag
+  const touchStartYRef = React.useRef<number | null>(null);
+  const scrollContainerRef = React.useRef<HTMLDivElement | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches && e.touches.length > 0) {
+      touchStartYRef.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartYRef.current === null) return;
+    const currentY = e.touches[0].clientY;
+    const deltaY = touchStartYRef.current - currentY;
+
+    // Upward drag while minimized -> automatically maximize
+    if (!mobileExpanded && deltaY > 28) {
+      touchStartYRef.current = null;
+      onToggleMobileExpand();
+      return;
+    }
+
+    // Downward drag while maximized -> automatically minimize
+    // If inside the scrollable content, only trigger when user is scrolled to the very top (scrollTop <= 0)
+    if (mobileExpanded && deltaY < -32) {
+      const scrollPos = scrollContainerRef.current?.scrollTop ?? 0;
+      if (scrollPos <= 2) {
+        touchStartYRef.current = null;
+        onToggleMobileExpand();
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchStartYRef.current = null;
+  };
 
   // Shortlist WhatsApp Preview Share Modal state
   const [sharePreviewOpen, setSharePreviewOpen] = useState(false);
@@ -492,7 +539,8 @@ export default function PropertyBlock({
     image: familyCommunityImg,
   };
 
-  const propertySlug = apiProperty?.slug || property?.id || project.id;
+  const propertyPageId = activePropertyId || apiProperty?.id || property?.id || project?.id;
+  const propertyPageHref = `/properties/${propertyPageId}`;
 
   // Render the expanded content
   const renderExpandedBody = (onClose: () => void) => (
@@ -572,42 +620,42 @@ export default function PropertyBlock({
       </div>
 
       {/* 2. PROPERTY INFORMATION */}
-      <div className="rounded-2xl border border-[#e5ddcd] bg-white p-4 shadow-[0_2px_12px_rgba(36,35,31,0.04)]">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h2 className="font-serif text-lg font-bold tracking-tight text-[#171717] sm:text-xl">
+      <div className="rounded-2xl border border-[#ded9cf] bg-white p-4 shadow-[0_4px_16px_rgba(20,20,20,0.06)]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xl font-extrabold tracking-tight text-[#141414] sm:text-2xl">
               {propertyName}
             </h2>
-            <p className="mt-1 flex items-center gap-1.5 text-xs text-[#6e685f]">
+            <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-[#5c5549]">
               <PinIcon className="h-3.5 w-3.5 shrink-0 text-[#c6a46c]" />
               <span className="truncate">{propertyLocation}</span>
             </p>
           </div>
-          <div className="text-right">
-            <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#8a8174]">
+          <div className="shrink-0 text-right">
+            <span className="block text-[10px] font-extrabold uppercase tracking-wider text-[#7a7265]">
               Starting From
             </span>
-            <span className="font-serif text-lg font-bold text-[#c6a46c] sm:text-xl">
+            <span className="mt-0.5 block text-lg font-black text-[#876527] sm:text-xl">
               {startingPrice}
             </span>
           </div>
         </div>
 
         {/* Spec row: Plot size range, HMDA, RERA */}
-        <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-[#f0ece3] pt-3 text-xs">
-          <div className="flex items-center gap-1 rounded-lg border border-[#ded9cf] bg-[#faf7f0] px-2.5 py-1 text-[#454038]">
-            <span className="text-[10px] font-medium uppercase text-[#8a8174]">Plot sizes:</span>
-            <span className="font-semibold">{plotSizeRange}</span>
+        <div className="mt-3.5 flex flex-wrap items-center gap-2 border-t border-[#eee8dc] pt-3 text-xs">
+          <div className="flex items-center gap-1.5 rounded-lg border border-black/10 bg-[#faf7f0] px-3 py-1 text-[#24231f]">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#7a7265]">Sizes:</span>
+            <span className="font-extrabold text-[#141414]">{plotSizeRange}</span>
           </div>
 
-          <span className="inline-flex items-center gap-1 rounded-full border border-[#d9e3da] bg-[#f2f7f2] px-2.5 py-1 text-[11px] font-semibold text-[#1f5c45]">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#1f8a68]/30 bg-[#edf6f0] px-3 py-1 text-[11px] font-bold text-[#1b5e3f]">
             <span className="h-1.5 w-1.5 rounded-full bg-[#1f8a68]" />
             {approvalStatus}
           </span>
 
           {isRera && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-[#e6d7b0] bg-[#faf4e4] px-2.5 py-1 text-[11px] font-semibold text-[#8a6d34]">
-              <span className="text-[9px]">✦</span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#c6a46c]/40 bg-[#faf4e4] px-3 py-1 text-[11px] font-bold text-[#876527]">
+              <span className="text-[10px]">✦</span>
               RERA Registered
             </span>
           )}
@@ -615,66 +663,66 @@ export default function PropertyBlock({
       </div>
 
       {/* 3. YOUR FIT (Property suitability highlights) */}
-      <div className="rounded-2xl border border-[#e5ddcd] bg-white p-4 shadow-[0_2px_12px_rgba(36,35,31,0.04)]">
-        <h3 className="text-xs font-bold tracking-[0.12em] uppercase text-[#a07c3c]">
+      <div className="rounded-2xl border border-[#ded9cf] bg-white p-4 shadow-[0_4px_16px_rgba(20,20,20,0.06)]">
+        <h3 className="text-xs font-extrabold tracking-[0.14em] uppercase text-[#876527]">
           Your Fit
         </h3>
-        <p className="mt-0.5 text-[11px] text-[#7a7469]">
+        <p className="mt-0.5 text-xs font-medium text-[#6e685f]">
           Key lifestyle and location suitability match
         </p>
 
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <div className="flex items-center gap-2.5 rounded-xl border border-[#e8e2d5] bg-[#faf7f0] p-2.5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#f1e5c9] text-[#8a6d34]">
-              <SchoolIcon className="h-4 w-4" />
+        <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          <div className="flex items-center gap-3 rounded-xl border border-[#e8e2d5] bg-[#faf8f4] p-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#876527]">
+              <SchoolIcon className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0">
-              <span className="block text-xs font-semibold text-[#24231f]">Near schools</span>
-              <span className="block text-[10px] text-[#7a7469]">Reputed institutions nearby</span>
+              <span className="block text-xs font-bold text-[#141414]">Near schools</span>
+              <span className="block text-[11px] font-medium text-[#6e685f]">Reputed institutions nearby</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 rounded-xl border border-[#e8e2d5] bg-[#faf7f0] p-2.5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#f1e5c9] text-[#8a6d34]">
-              <TreesIcon className="h-4 w-4" />
+          <div className="flex items-center gap-3 rounded-xl border border-[#e8e2d5] bg-[#faf8f4] p-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#876527]">
+              <TreesIcon className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0">
-              <span className="block text-xs font-semibold text-[#24231f]">Quiet surroundings</span>
-              <span className="block text-[10px] text-[#7a7469]">Serene green community</span>
+              <span className="block text-xs font-bold text-[#141414]">Quiet surroundings</span>
+              <span className="block text-[11px] font-medium text-[#6e685f]">Serene green community</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 rounded-xl border border-[#e8e2d5] bg-[#faf7f0] p-2.5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#f1e5c9] text-[#8a6d34]">
-              <RoadIcon className="h-4 w-4" />
+          <div className="flex items-center gap-3 rounded-xl border border-[#e8e2d5] bg-[#faf8f4] p-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#876527]">
+              <RoadIcon className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0">
-              <span className="block text-xs font-semibold text-[#24231f]">Good road access</span>
-              <span className="block text-[10px] text-[#7a7469]">Wide BT roads with connectivity</span>
+              <span className="block text-xs font-bold text-[#141414]">Good road access</span>
+              <span className="block text-[11px] font-medium text-[#6e685f]">Wide BT roads with connectivity</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* 4. AVAILABLE PLOTS (Selectable plot cards) */}
-      <div className="rounded-2xl border border-[#e5ddcd] bg-white p-4 shadow-[0_2px_12px_rgba(36,35,31,0.04)]">
+      <div className="rounded-2xl border border-[#ded9cf] bg-white p-4 shadow-[0_4px_16px_rgba(20,20,20,0.06)]">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-xs font-bold tracking-[0.12em] uppercase text-[#a07c3c]">
+            <h3 className="text-xs font-extrabold tracking-[0.14em] uppercase text-[#876527]">
               Available Plots
             </h3>
-            <span className="text-[11px] text-[#7a7469]">Select a plot for instant details</span>
+            <span className="text-xs font-medium text-[#6e685f]">Select a plot for instant details</span>
           </div>
           <button
             type="button"
             onClick={() => setShowAllPlots((prev) => !prev)}
-            className="text-xs font-semibold text-[#8a6d34] underline decoration-[#c6a46c] underline-offset-4 transition hover:text-[#24231f]"
+            className="text-xs font-bold text-[#876527] underline decoration-[#c6a46c] underline-offset-4 transition hover:text-[#141414]"
           >
             {showAllPlots ? "Show fewer" : "View all plots"}
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div className="mt-3.5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           {displayedPlots.map((plot) => {
             const isSelected = selectedPlotId === plot.id;
             return (
@@ -685,21 +733,21 @@ export default function PropertyBlock({
                   setSelectedPlotId(plot.id);
                   onSelectPlot?.(plot);
                 }}
-                className={`relative flex flex-col rounded-xl border p-2.5 text-left transition-all ${
+                className={`relative flex flex-col rounded-xl border p-3 text-left transition-all ${
                   isSelected
-                    ? "border-[#c6a46c] bg-[#faf4e4] shadow-sm ring-2 ring-[#c6a46c]/40"
-                    : "border-[#e5ddcd] bg-[#faf7f0] hover:border-[#c6a46c]/60 hover:bg-white"
+                    ? "border-[#c6a46c] bg-[#faf4e4] shadow-sm ring-2 ring-[#c6a46c]"
+                    : "border-[#ded9cf] bg-[#faf8f4] hover:border-[#c6a46c]/70 hover:bg-white"
                 }`}
               >
                 {isSelected && (
-                  <span className="absolute top-2 right-2 text-[#c6a46c]">
+                  <span className="absolute top-2.5 right-2.5 text-[#876527]">
                     <CheckCircleIcon className="h-4 w-4" />
                   </span>
                 )}
-                <span className="text-xs font-bold text-[#171717]">{plot.title}</span>
-                <span className="mt-1 text-[11px] font-medium text-[#4f493f]">{plot.area}</span>
-                <span className="mt-0.5 text-[10px] font-semibold text-[#8a6d34]">{plot.facing}</span>
-                <span className="mt-2 text-[11px] font-bold text-[#1f5c45]">{plot.price}</span>
+                <span className="text-xs font-extrabold text-[#141414]">{plot.title}</span>
+                <span className="mt-1 text-[11px] font-semibold text-[#5c5549]">{plot.area}</span>
+                <span className="mt-0.5 text-[10px] font-bold text-[#876527] uppercase tracking-wider">{plot.facing}</span>
+                <span className="mt-2 text-xs font-black text-[#1b5e3f]">{plot.price}</span>
               </button>
             );
           })}
@@ -707,26 +755,54 @@ export default function PropertyBlock({
       </div>
 
       {/* 5. AVAILABILITY AND ACTIVITY */}
-      <div className="flex flex-col gap-2 rounded-2xl border border-[#d9e3da] bg-[#f4f8f5] p-3.5 text-xs sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2.5 rounded-2xl border border-[#1f8a68]/25 bg-[#edf6f0] p-3.5 text-xs sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#1f8a68]/15 text-[#1f5c45]">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#1f8a68] text-white">
             <EyeIcon className="h-3.5 w-3.5" />
           </span>
-          <span className="text-[#2d523e]">
-            <strong className="font-semibold">{viewingCount} people</strong> viewed this property this week
+          <span className="text-[#1b5e3f]">
+            <strong className="font-extrabold">{viewingCount} people</strong> viewed this property this week
           </span>
         </div>
 
         <div className="flex items-center gap-1.5 self-start sm:self-center">
           <span className="h-2 w-2 rounded-full bg-[#1f8a68]" />
-          <span className="font-semibold text-[#1f5c45]">
+          <span className="font-extrabold text-[#1b5e3f]">
             {availablePlotsCount} of {totalPlotsCount} plots available
           </span>
         </div>
       </div>
 
-      {/* 6. QUICK ACTIONS (Wishlist, Compare, Share, WhatsApp, EMI) */}
-      <div className="grid grid-cols-5 gap-1.5 rounded-2xl border border-[#e5ddcd] bg-white p-2 shadow-sm">
+      {/* "See what others are viewing" Button positioned above the quick actions */}
+      <button
+        type="button"
+        onClick={() => setPulseModalOpen(true)}
+        className="group relative flex w-full items-center justify-between overflow-hidden rounded-2xl border border-[#c6a46c]/40 bg-gradient-to-r from-[#faf4e4] via-[#fdfbf6] to-[#f5ecd8] p-3 shadow-[0_4px_16px_rgba(198,164,108,0.14)] transition-all duration-300 hover:border-[#c6a46c] hover:shadow-[0_6px_22px_rgba(198,164,108,0.24)] active:scale-[0.99]"
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#c6a46c] to-[#997332] text-white shadow-xs">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-xl bg-[#c6a46c] opacity-40"></span>
+            <EyeIcon className="h-4 w-4 relative" />
+          </span>
+          <div className="text-left">
+            <span className="block text-xs font-black tracking-tight text-[#141414] group-hover:text-[#876527] transition-colors">
+              See What Others Are Viewing
+            </span>
+            <span className="block text-[10.5px] font-semibold text-[#7a7265]">
+              Live interest, trending layouts &amp; active buyers
+            </span>
+          </div>
+        </div>
+
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#876527] border border-[#c6a46c]/30 shadow-xs transition group-hover:bg-[#c6a46c] group-hover:text-white">
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </span>
+      </button>
+
+      {/* 6. QUICK ACTIONS (Wishlist, Compare, WhatsApp, EMI, Call) */}
+      <div className="grid grid-cols-5 gap-1.5 rounded-2xl border border-[#ded9cf] bg-white p-2.5 shadow-[0_4px_16px_rgba(20,20,20,0.06)]">
         {/* Wishlist */}
         <button
           type="button"
@@ -734,11 +810,11 @@ export default function PropertyBlock({
           disabled={wishlistLoading}
           aria-label={wishlistSaved ? "Remove from wishlist" : "Save to wishlist"}
           className={`flex flex-col items-center justify-center rounded-xl py-2 px-1 text-center transition active:scale-95 ${
-            wishlistSaved ? "bg-[#faf4e4] text-[#8a6d34]" : "text-[#5c5348] hover:bg-[#faf7f0]"
+            wishlistSaved ? "bg-[#faf4e4] text-[#876527]" : "text-[#4a453e] hover:bg-[#faf7f0]"
           }`}
         >
-          <HeartIcon className="h-4 w-4" filled={wishlistSaved} />
-          <span className="mt-1 text-[10px] font-semibold">
+          <HeartIcon className="h-4.5 w-4.5" filled={wishlistSaved} />
+          <span className="mt-1 text-[11px] font-bold">
             {wishlistLoading ? "..." : wishlistSaved ? "Saved" : "Wishlist"}
           </span>
         </button>
@@ -748,119 +824,113 @@ export default function PropertyBlock({
           type="button"
           onClick={() => {
             setCompareSaved(true);
+            onCloseMobile();
+            onCloseDesktop();
             onOpenCompare?.(activePropertyId);
           }}
           className={`flex flex-col items-center justify-center rounded-xl py-2 px-1 text-center transition active:scale-95 ${
-            compareSaved ? "bg-[#faf4e4] text-[#8a6d34]" : "text-[#5c5348] hover:bg-[#faf7f0]"
+            compareSaved ? "bg-[#faf4e4] text-[#876527]" : "text-[#4a453e] hover:bg-[#faf7f0]"
           }`}
         >
-          <CompareIcon className="h-4 w-4" />
-          <span className="mt-1 text-[10px] font-semibold">Compare</span>
+          <CompareIcon className="h-4.5 w-4.5 text-[#876527]" />
+          <span className="mt-1 text-[11px] font-bold">Compare</span>
         </button>
 
-        {/* Share */}
+        {/* Share via WhatsApp */}
         <button
           type="button"
           onClick={handleShare}
-          className="flex flex-col items-center justify-center rounded-xl py-2 px-1 text-center text-[#5c5348] transition hover:bg-[#faf7f0]"
+          disabled={shareLoading}
+          aria-label="Share property via WhatsApp"
+          className="flex flex-col items-center justify-center rounded-xl py-2 px-1 text-center text-[#1b5e3f] transition hover:bg-[#edf6f0] active:scale-95 disabled:opacity-60"
         >
-          <ShareIcon className="h-4 w-4" />
-          <span className="mt-1 text-[10px] font-semibold">Share</span>
-        </button>
-
-        {/* WhatsApp */}
-        <button
-          type="button"
-          onClick={handleWhatsApp}
-          className="flex flex-col items-center justify-center rounded-xl py-2 px-1 text-center text-[#1f8a68] transition hover:bg-[#eef8f2]"
-        >
-          <WhatsappIcon className="h-4 w-4" />
-          <span className="mt-1 text-[10px] font-semibold">WhatsApp</span>
+          <WhatsappIcon className="h-4.5 w-4.5" />
+          <span className="mt-1 text-[11px] font-bold">
+            {shareLoading ? "..." : "Share"}
+          </span>
         </button>
 
         {/* EMI */}
-        <Link
-          href={`/properties/${propertySlug}#affordability-financing`}
-          className="flex flex-col items-center justify-center rounded-xl py-2 px-1 text-center text-[#5c5348] transition hover:bg-[#faf7f0]"
+        <button
+          type="button"
+          onClick={() => {
+            const rawPrice =
+              (apiProperty?.minimum_price != null ? Number(apiProperty.minimum_price) : null) ??
+              apiProperty?.price ??
+              property?.price ??
+              5000000;
+            if (onOpenEmi) {
+              onOpenEmi({
+                id: activePropertyId || project.id,
+                name: propertyName,
+                price: rawPrice,
+                location: propertyLocation,
+              });
+            }
+          }}
+          className="flex flex-col items-center justify-center rounded-xl py-2 px-1 text-center text-[#4a453e] transition hover:bg-[#faf7f0] active:scale-95"
         >
-          <CalculatorIcon className="h-4 w-4" />
-          <span className="mt-1 text-[10px] font-semibold">EMI</span>
-        </Link>
-      </div>
+          <CalculatorIcon className="h-4.5 w-4.5 text-[#876527]" />
+          <span className="mt-1 text-[11px] font-bold">EMI</span>
+        </button>
 
-      {/* 7. PRIMARY ACTIONS (Book a site visit, Call) */}
-      <div className="flex items-center gap-2.5 pt-1">
-        <Link
-          href={`/properties/${propertySlug}`}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-3 text-xs font-bold tracking-wider uppercase text-[#171717] shadow-md transition active:scale-[0.99] hover:brightness-105"
-        >
-          <span>Book a Site Visit</span>
-        </Link>
-
+        {/* Call */}
         <a
           href="tel:+919876543210"
-          className="flex items-center justify-center gap-1.5 rounded-xl border border-[#ded9cf] bg-white px-4 py-3 text-xs font-semibold text-[#171717] shadow-sm transition hover:bg-[#faf7f0] active:scale-95"
+          aria-label="Call ILA Homes"
+          className="flex flex-col items-center justify-center rounded-xl py-2 px-1 text-center text-[#4a453e] transition hover:bg-[#faf7f0] active:scale-95"
         >
-          <PhoneIcon className="h-3.5 w-3.5 text-[#c6a46c]" />
-          <span>Call</span>
+          <PhoneIcon className="h-4.5 w-4.5 text-[#876527]" />
+          <span className="mt-1 text-[11px] font-bold">Call</span>
         </a>
+      </div>
+
+      {/* 7. PRIMARY ACTIONS (Book a site visit, View Property) */}
+      <div className="flex items-center gap-2.5 pt-1">
+        <button
+          type="button"
+          onClick={() => setSiteVisitModalOpen(true)}
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-3.5 text-xs font-black tracking-wider uppercase text-[#141414] shadow-md transition active:scale-[0.99] hover:brightness-105 cursor-pointer"
+        >
+          <span>Book a Site Visit</span>
+        </button>
+
+        <Link
+          href={propertyPageHref}
+          className="flex items-center justify-center gap-2 rounded-xl border border-black/15 bg-white px-5 py-3.5 text-xs font-black text-[#141414] shadow-sm transition hover:bg-[#faf7f0] active:scale-95 whitespace-nowrap"
+        >
+          <span>View Property</span>
+        </Link>
       </div>
     </div>
   );
 
-  // Render minimized bottom strip for mobile
+  // Render minimized bottom strip for mobile (cleanly displaying property name, location, price, and size)
   const renderMinimizedBody = (onToggle: () => void) => (
-    <div className="w-full text-xs text-[#24231f]">
-      <div className="flex items-center gap-2.5">
-        <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-[#ded9cf] bg-[#e8e4dc]">
-          <Image
-            src={galleryImages[0] || "/hero-image.png"}
-            alt=""
-            fill
-            sizes="48px"
-            className="object-cover"
-          />
-          <span className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <span className="absolute inset-x-0 bottom-0 pb-0.5 text-center text-[9px] font-bold text-white">
-            {availablePlotsCount}/{totalPlotsCount}
-          </span>
-        </div>
+    <div
+      onClick={onToggle}
+      className="flex w-full cursor-pointer flex-col justify-center select-none py-1"
+    >
+      {/* Property Name */}
+      <h3 className="truncate text-base font-extrabold tracking-tight text-[#141414]">
+        {propertyName}
+      </h3>
 
-        <div className="min-w-0 flex-1">
-          <h4 className="line-clamp-1 font-semibold text-[#171717]">
-            {propertyName}
-          </h4>
-          <p className="mt-0.5 flex items-center gap-1 text-[#6e685f]">
-            <PinIcon className="h-3 w-3 shrink-0 text-[#c6a46c]" />
-            <span className="truncate">{propertyLocation}</span>
-          </p>
-          <div className="mt-0.5 flex items-baseline gap-1.5">
-            <strong className="font-bold text-[#c6a46c]">
-              from {startingPrice}
-            </strong>
-            <span className="text-[11px] text-[#7a7469]">
-              · {plotSizeRange}
-            </span>
-          </div>
-        </div>
-      </div>
+      {/* Location */}
+      <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-[#5c5549]">
+        <PinIcon className="h-3.5 w-3.5 shrink-0 text-[#c6a46c]" />
+        <span className="truncate">{propertyLocation}</span>
+      </p>
 
-      <button
-        type="button"
-        onClick={onToggle}
-        className="mt-2 flex w-full items-center justify-between rounded-lg border border-[#e6e0d4] bg-[#faf7f0] px-2.5 py-1.5 text-left transition active:scale-[0.99]"
-      >
-        <span className="flex items-center gap-1.5 truncate">
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#f2f7f2] px-2 py-0.5 text-[9px] font-semibold text-[#1f5c45]">
-            <span className="h-1 w-1 rounded-full bg-[#1f8a68]" />
-            {approvalStatus}
-          </span>
-          <span className="truncate text-[11px] text-[#5c5348]">
-            {availablePlotsCount} available · Tap to expand
-          </span>
+      {/* Price & Size on high-visibility pill / row */}
+      <div className="mt-2 flex items-center gap-2">
+        <span className="rounded-lg bg-[#c6a46c]/15 px-2.5 py-1 text-xs font-black text-[#876527]">
+          From {startingPrice}
         </span>
-        <span className="text-[10px] font-semibold text-[#8a6d34]">Details ↗</span>
-      </button>
+        <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
+          {plotSizeRange}
+        </span>
+      </div>
     </div>
   );
 
@@ -872,7 +942,7 @@ export default function PropertyBlock({
           className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 z-30 hidden md:flex w-[380px] max-h-[85vh] flex-col"
           aria-label="Selected property summary"
         >
-          <div className="pointer-events-auto relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#ded9cf] bg-[#f9f7f2] shadow-[0_16px_40px_rgba(36,35,31,0.18)]">
+          <div className="pointer-events-auto relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#ded9cf] bg-[#f9f7f2] shadow-[0_16px_40px_rgba(36,35,31,0.18)] transition-all duration-300 animate-in fade-in zoom-in-95 slide-in-from-left-4">
             <div className="flex shrink-0 items-center justify-between border-b border-[#ded9cf] bg-white px-4 py-3">
               <span className="text-[11px] font-bold tracking-[0.18em] text-[#8a6d34] uppercase">
                 Property Summary
@@ -898,12 +968,20 @@ export default function PropertyBlock({
       {portalReady && !selectedPlot && !mapFullscreen
         ? createPortal(
             <div
-              className={`pointer-events-auto fixed inset-x-0 bottom-0 z-[200] flex flex-col overflow-hidden rounded-t-[1.75rem] border-x border-t border-[#ded9cf] bg-[#f9f7f2] pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-12px_36px_rgba(36,35,31,0.22)] transition-[height,max-height] duration-300 md:hidden ${
-                mobileExpanded ? "h-[88%] max-h-[88%]" : "h-36 max-h-36"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              className={`pointer-events-auto fixed inset-x-0 bottom-0 z-[200] flex flex-col overflow-hidden rounded-t-[1.75rem] border-x border-t border-[#ded9cf] bg-[#f9f7f2] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-12px_36px_rgba(36,35,31,0.22)] transition-[height,max-height] duration-300 animate-in fade-in slide-in-from-bottom-6 duration-300 md:hidden ${
+                mobileExpanded ? "h-[88%] max-h-[88%]" : "h-auto max-h-44"
               }`}
             >
               {/* Top Controls Row */}
-              <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-2.5 pb-2">
+              <div
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                className="flex shrink-0 items-center justify-between gap-2 px-3 pt-2.5 pb-1 cursor-grab active:cursor-grabbing"
+              >
                 <button
                   type="button"
                   aria-label="Close property details"
@@ -935,7 +1013,15 @@ export default function PropertyBlock({
               </div>
 
               {/* Body */}
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-3">
+              <div
+                ref={scrollContainerRef}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                className={`flex min-h-0 flex-1 flex-col px-4 pb-2 ${
+                  mobileExpanded ? "overflow-y-auto overscroll-contain pb-3" : "overflow-hidden"
+                }`}
+              >
                 {mobileExpanded ? renderExpandedBody(onCloseMobile) : renderMinimizedBody(onToggleMobileExpand)}
               </div>
             </div>,
@@ -952,6 +1038,109 @@ export default function PropertyBlock({
         onConfirmShare={handleConfirmShare}
         sharing={shareLoading}
       />
+
+      {/* 10. Plots With Pulse ("See What Others Are Viewing") Modal Popup */}
+      {pulseModalOpen && portalReady
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[350] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop animate-in fade-in duration-200"
+              onClick={() => setPulseModalOpen(false)}
+            >
+              <div
+                className="relative flex w-full sm:max-w-5xl max-h-[92vh] flex-col rounded-t-3xl sm:rounded-2xl border-t border-x-0 sm:border border-white/15 bg-[#17191d] text-[#f2f0ea] shadow-2xl overflow-hidden ila-modal-content"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Modal Header */}
+                <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6 bg-[#1a1c21]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#c6a46c]">
+                      <EyeIcon className="h-4.5 w-4.5" />
+                    </span>
+                    <div>
+                      <h3 className="text-base font-extrabold text-white">
+                        See What Others Are Viewing
+                      </h3>
+                      <p className="text-xs text-[#9a9388]">
+                        Trending properties, live buyer pulse &amp; market activity
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close trending properties"
+                    title="Close"
+                    onClick={() => setPulseModalOpen(false)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-[#c6a46c]/50 bg-[#c6a46c]/20 text-[#c6a46c] shadow-md transition hover:bg-[#c6a46c] hover:text-[#17191d] hover:border-[#c6a46c] active:scale-95"
+                  >
+                    <CloseIcon className="h-4.5 w-4.5 stroke-[2.5]" />
+                  </button>
+                </div>
+
+                {/* Modal Body: PlotsWithPulse component */}
+                <div className="flex-1 overflow-y-auto">
+                  <PlotsWithPulse />
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {/* 11. "Next step" Site Visit Booking Modal Popup */}
+      {siteVisitModalOpen && portalReady
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[350] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop animate-in fade-in duration-200"
+              onClick={() => setSiteVisitModalOpen(false)}
+            >
+              <div
+                className="relative flex w-full sm:max-w-4xl max-h-[92vh] flex-col rounded-t-3xl sm:rounded-2xl border-t border-x-0 sm:border border-white/15 bg-[#17191d] text-[#f2f0ea] shadow-2xl overflow-hidden ila-modal-content"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Modal Header */}
+                <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6 bg-[#1a1c21]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#c6a46c]">
+                      <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
+                      </svg>
+                    </span>
+                    <div>
+                      <h3 className="text-base font-extrabold text-white">
+                        Book a Site Visit
+                      </h3>
+                      <p className="text-xs text-[#9a9388]">
+                        Next step &middot; {propertyName}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close site visit booking"
+                    title="Close"
+                    onClick={() => setSiteVisitModalOpen(false)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-[#c6a46c]/50 bg-[#c6a46c]/20 text-[#c6a46c] shadow-md transition hover:bg-[#c6a46c] hover:text-[#17191d] hover:border-[#c6a46c] active:scale-95"
+                  >
+                    <CloseIcon className="h-4.5 w-4.5 stroke-[2.5]" />
+                  </button>
+                </div>
+
+                {/* Modal Body: HomeReadyToVisit ("Next step") component */}
+                <div className="flex-1 overflow-y-auto">
+                  <HomeReadyToVisit
+                    propertyName={propertyName}
+                    propertyId={activePropertyId}
+                    onSuccess={() => setSiteVisitModalOpen(false)}
+                  />
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

@@ -38,17 +38,28 @@ type FormFields = {
 
 type FormErrors = Partial<Record<keyof FormFields, string>>;
 
-const DEFAULT_HOME_MESSAGE =
-  "Hi, I want to know more about your available properties. Could you please share the details?";
-
-const EMPTY_FIELDS: FormFields = {
-  name: "",
-  phone: "",
-  description: DEFAULT_HOME_MESSAGE,
+type HomeReadyToVisitProps = {
+  propertyName?: string;
+  propertyId?: string;
+  className?: string;
+  onSuccess?: () => void;
 };
 
-export default function HomeReadyToVisit() {
-  const [fields, setFields] = useState<FormFields>(EMPTY_FIELDS);
+export default function HomeReadyToVisit({
+  propertyName,
+  propertyId,
+  className = "",
+  onSuccess,
+}: HomeReadyToVisitProps = {}) {
+  const defaultMessage = propertyName
+    ? `Hi, I want to book a private site visit for ${propertyName}. Could you please share the available slots and details?`
+    : DEFAULT_HOME_MESSAGE;
+
+  const [fields, setFields] = useState<FormFields>({
+    name: "",
+    phone: "",
+    description: defaultMessage,
+  });
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<"idle" | "submitting" | "sent" | "error">(
     "idle",
@@ -110,24 +121,28 @@ export default function HomeReadyToVisit() {
         mobile: toStoredPhone(fields.phone),
         email: null,
         message: fields.description.trim() || null,
-        property_id: null,
+        property_id: propertyId || null,
         unit_id: null,
         metadata: {
           form_name: "homepage_visit_enquiry",
+          property_name: propertyName || null,
           page_url:
             typeof window !== "undefined" ? window.location.href : null,
         },
       });
 
       setStatus("sent");
-      const submittedName = fields.name.trim();
-      const submittedPhone = toStoredPhone(fields.phone);
       const submittedNotes = fields.description.trim();
-      setFields(EMPTY_FIELDS);
+      setFields({
+        name: "",
+        phone: "",
+        description: defaultMessage,
+      });
+      onSuccess?.();
 
       // Redirect to WhatsApp with enquiry details
       if (typeof window !== "undefined") {
-        const text = submittedNotes || DEFAULT_HOME_MESSAGE;
+        const text = submittedNotes || defaultMessage;
         const targetUrl = whatsappUrl(text, DEFAULT_WHATSAPP_PHONE);
         window.location.href = targetUrl;
       }
@@ -158,7 +173,7 @@ export default function HomeReadyToVisit() {
   return (
     <section
       id="visit-plot"
-      className="home-visit"
+      className={`home-visit ${className}`.trim()}
       aria-labelledby="home-visit-title"
     >
       <div className="home-visit__inner">

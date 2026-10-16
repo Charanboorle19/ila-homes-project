@@ -568,14 +568,19 @@ function createProjectPin(
     isHighlighted?: boolean;
     isDimmed?: boolean;
     compareSelected?: boolean;
+    isCompareMode?: boolean;
     compareIndex?: number;
+    tagPlacement?: "top" | "right" | "left" | "bottom";
   },
 ) {
   const el = document.createElement("button");
   el.type = "button";
-  let classes = "ila-project-pin group";
+  const placementClass = `ila-project-pin--tag-${options?.tagPlacement || "right"}`;
+  let classes = `ila-project-pin group ${placementClass}`;
   if (options?.compareSelected) {
     classes += " ila-project-pin--compare-selected";
+  } else if (options?.isCompareMode) {
+    classes += " ila-project-pin--compare-mode";
   } else if (options?.isHighlighted) {
     classes += " ila-project-pin--highlighted";
   } else if (options?.isDimmed) {
@@ -601,7 +606,19 @@ function createProjectPin(
 
   el.innerHTML = `
     ${badgeHtml}
-    ${PIN_ICON}
+    <div class="ila-project-pin__anchor">
+      <div class="ila-project-pin__halo" aria-hidden="true"></div>
+      <div class="ila-project-pin__core">
+        <svg viewBox="0 0 24 24" class="ila-project-pin__icon" aria-hidden="true">
+          <path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-5v-5H10v5H5a1 1 0 0 1-1-1v-8.5Z" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="ila-project-pin__needle" aria-hidden="true"></div>
+      <div class="ila-project-pin__point" aria-hidden="true"></div>
+    </div>
+    <div class="ila-pin-tag" aria-hidden="true">
+      <span class="ila-pin-tag__text">${project.name}</span>
+    </div>
     <div class="ila-pin-tooltip" aria-hidden="true">
       <span class="ila-pin-tooltip__eyebrow">Development</span>
       <strong class="ila-pin-tooltip__name">${project.name}</strong>
@@ -881,9 +898,17 @@ export default function MapSection({
   const [compareModalOpen, setCompareModalOpen] = useState(false);
 
   const startCompareMode = useCallback((initialId?: string) => {
-    setCompareSelectingMode(true);
+    // Close any open property cards, layout, or mobile bottom-sheets
+    setActiveProjectId(null);
+    setSelectedProjectId(null);
+    setSelectedId(null);
     setDesktopPropertyCardOpen(false);
     setPropertySheetExpanded(false);
+    setMobilePlotExpanded(false);
+    setPanelOpen(false);
+
+    // Activate compare mode and auto-select initialId
+    setCompareSelectingMode(true);
     if (initialId) {
       setCompareSelectedIds((prev) =>
         prev.includes(initialId) ? prev : [...prev, initialId],
@@ -1803,10 +1828,23 @@ export default function MapSection({
       window.requestAnimationFrame(() => map.resize());
       if (mobileQuery.matches) setMobileTouchAction(true);
 
+      const updateZoomClass = () => {
+        if (!mapContainerRef.current) return;
+        const currentZoom = map.getZoom();
+        if (currentZoom >= 12.5) {
+          mapContainerRef.current.classList.add("map--zoomed-in");
+        } else {
+          mapContainerRef.current.classList.remove("map--zoomed-in");
+        }
+      };
+      updateZoomClass();
+      map.on("zoom", updateZoomClass);
+
       // MAP_ZOOM_REGION: report the viewport the visitor settled on, so we can
       // tell which part of the layout they are exploring.
       let lastZoomRegion = "";
       map.on("moveend", () => {
+        updateZoomClass();
         const center = map.getCenter();
         const region = `${center.lat.toFixed(2)},${center.lng.toFixed(2)}@${map
           .getZoom()
@@ -2127,7 +2165,7 @@ export default function MapSection({
     const hasFeatureFilter = selectedFeatureKeys.length > 0;
     const isComparing = compareSelectingMode;
 
-    visiblePins.forEach((project) => {
+    visiblePins.forEach((project, index) => {
       // Compare mode takes priority for pin appearance
       const compareIndex = isComparing
         ? compareSelectedIds.indexOf(project.id)
@@ -2140,11 +2178,21 @@ export default function MapSection({
       const isDimmed = isCompareDimmed || (!isComparing && hasFeatureFilter && !isMatch);
       const isHighlighted = !isComparing && hasFeatureFilter && isMatch;
 
+      const placements: Array<"right" | "top" | "bottom" | "left"> = [
+        "right",
+        "top",
+        "bottom",
+        "left",
+      ];
+      const tagPlacement = placements[index % placements.length];
+
       const el = createProjectPin(project, {
         isHighlighted,
         isDimmed,
         compareSelected,
+        isCompareMode: isComparing,
         compareIndex: compareSelected ? compareIndex + 1 : undefined,
+        tagPlacement,
       });
 
       if (emiSelectingProperty) {
@@ -2655,7 +2703,7 @@ export default function MapSection({
 
 
 
-        {!hideDetails && panelOpen ? (
+        {!hideDetails && panelOpen && !compareSelectingMode ? (
           <aside className="pointer-events-none absolute inset-y-0 left-0 z-20 hidden w-88 flex-col py-3 pl-3 md:flex sm:py-4">
             <div className="pointer-events-auto relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[8px_0_28px_rgba(15,23,42,0.14)]">
               {activeProject && !singlePropertyId ? (
@@ -2694,6 +2742,11 @@ export default function MapSection({
                     onOpenCompare={(propId) => {
                       const idToCompare = propId || activePropertyId || activeProject?.id || activeProperty?.id;
                       startCompareMode(idToCompare);
+                    }}
+                    onOpenEmi={(propertyInfo) => {
+                      setEmiSelectedProperty(propertyInfo);
+                      setEmiOpen(true);
+                      setEmiSelectingProperty(false);
                     }}
                   />
                 </div>
@@ -2778,7 +2831,7 @@ export default function MapSection({
               </div>
             </div>
           </aside>
-        ) : !hideDetails ? (
+        ) : !hideDetails && !compareSelectingMode ? (
           <button
             type="button"
             aria-label="Open developments panel"
@@ -2813,6 +2866,11 @@ export default function MapSection({
           onOpenCompare={(propId) => {
             const idToCompare = propId || activePropertyId || selectedProject?.id || selectedProperty?.id;
             startCompareMode(idToCompare);
+          }}
+          onOpenEmi={(propertyInfo) => {
+            setEmiSelectedProperty(propertyInfo);
+            setEmiOpen(true);
+            setEmiSelectingProperty(false);
           }}
         />
         {/* Mobile bottom-sheet plot details — compact first, expandable on demand */}
@@ -2957,7 +3015,7 @@ export default function MapSection({
         ) : null}
 
         {/* FindYourPlot feature cards side-by-side at the bottom of the map */}
-        {features.length > 0 && !selectedPlot && !compareSelectingMode ? (
+        {features.length > 0 && !selectedPlot && !compareSelectingMode && !emiSelectingProperty ? (
           <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-20 flex items-center gap-1.5 sm:left-4 sm:right-4 md:right-24">
             {/* Left arrow (mobile/touch only) */}
             <button
@@ -3041,7 +3099,20 @@ export default function MapSection({
               </button>
             )}
 
-            {/* Right arrow (mobile/touch only) */}
+            {/* Maximize map button positioned cleanly above the right arrow - hidden when maximized */}
+            {!mapFullscreen ? (
+              <button
+                type="button"
+                aria-label="Maximize map to full screen"
+                title="Maximize map"
+                onClick={toggleNativeFullscreen}
+                className="pointer-events-auto absolute -top-10 right-0 flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-[#171717]/90 text-white/90 shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur-md transition hover:border-[#c6a46c]/60 hover:bg-[#202020] hover:text-[#c6a46c] active:scale-95"
+              >
+                <ExpandIcon className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+
+            {/* Right arrow (mobile/touch only) - exactly in original position */}
             <button
               type="button"
               aria-label="Scroll tags right"
@@ -3060,114 +3131,132 @@ export default function MapSection({
           </div>
         ) : null}
 
-        {/* Right center quick actions: Wishlist & EMI Calculator */}
-        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 z-30 flex flex-col items-end gap-2.5 sm:right-4">
-          {/* Wishlist Component */}
-          <Wishlist
-            isOpen={wishlistOpen}
-            onOpen={() => setWishlistOpen(true)}
-            onClose={() => setWishlistOpen(false)}
-          />
+        {/* Right center quick actions: Wishlist, EMI Calculator & Compare (hidden when maximized or in compare mode) */}
+        {!compareSelectingMode && !mapFullscreen ? (
+          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 z-30 flex flex-col items-end gap-2.5 sm:right-4">
+            {/* Wishlist Component - hidden when selecting property for EMI */}
+            {!emiSelectingProperty ? (
+              <Wishlist
+                isOpen={wishlistOpen}
+                onOpen={() => setWishlistOpen(true)}
+                onClose={() => setWishlistOpen(false)}
+              />
+            ) : null}
 
-          {/* EMI Calculator Button */}
-          <button
-            type="button"
-            aria-label="Open EMI loan calculator"
-            onClick={() => {
-              setEmiOpen(false);
-              setEmiSelectingProperty((prev) => !prev);
-            }}
-            className={`pointer-events-auto group relative flex items-center gap-2 rounded-full border p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all active:scale-95 sm:px-3 sm:py-2 ${
-              emiSelectingProperty
-                ? "border-[#c6a46c] bg-[#c6a46c] text-[#171717] ring-4 ring-[#c6a46c]/30"
-                : "border-white/15 bg-[#171717]/90 text-[#f2f0ea] hover:border-[#c6a46c] hover:bg-[#222222]"
-            }`}
-          >
-            <svg
-              className={`h-4.5 w-4.5 transition-transform group-hover:scale-110 ${
-                emiSelectingProperty ? "text-[#171717]" : "text-[#c6a46c]"
+            {/* EMI Calculator Button */}
+            <button
+              type="button"
+              aria-label="Open EMI loan calculator"
+              onClick={() => {
+                setEmiOpen(false);
+                setEmiSelectingProperty((prev) => !prev);
+              }}
+              className={`pointer-events-auto group relative flex items-center gap-2 rounded-full border p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all active:scale-95 sm:px-3 sm:py-2 ${
+                emiSelectingProperty
+                  ? "border-[#c6a46c] bg-[#c6a46c] text-[#171717] ring-4 ring-[#c6a46c]/30"
+                  : "border-white/15 bg-[#171717]/90 text-[#f2f0ea] hover:border-[#c6a46c] hover:bg-[#222222]"
               }`}
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-hidden
             >
-              <rect x="4" y="2" width="16" height="20" rx="3" stroke="currentColor" strokeWidth="1.8" />
-              <line x1="8" y1="6" x2="16" y2="6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              <circle cx="8" cy="11" r="1" fill="currentColor" />
-              <circle cx="12" cy="11" r="1" fill="currentColor" />
-              <circle cx="16" cy="11" r="1" fill="currentColor" />
-              <circle cx="8" cy="15" r="1" fill="currentColor" />
-              <circle cx="12" cy="15" r="1" fill="currentColor" />
-              <circle cx="16" cy="15" r="1" fill="currentColor" />
-              <circle cx="8" cy="18" r="1" fill="currentColor" />
-              <circle cx="12" cy="18" r="1" fill="currentColor" />
-              <circle cx="16" cy="18" r="1" fill="currentColor" />
-            </svg>
-            <span className="hidden text-xs font-semibold tracking-wide sm:inline">
-              {emiSelectingProperty ? "Select on map" : "EMI Calculator"}
-            </span>
-          </button>
+              <svg
+                className={`h-4.5 w-4.5 transition-transform group-hover:scale-110 ${
+                  emiSelectingProperty ? "text-[#171717]" : "text-[#c6a46c]"
+                }`}
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden
+              >
+                <rect x="4" y="2" width="16" height="20" rx="3" stroke="currentColor" strokeWidth="1.8" />
+                <line x1="8" y1="6" x2="16" y2="6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <circle cx="8" cy="11" r="1" fill="currentColor" />
+                <circle cx="12" cy="11" r="1" fill="currentColor" />
+                <circle cx="16" cy="11" r="1" fill="currentColor" />
+                <circle cx="8" cy="15" r="1" fill="currentColor" />
+                <circle cx="12" cy="15" r="1" fill="currentColor" />
+                <circle cx="16" cy="15" r="1" fill="currentColor" />
+                <circle cx="8" cy="18" r="1" fill="currentColor" />
+                <circle cx="12" cy="18" r="1" fill="currentColor" />
+                <circle cx="16" cy="18" r="1" fill="currentColor" />
+              </svg>
+              <span className="hidden text-xs font-semibold tracking-wide sm:inline">
+                {emiSelectingProperty ? "Select on map" : "EMI Calculator"}
+              </span>
+            </button>
 
-          {/* Compare Properties Button */}
-          <button
-            type="button"
-            aria-label="Compare properties on map"
-            onClick={() => {
-              if (compareSelectingMode) {
-                setCompareSelectingMode(false);
-              } else {
-                setEmiSelectingProperty(false);
-                setCompareSelectingMode(true);
-                setDesktopPropertyCardOpen(false);
-                setPropertySheetExpanded(false);
-              }
-            }}
-            className={`pointer-events-auto group relative flex items-center gap-2 rounded-full border p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all active:scale-95 sm:px-3 sm:py-2 ${
-              compareSelectingMode
-                ? "border-[#c6a46c] bg-[#c6a46c] text-[#171717] ring-4 ring-[#c6a46c]/30"
-                : "border-white/15 bg-[#171717]/90 text-[#f2f0ea] hover:border-[#c6a46c] hover:bg-[#222222]"
-            }`}
-          >
-            <svg
-              className={`h-4.5 w-4.5 transition-transform group-hover:scale-110 ${
-                compareSelectingMode ? "text-[#171717]" : "text-[#c6a46c]"
-              }`}
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-hidden
-            >
-              <rect x="3" y="4" width="7.5" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
-              <rect x="13.5" y="4" width="7.5" height="16" rx="2" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M6.75 9h0M17.25 9h0M6.75 14h0M17.25 14h0" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
-            </svg>
-            <span className="hidden text-xs font-semibold tracking-wide sm:inline">
-              {compareSelectingMode ? (
-                <span>Selecting ({compareSelectedIds.length})</span>
-              ) : (
-                <span>Compare</span>
-              )}
-            </span>
-          </button>
-        </div>
+            {/* Compare Properties Button - hidden when selecting property for EMI */}
+            {!emiSelectingProperty ? (
+              <button
+                type="button"
+                aria-label="Compare properties on map"
+                onClick={() => {
+                  if (compareSelectingMode) {
+                    setCompareSelectingMode(false);
+                  } else {
+                    setEmiSelectingProperty(false);
+                    setCompareSelectingMode(true);
+                    setDesktopPropertyCardOpen(false);
+                    setPropertySheetExpanded(false);
+                  }
+                }}
+                className="pointer-events-auto group relative flex items-center gap-2 rounded-full border border-white/15 bg-[#171717]/90 p-2.5 text-[#f2f0ea] shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all hover:border-[#c6a46c] hover:bg-[#222222] active:scale-95 sm:px-3 sm:py-2"
+              >
+                <svg
+                  className="h-5 w-5 text-[#c6a46c] transition-transform group-hover:scale-110"
+                  viewBox="0 0 200 250"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="12"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  {/* Pin Outline */}
+                  <path d="M 100 16 C 50 16 20 52 20 102 C 20 152 100 230 100 230 C 100 230 180 152 180 102 C 180 52 150 16 100 16 Z" strokeWidth="12" />
+                  {/* Balance Scale */}
+                  <line x1="75" y1="58" x2="125" y2="58" strokeWidth="10" />
+                  <line x1="100" y1="58" x2="100" y2="82" strokeWidth="10" />
+                  <line x1="82" y1="82" x2="118" y2="82" strokeWidth="10" />
+                  <path d="M 72 74 L 84 74 A 6 5 0 0 1 72 74 Z" strokeWidth="8" fill="currentColor" />
+                  <path d="M 116 74 L 128 74 A 6 5 0 0 1 116 74 Z" strokeWidth="8" fill="currentColor" />
+                  {/* Plots and arrows */}
+                  <polygon points="56,110 84,110 92,134 48,134" strokeWidth="8" />
+                  <polygon points="116,110 144,110 152,134 108,134" strokeWidth="8" />
+                  {/* Bottom two-way arrow */}
+                  <line x1="72" y1="152" x2="128" y2="152" strokeWidth="9" />
+                  <polyline points="78,146 72,152 78,158" strokeWidth="9" />
+                  <polyline points="122,146 128,152 122,158" strokeWidth="9" />
+                </svg>
+                <span className="hidden text-xs font-semibold tracking-wide sm:inline">
+                  Compare
+                </span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
-        {/* Floating guidance banner when EMI Calculator is awaiting property selection */}
+        {/* Floating guidance popup note centered at top middle when EMI Calculator is awaiting property selection */}
         {emiSelectingProperty ? (
           <div className="pointer-events-none absolute top-4 inset-x-0 z-40 flex justify-center px-4">
-            <div className="pointer-events-auto flex items-center gap-3 rounded-full border border-[#c6a46c]/50 bg-[#141519]/95 px-4 py-2.5 text-xs text-[#f2f0ea] shadow-[0_12px_36px_rgba(0,0,0,0.6)] backdrop-blur-md">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#c6a46c] text-[#141519] shadow-sm">
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M12 21s7-5.4 7-11a7 7 0 1 0-14 0c0 5.6 7 11 7 11Z" />
-                  <circle cx="12" cy="10" r="2.5" fill="currentColor" />
+            <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-[#c6a46c]/60 bg-[#141519]/95 px-4 py-3 text-xs text-[#f2f0ea] shadow-[0_12px_36px_rgba(0,0,0,0.65)] backdrop-blur-md ila-banner-animate">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c6a46c] text-[#141519] shadow-sm">
+                <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="4" y="2" width="16" height="20" rx="3" />
+                  <line x1="8" y1="6" x2="16" y2="6" />
+                  <circle cx="8" cy="11" r="1" fill="currentColor" />
+                  <circle cx="12" cy="11" r="1" fill="currentColor" />
+                  <circle cx="16" cy="11" r="1" fill="currentColor" />
+                  <circle cx="8" cy="15" r="1" fill="currentColor" />
+                  <circle cx="12" cy="15" r="1" fill="currentColor" />
+                  <circle cx="16" cy="15" r="1" fill="currentColor" />
                 </svg>
               </span>
-              <span className="flex items-center gap-1.5 font-medium">
-                <strong className="font-semibold text-[#c6a46c]">Select a property on the map</strong>
-                <span className="text-white/60 hidden sm:inline">to calculate EMI &amp; returns</span>
-              </span>
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] font-bold tracking-wider text-[#c6a46c] uppercase">EMI Calculate</span>
+                <span className="font-semibold text-white">Select a property on the map to EMI calculate</span>
+              </div>
               <button
                 type="button"
                 onClick={() => setEmiSelectingProperty(false)}
-                className="ml-1 flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-white/60 transition hover:bg-white/20 hover:text-white"
+                className="ml-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60 transition hover:bg-white/20 hover:text-white"
                 aria-label="Cancel property selection"
               >
                 <CloseIcon className="h-3.5 w-3.5" />
@@ -3179,138 +3268,159 @@ export default function MapSection({
 
 
         {/* ======================================================== */}
-        {/* COMPARE MODE: Top Header Bar (matches user image)          */}
+        {/* COMPARE MODE: Top Guidance Notice (Gold/Yellow BG, Black text) */}
         {/* ======================================================== */}
         {compareSelectingMode ? (
-          <div className="pointer-events-none absolute top-4 inset-x-0 z-50 flex justify-center px-3 sm:px-4">
-            <div className="pointer-events-auto flex items-center justify-between gap-3 w-full max-w-md rounded-2xl border border-black/10 bg-[#faf6ee]/95 px-4 py-3 shadow-[0_12px_36px_rgba(0,0,0,0.18)] backdrop-blur-md">
+          <div className="pointer-events-none absolute top-3 inset-x-0 z-40 flex justify-center px-3 sm:px-4">
+            <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-[#b38e52] bg-gradient-to-r from-[#c6a46c] to-[#b38e52] px-3.5 py-2 text-xs text-[#141519] shadow-[0_10px_28px_rgba(0,0,0,0.3)] backdrop-blur-md ila-banner-animate">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#141519] text-[#c6a46c] shadow-sm">
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 200 250"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="14"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M 100 16 C 50 16 20 52 20 102 C 20 152 100 230 100 230 C 100 230 180 152 180 102 C 180 52 150 16 100 16 Z" strokeWidth="14" />
+                  <line x1="72" y1="58" x2="128" y2="58" strokeWidth="12" />
+                  <line x1="100" y1="58" x2="100" y2="82" strokeWidth="12" />
+                  <polygon points="56,110 84,110 92,134 48,134" strokeWidth="10" />
+                  <polygon points="116,110 144,110 152,134 108,134" strokeWidth="10" />
+                </svg>
+              </span>
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] font-extrabold tracking-wider text-[#141519]/80 uppercase">Compare Properties</span>
+                <span className="text-xs sm:text-[13px] font-extrabold tracking-tight text-[#141519]">Tap pins on the map to select up to 5 properties</span>
+              </div>
               <button
                 type="button"
                 onClick={() => {
                   setCompareSelectingMode(false);
                   setCompareSelectedIds([]);
                 }}
-                aria-label="Close compare mode"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/5 text-[#171717] transition hover:bg-black/10 active:scale-95"
+                className="ml-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-black/20 bg-[#141519] text-white shadow-sm transition hover:bg-black hover:scale-105 active:scale-95"
+                aria-label="Cancel compare mode"
+                title="Exit compare mode"
               >
-                <CloseIcon className="h-4 w-4" />
+                <CloseIcon className="h-3 w-3 stroke-[2.5]" />
               </button>
-
-              <div className="flex-1 text-center">
-                <h3 className="text-sm font-bold tracking-tight text-[#171717] sm:text-base">
-                  Compare properties
-                </h3>
-                <p className="text-[11px] font-medium text-[#7a7469]">
-                  Tap pins to select up to 5
-                </p>
-              </div>
-
-              {/* Invisible spacer so the title is optically centered */}
-              <div className="h-9 w-9 shrink-0" aria-hidden="true" />
             </div>
           </div>
         ) : null}
 
         {/* ======================================================== */}
-        {/* COMPARE MODE: Bottom Drawer Selection Strip (matches user image) */}
+        {/* COMPARE MODE: Bottom Drawer Selection Strip (cards on top, actions below) */}
         {/* ======================================================== */}
         {compareSelectingMode ? (
-          <div className="pointer-events-none absolute bottom-0 inset-x-0 z-50 flex justify-center px-2 pb-3 sm:px-4 sm:pb-4">
-            <div className="pointer-events-auto flex w-full max-w-2xl flex-col rounded-3xl border border-black/10 bg-[#faf6ee] p-4 shadow-[0_-12px_44px_rgba(0,0,0,0.22)] backdrop-blur-md">
-              {/* Drag handle */}
-              <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-black/20" aria-hidden="true" />
+          <div className="pointer-events-none absolute bottom-0 inset-x-0 z-50 flex justify-center">
+            <div className="pointer-events-auto flex w-full flex-col border-t border-black/15 bg-[#faf6ee]/95 px-3 pt-2.5 pb-3 sm:px-6 shadow-[0_-8px_32px_rgba(0,0,0,0.18)] backdrop-blur-md">
+              <div className="mx-auto flex w-full max-w-5xl flex-col gap-2.5">
+                {/* Upper Row: Selected Property Cards & Empty Slots */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                  {/* Render selected property chips */}
+                  {compareSelectedIds.map((id) => {
+                    const propItem = propertyList.find((p) => p.id === id);
+                    const propRec = getPropertyById(id === "sark-green" ? "sark-green-plains" : id);
+                    const name = propItem?.name || propRec?.name || id;
+                    const cover = propItem?.cover_url || propRec?.gallery?.[0]?.src || "/hero-image.png";
 
-              {/* Selected / Empty Slots List */}
-              <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
-                {/* Render selected property cards */}
-                {compareSelectedIds.map((id) => {
-                  const propItem = propertyList.find((p) => p.id === id);
-                  const propRec = getPropertyById(id === "sark-green" ? "sark-green-plains" : id);
-                  const name = propItem?.name || propRec?.name || id;
-                  const cover = propItem?.cover_url || propRec?.gallery?.[0]?.src || "/hero-image.png";
+                    return (
+                      <div
+                        key={id}
+                        className="group relative flex h-14 w-44 shrink-0 items-center gap-2 overflow-hidden rounded-xl border border-black/10 bg-white p-1.5 shadow-xs transition hover:border-[#c6a46c]/60 hover:shadow-sm"
+                      >
+                        {/* Image Thumbnail */}
+                        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-black/10">
+                          <Image
+                            src={cover}
+                            alt={name}
+                            fill
+                            sizes="44px"
+                            unoptimized
+                            className="object-cover"
+                          />
+                        </div>
 
-                  return (
-                    <div
-                      key={id}
-                      className="group relative flex h-28 w-28 shrink-0 flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm transition hover:shadow-md"
-                    >
-                      {/* Image Thumbnail */}
-                      <div className="relative h-16 w-full overflow-hidden bg-black/10">
-                        <Image
-                          src={cover}
-                          alt={name}
-                          fill
-                          sizes="112px"
-                          unoptimized
-                          className="object-cover"
-                        />
+                        {/* Property name */}
+                        <div className="min-w-0 flex-1 pr-4">
+                          <p className="truncate text-xs font-semibold text-[#171717]">
+                            {name}
+                          </p>
+                          <p className="text-[10px] text-[#7a7469]">
+                            Selected
+                          </p>
+                        </div>
+
                         {/* Remove button */}
                         <button
                           type="button"
                           onClick={() => toggleCompareId(id)}
                           aria-label={`Remove ${name} from comparison`}
-                          className="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-white/95 text-red-600 shadow-md transition hover:bg-red-50 hover:text-red-700 active:scale-95"
+                          className="absolute top-1.5 right-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-black/5 text-[#7a7469] transition hover:bg-red-50 hover:text-red-600 active:scale-95"
                         >
-                          <CloseIcon className="h-3 w-3 stroke-[2.5]" />
+                          <CloseIcon className="h-2.5 w-2.5 stroke-[2.5]" />
                         </button>
                       </div>
+                    );
+                  })}
 
-                      {/* Property name */}
-                      <div className="flex flex-1 items-center px-2 py-1">
-                        <span className="line-clamp-2 text-[11px] font-semibold leading-tight text-[#171717]">
-                          {name}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Empty slot placeholders up to 5 */}
-                {Array.from({ length: Math.max(0, 5 - compareSelectedIds.length) }).map((_, idx) => (
-                  <div
-                    key={`empty-slot-${idx}`}
-                    className="flex h-28 w-28 shrink-0 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-black/15 bg-black/[0.02]"
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black/5 text-[#8a6a12]">
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  {/* Empty slot placeholders up to 5 */}
+                  {Array.from({ length: Math.max(0, 5 - compareSelectedIds.length) }).map((_, idx) => (
+                    <div
+                      key={`empty-slot-${idx}`}
+                      className="flex h-14 w-32 shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-black/15 bg-black/[0.02] px-2 text-[11px] text-[#8a8275]"
+                    >
+                      <svg className="h-3.5 w-3.5 text-[#c6a46c]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                         <line x1="12" y1="5" x2="12" y2="19" />
                         <line x1="5" y1="12" x2="19" y2="12" />
                       </svg>
+                      <span>Slot {compareSelectedIds.length + idx + 1}</span>
                     </div>
+                  ))}
+                </div>
+
+                {/* Lower Row: Count, Compare Button & Close Button */}
+                <div className="flex items-center justify-between gap-3 border-t border-black/10 pt-2">
+                  <div className="flex items-center gap-1.5 text-xs text-[#5c5348]">
+                    <span className="flex h-2 w-2 rounded-full bg-[#c6a46c]" />
+                    <strong className="text-[#171717]">{compareSelectedIds.length} of 5</strong>
+                    <span>properties selected</span>
                   </div>
-                ))}
-              </div>
 
-              {/* Bottom Action Row: count, compare now button, clear all */}
-              <div className="mt-3 flex items-center justify-between gap-3 pt-2 border-t border-black/10">
-                <span className="text-xs font-semibold text-[#5c5348] whitespace-nowrap">
-                  <strong className="text-[#171717]">{compareSelectedIds.length} of 5</strong> selected
-                </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={compareSelectedIds.length < 2}
+                      onClick={() => setCompareModalOpen(true)}
+                      className={`flex items-center justify-center gap-1.5 rounded-xl px-5 py-2 text-xs font-bold tracking-wider uppercase transition shadow-md whitespace-nowrap ${
+                        compareSelectedIds.length >= 2
+                          ? "bg-gradient-to-r from-[#c6a46c] to-[#b38e52] text-[#171717] hover:brightness-105 active:scale-[0.99]"
+                          : "cursor-not-allowed bg-black/10 text-black/40"
+                      }`}
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      <span>Compare</span>
+                    </button>
 
-                <button
-                  type="button"
-                  disabled={compareSelectedIds.length < 2}
-                  onClick={() => setCompareModalOpen(true)}
-                  className={`flex flex-1 max-w-xs items-center justify-center gap-2 rounded-xl py-3 px-4 text-xs font-bold tracking-wider uppercase transition shadow-md ${
-                    compareSelectedIds.length >= 2
-                      ? "bg-gradient-to-r from-[#c6a46c] to-[#b38e52] text-[#171717] hover:brightness-105 active:scale-[0.99]"
-                      : "cursor-not-allowed bg-black/10 text-black/40"
-                  }`}
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span>Compare now</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCompareSelectedIds([])}
-                  disabled={compareSelectedIds.length === 0}
-                  className="text-xs font-semibold text-[#8a6a12] underline underline-offset-4 transition hover:text-[#171717] disabled:opacity-40 disabled:no-underline whitespace-nowrap"
-                >
-                  Clear all
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCompareSelectingMode(false);
+                        setCompareSelectedIds([]);
+                      }}
+                      aria-label="Close compare mode"
+                      title="Close compare mode"
+                      className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-500 shadow-xs transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 active:scale-95"
+                    >
+                      <CloseIcon className="h-4 w-4 stroke-[2.5]" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -3321,7 +3431,11 @@ export default function MapSection({
           <CompareProperties
             initialSelectedIds={compareSelectedIds}
             isModalOpen={compareModalOpen}
-            onCloseModal={() => setCompareModalOpen(false)}
+            onCloseModal={() => {
+              setCompareModalOpen(false);
+              setCompareSelectingMode(false);
+              setCompareSelectedIds([]);
+            }}
             modalOnly
           />
         )}
@@ -3329,11 +3443,11 @@ export default function MapSection({
         {/* EMI Calculator / EmiAppreciation Popup Modal Overlay */}
         {emiOpen ? (
           <div
-            className="fixed inset-0 z-[300] flex items-center justify-center p-2 sm:p-6 bg-black/80 backdrop-blur-sm animate-fade-in"
+            className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop"
             onClick={() => setEmiOpen(false)}
           >
             <div
-              className="relative flex w-full max-w-4xl max-h-[92vh] flex-col rounded-2xl border border-white/15 bg-[#17191d] text-[#f2f0ea] shadow-2xl overflow-hidden"
+              className="relative flex w-full sm:max-w-4xl max-h-[92vh] flex-col rounded-t-3xl sm:rounded-2xl border-t border-x-0 sm:border border-white/15 bg-[#17191d] text-[#f2f0ea] shadow-2xl overflow-hidden ila-modal-content"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 sm:px-6">
@@ -3376,16 +3490,17 @@ export default function MapSection({
           </div>
         ) : null}
 
-        {/* map zoom + fullscreen controls */}
-        <div
-          className={`pointer-events-none absolute right-3 z-20 flex flex-col gap-1.5 sm:right-4 ${
-            mapFullscreen
-              ? "bottom-6"
-              : activeProject
-                ? "bottom-14"
-                : "bottom-4"
-          }`}
-        >
+        {/* map zoom + fullscreen controls - hidden during compare mode */}
+        {!compareSelectingMode ? (
+          <div
+            className={`pointer-events-none absolute right-3 z-20 flex flex-col gap-1.5 sm:right-4 ${
+              mapFullscreen
+                ? "bottom-6"
+                : activeProject
+                  ? "bottom-14"
+                  : "bottom-4"
+            }`}
+          >
           {!mapFullscreen ? (
             <button
               type="button"
@@ -3424,6 +3539,7 @@ export default function MapSection({
             </button>
           </div>
         </div>
+        ) : null}
       </div>
     </section>
   );

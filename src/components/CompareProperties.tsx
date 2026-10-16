@@ -493,6 +493,8 @@ export default function CompareProperties({
     }
   }, [result?.share_url]);
 
+
+
   const propertyMap = useMemo(() => {
     return new Map(properties.map((p) => [p.id, p]));
   }, [properties]);
@@ -787,7 +789,7 @@ export default function CompareProperties({
             role="dialog"
             aria-modal="true"
             aria-label="Property comparison results"
-            className="fixed inset-0 z-[200] flex flex-col overflow-hidden bg-[#141519] text-white animate-fade-in"
+            className="ila-compare-modal fixed inset-0 z-[200] flex flex-col overflow-hidden bg-[#141519] text-white animate-fade-in"
           >
             {/* Header band */}
             <div className="shrink-0 border-b border-white/10 bg-[#17191e] px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
@@ -797,12 +799,7 @@ export default function CompareProperties({
                     Comparison Results
                   </h3>
                   <p className="mt-1 text-[12px] leading-snug text-[#8a909e]">
-                    Comparing <strong className="text-[#e8e6e1]">{compared.length}</strong> developments
-                    {bestMatchProperty ? (
-                      <span>
-                        {" "}· Top match: <strong className="text-[#c9a84c]">{bestMatchProperty.name}</strong>
-                      </span>
-                    ) : null}
+                    Comparing <strong className="text-[#e8e6e1]">{compared.length}</strong> properties
                   </p>
                 </div>
 
@@ -1026,20 +1023,6 @@ export default function CompareProperties({
               </div>
             </div>
 
-            {/* Share bar */}
-            {result?.share_url ? (
-              <div className="shrink-0 border-t border-white/10 bg-[#17191e] px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-                <button
-                  type="button"
-                  onClick={copyShareUrl}
-                  className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 text-[12px] font-semibold text-white/85 transition active:bg-white/10"
-                >
-                  <span>
-                    {copiedShare ? "Link copied" : "Copy shareable comparison link"}
-                  </span>
-                </button>
-              </div>
-            ) : null}
           </div>
         )}
       </Fragment>
@@ -1587,23 +1570,8 @@ export default function CompareProperties({
                       Comparison Results
                     </h3>
                     <p className="text-[12px] text-[#8a909e]">
-                      Comparing <strong className="text-[#e8e6e1]">{compared.length}</strong> developments
-                      {bestMatchProperty ? (
-                        <span> · Top match: <strong className="text-[#c9a84c]">{bestMatchProperty.name}</strong></span>
-                      ) : null}
+                      Comparing <strong className="text-[#e8e6e1]">{compared.length}</strong> properties
                     </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {result?.share_url ? (
-                      <button
-                        type="button"
-                        onClick={copyShareUrl}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(242,240,234,0.15)] bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-[#e8e6e1] transition hover:bg-white/10"
-                      >
-                        <span>{copiedShare ? "✓ Copied" : "Copy shareable link"}</span>
-                      </button>
-                    ) : null}
                   </div>
 
                   {/* Category Filter Pills on Desktop */}
@@ -2317,7 +2285,7 @@ export default function CompareProperties({
           role="dialog"
           aria-modal="true"
           aria-label="Property comparison results"
-          className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#141519] text-white"
+          className="ila-compare-modal fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#141519] text-white"
         >
           {/* Header band.
 
@@ -2350,15 +2318,7 @@ export default function CompareProperties({
                 <p className="mt-1 text-[12px] leading-snug text-[#8a909e]">
                   Comparing{" "}
                   <strong className="text-[#e8e6e1]">{compared.length}</strong>{" "}
-                  developments
-                  {bestMatchProperty ? (
-                    <span>
-                      {" "}· Top match:{" "}
-                      <strong className="text-[#c9a84c]">
-                        {bestMatchProperty.name}
-                      </strong>
-                    </span>
-                  ) : null}
+                  properties
                 </p>
               </div>
 
@@ -2763,19 +2723,6 @@ export default function CompareProperties({
             icon and its own stacking context; the button already owns
             `copiedShare`, so the state lands where the tap was. `min-h-11`
             because this is the only control in the bar. */}
-          {result?.share_url ? (
-            <div className="shrink-0 border-t border-white/10 bg-[#17191e] px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-              <button
-                type="button"
-                onClick={copyShareUrl}
-                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 text-[12px] font-semibold text-white/85 transition active:bg-white/10"
-              >
-                <span>
-                  {copiedShare ? "Link copied" : "Copy shareable comparison link"}
-                </span>
-              </button>
-            </div>
-          ) : null}
         </div>
       ) : null}
     </section>

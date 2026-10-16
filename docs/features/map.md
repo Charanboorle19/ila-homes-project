@@ -15,11 +15,10 @@ The project has two MapLibre-based map components:
 
 1. `MapSection` loads `GET /api/properties?status=ALL&page=1&per_page=100` through `fetchProperties`.
 2. Property coordinates are taken from the list where available; missing coordinates are resolved with detail calls through `fetchPropertyAnchors` (maximum concurrency `4`).
-3. Properties with usable coordinates receive gold map pins. Selecting a property pin or a property row opens the property summary sheet and can load its units/layout.
+3. Properties with usable coordinates receive gold-and-charcoal map pins with property name tags. At default overview zoom, tags remain compact and single-line; when zoomed in or hovered, tags expand and wrap cleanly onto multiple lines without truncating. Selecting a property pin or a property row smoothly animates the property summary card / results popup into view and loads its units/layout.
 4. Opening a property layout loads the property detail and `GET /api/properties/{id}/units?limit=all`. Unit geometry is converted into plot polygons.
 5. A plot can be selected from the map or list. The plot selection shows its plot details and highlights the polygon.
-6. The visitor can filter plots by `all`, `available`, or `sold`, toggle layout imagery, and close the layout/property sheet (on-map search input option was removed from the map overlay).
-7. The quick action toolbar on the right side provides quick access to Wishlist, EMI Calculator, and Compare Properties. Clicking Compare activates pin selection mode to select properties across the map and launch the Compare Properties popup modal.
+7. The quick action toolbar on the right side provides quick access to Wishlist, EMI Calculator, and Compare Properties. When the map is maximized (fullscreen), the right-side quick action buttons and the maximize button are hidden to provide an uncluttered full map experience. When EMI Calculator selection mode is activated, other floating options (Wishlist, Compare Properties, and FindYourPlot) are cleanly hidden, and a centered top note smoothly animates down to direct the visitor: "Select a property on the map to EMI calculate". When Compare is clicked, the UI enters Compare selection mode and cleanly hides all other floating options on the map (Wishlist, EMI Calculator, FindYourPlot feature cards, Developments sidebar button/panel, and zoom/fullscreen controls) leaving only the top guidance header, bottom property selection drawer, and selectable property map pins. Closing the comparison results popup (or clicking the close cross in the bottom bar or top notice) fully dismisses compare mode and resets selections, returning all regular map controls to view.
 
 ### Location/Development map (`GrowthCorridors`)
 

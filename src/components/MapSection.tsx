@@ -690,6 +690,8 @@ export default function MapSection({
   const applyInteractionsRef = useRef<() => void>(() => {});
   const [desktopScrollHint, setDesktopScrollHint] = useState(false);
   const desktopScrollHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [maxZoomNotice, setMaxZoomNotice] = useState(false);
+  const maxZoomNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapFrameRef = useRef<HTMLDivElement | null>(null);
   const fittedPinsRef = useRef("");
   /** Coalesces the auto-fit while pins stream in, so the camera moves once. */
@@ -1683,17 +1685,19 @@ export default function MapSection({
       const isMobileScreen =
         typeof window !== "undefined" &&
         !window.matchMedia("(min-width: 768px)").matches;
+      const enableCooperativeGestures = Boolean(singlePropertyId) && isMobileScreen;
       map = new MapLibreMap({
         container: mapContainerRef.current,
         style: MAP_STYLE,
         center: [78.42, 17.17],
         zoom: 11.4,
         pitch: 0,
+        maxZoom: 18.5,
         attributionControl: { compact: true },
         dragRotate: true,
         pitchWithRotate: true,
         touchPitch: true,
-        cooperativeGestures: false,
+        cooperativeGestures: enableCooperativeGestures,
       });
     } catch (error) {
       console.error("Unable to initialize the developments map", error);
@@ -1783,14 +1787,28 @@ export default function MapSection({
 
     const applyMobileInteractions = () => {
       clearMobileTouchListeners();
-      // Unrestricted full interaction on both desktop and mobile:
-      map.cooperativeGestures?.disable();
-      map.scrollZoom.enable();
-      map.dragPan.enable();
-      map.touchZoomRotate.enable();
-      map.touchZoomRotate.enableRotation();
-      map.dragRotate.enable();
-      setMobileTouchAction(false);
+      const isMobile = mobileQuery.matches;
+      const isPropertyPage = Boolean(singlePropertyId);
+
+      if (isPropertyPage && isMobile && !mapFullscreenRef.current) {
+        // Enforce restriction to use two fingers on property pages:
+        map.cooperativeGestures?.enable();
+        map.scrollZoom.disable();
+        map.dragPan.enable();
+        map.touchZoomRotate.enable();
+        map.touchZoomRotate.enableRotation();
+        map.dragRotate.enable();
+        setMobileTouchAction(true);
+      } else {
+        // Unrestricted full interaction on desktop or homepage:
+        map.cooperativeGestures?.disable();
+        map.scrollZoom.enable();
+        map.dragPan.enable();
+        map.touchZoomRotate.enable();
+        map.touchZoomRotate.enableRotation();
+        map.dragRotate.enable();
+        setMobileTouchAction(false);
+      }
     };
 
     const onWheel = () => {
@@ -1835,6 +1853,15 @@ export default function MapSection({
           mapContainerRef.current.classList.add("map--zoomed-in");
         } else {
           mapContainerRef.current.classList.remove("map--zoomed-in");
+        }
+
+        if (currentZoom >= 18.2) {
+          setMaxZoomNotice(true);
+          if (maxZoomNoticeTimerRef.current) clearTimeout(maxZoomNoticeTimerRef.current);
+          maxZoomNoticeTimerRef.current = setTimeout(() => {
+            setMaxZoomNotice(false);
+            maxZoomNoticeTimerRef.current = null;
+          }, 3200);
         }
       };
       updateZoomClass();
@@ -3015,7 +3042,7 @@ export default function MapSection({
         ) : null}
 
         {/* FindYourPlot feature cards side-by-side at the bottom of the map */}
-        {features.length > 0 && !selectedPlot && !compareSelectingMode && !emiSelectingProperty ? (
+        {features.length > 0 && !selectedPlot && !compareSelectingMode && !emiSelectingProperty && !singlePropertyId ? (
           <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-20 flex items-center gap-1.5 sm:left-4 sm:right-4 md:right-24">
             {/* Left arrow (mobile/touch only) */}
             <button
@@ -3131,8 +3158,21 @@ export default function MapSection({
           </div>
         ) : null}
 
-        {/* Right center quick actions: Wishlist, EMI Calculator & Compare (hidden when maximized or in compare mode) */}
-        {!compareSelectingMode && !mapFullscreen ? (
+        {/* Maximize map button when singlePropertyId is active (since bottom feature bar is hidden) */}
+        {singlePropertyId && !mapFullscreen ? (
+          <button
+            type="button"
+            aria-label="Maximize map to full screen"
+            title="Maximize map"
+            onClick={toggleNativeFullscreen}
+            className="pointer-events-auto absolute bottom-3 right-3 z-20 flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[#171717]/90 text-white/90 shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur-md transition hover:border-[#c6a46c]/60 hover:bg-[#202020] hover:text-[#c6a46c] active:scale-95 sm:bottom-4 sm:right-4"
+          >
+            <ExpandIcon className="h-4 w-4" />
+          </button>
+        ) : null}
+
+        {/* Right center quick actions: Wishlist, EMI Calculator & Compare (hidden when maximized, in compare mode, or on single property page) */}
+        {!compareSelectingMode && !mapFullscreen && !singlePropertyId ? (
           <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 z-30 flex flex-col items-end gap-2.5 sm:right-4">
             {/* Wishlist Component - hidden when selecting property for EMI */}
             {!emiSelectingProperty ? (
@@ -3230,6 +3270,33 @@ export default function MapSection({
                 </span>
               </button>
             ) : null}
+          </div>
+        ) : null}
+
+        {/* Maximum zoom reached notification popup note */}
+        {maxZoomNotice ? (
+          <div className="pointer-events-none absolute top-4 inset-x-0 z-40 flex justify-center px-4">
+            <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-amber-500/50 bg-[#141519]/95 px-4 py-2.5 text-xs text-[#f2f0ea] shadow-[0_12px_36px_rgba(0,0,0,0.65)] backdrop-blur-md ila-banner-animate">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </span>
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] font-bold tracking-wider text-amber-400 uppercase">Maximum Zoom Reached</span>
+                <span className="font-medium text-white/90">Higher satellite resolution is not available for this area</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMaxZoomNotice(false)}
+                className="ml-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60 transition hover:bg-white/20 hover:text-white"
+                aria-label="Dismiss notice"
+              >
+                <CloseIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         ) : null}
 

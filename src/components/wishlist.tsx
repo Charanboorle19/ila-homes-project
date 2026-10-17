@@ -31,8 +31,15 @@ function CloseIcon({ className = "" }: { className?: string }) {
 
 function HeartIcon({ className = "", filled = false }: { className?: string; filled?: boolean }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    <svg className={className} viewBox="0 0 100 100" fill="none" aria-hidden="true">
+      <path
+        d="M 50 85 L 20 54.5 A 20 20 0 0 1 48 24.8 L 50 27.2 L 52 24.8 A 20 20 0 0 1 80 54.5 Z"
+        fill={filled ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth="7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -595,16 +602,16 @@ export default function Wishlist({
         type="button"
         aria-label="Saved properties wishlist"
         onClick={onOpen}
-        className={`pointer-events-auto group relative flex items-center gap-2 rounded-full border border-white/15 bg-[#171717]/90 p-2.5 text-[#f2f0ea] shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all hover:border-[#c6a46c] hover:bg-[#222222] active:scale-95 sm:px-3 sm:py-2 ${className}`}
+        className={`pointer-events-auto group relative flex items-center justify-start gap-2 rounded-full border border-white/15 bg-[#171717]/90 p-2.5 text-[#f2f0ea] shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all hover:border-[#c6a46c] hover:bg-[#222222] active:scale-95 sm:h-10 sm:w-36 sm:px-3 sm:py-2 ${className}`}
       >
-        <div className="text-[#c6a46c] transition-transform group-hover:scale-110">
-          <HeartIcon className="h-4.5 w-4.5" />
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center text-[#c6a46c] transition-transform group-hover:scale-110">
+          <HeartIcon className="h-6 w-6" />
         </div>
         <span className="hidden text-xs font-semibold tracking-wide sm:inline">
           Wishlist
         </span>
         {favorites.length > 0 ? (
-          <span className="flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-[#c6a46c] px-1 text-[10px] font-bold text-[#171717]">
+          <span className="ml-auto flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-[#c6a46c] px-1 text-[10px] font-bold text-[#171717]">
             {favorites.length}
           </span>
         ) : null}

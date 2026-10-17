@@ -50,12 +50,11 @@ function HeartIcon({ className = "", filled = false }: { className?: string; fil
 
 function CompareIcon({ className = "" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 3h5v5" />
-      <path d="M4 20L21 3" />
-      <path d="M21 16v5h-5" />
-      <path d="M15 15l6 6" />
-      <path d="M4 4l5 5" />
+    <svg className={className} viewBox="0 0 100 100" fill="currentColor" aria-hidden="true">
+      <rect x="18" y="22" width="26" height="26" rx="5.5" />
+      <rect x="64" y="22" width="26" height="26" rx="5.5" />
+      <rect x="18" y="53" width="72" height="5.5" rx="2.75" />
+      <path d="M 48 56 H 60 L 70.5 76.5 A 5.5 5.5 0 0 1 65.6 84.5 H 42.4 A 5.5 5.5 0 0 1 37.5 76.5 Z" />
     </svg>
   );
 }

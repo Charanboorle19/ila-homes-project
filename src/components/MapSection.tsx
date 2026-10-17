@@ -2882,32 +2882,47 @@ export default function MapSection({
                 setEmiOpen(false);
                 setEmiSelectingProperty((prev) => !prev);
               }}
-              className={`pointer-events-auto group relative flex items-center gap-2 rounded-full border p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all active:scale-95 sm:px-3 sm:py-2 ${
+              className={`pointer-events-auto group relative flex items-center justify-start gap-2 rounded-full border p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all active:scale-95 sm:h-10 sm:w-36 sm:px-3 sm:py-2 ${
                 emiSelectingProperty
                   ? "border-[#c6a46c] bg-[#c6a46c] text-[#171717] ring-4 ring-[#c6a46c]/30"
                   : "border-white/15 bg-[#171717]/90 text-[#f2f0ea] hover:border-[#c6a46c] hover:bg-[#222222]"
               }`}
             >
-              <svg
-                className={`h-4.5 w-4.5 transition-transform group-hover:scale-110 ${
-                  emiSelectingProperty ? "text-[#171717]" : "text-[#c6a46c]"
-                }`}
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden
-              >
-                <rect x="4" y="2" width="16" height="20" rx="3" stroke="currentColor" strokeWidth="1.8" />
-                <line x1="8" y1="6" x2="16" y2="6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                <circle cx="8" cy="11" r="1" fill="currentColor" />
-                <circle cx="12" cy="11" r="1" fill="currentColor" />
-                <circle cx="16" cy="11" r="1" fill="currentColor" />
-                <circle cx="8" cy="15" r="1" fill="currentColor" />
-                <circle cx="12" cy="15" r="1" fill="currentColor" />
-                <circle cx="16" cy="15" r="1" fill="currentColor" />
-                <circle cx="8" cy="18" r="1" fill="currentColor" />
-                <circle cx="12" cy="18" r="1" fill="currentColor" />
-                <circle cx="16" cy="18" r="1" fill="currentColor" />
-              </svg>
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+                <svg
+                  className={`h-5.5 w-5.5 transition-transform group-hover:scale-110 ${
+                    emiSelectingProperty ? "text-[#171717]" : "text-[#c6a46c]"
+                  }`}
+                  viewBox="0 0 100 120"
+                  aria-hidden="true"
+                >
+                  <defs>
+                    <mask id="map-calc-cutout">
+                      <rect x="0" y="0" width="100" height="120" fill="#ffffff" />
+                      <g fill="#000000">
+                        <rect x="27.5" y="29" width="45" height="13.5" rx="3" />
+                        <rect x="27" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="63.2" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="27" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="63.2" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="27" y="89.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="89.5" width="27.9" height="9.5" rx="2.8" />
+                      </g>
+                    </mask>
+                  </defs>
+                  <rect
+                    x="17.5"
+                    y="14"
+                    width="65"
+                    height="92"
+                    rx="8.5"
+                    fill="currentColor"
+                    mask="url(#map-calc-cutout)"
+                  />
+                </svg>
+              </div>
               <span className="hidden text-xs font-semibold tracking-wide sm:inline">
                 {emiSelectingProperty ? "Select on map" : "EMI Calculator"}
               </span>
@@ -2928,34 +2943,21 @@ export default function MapSection({
                     setPropertySheetExpanded(false);
                   }
                 }}
-                className="pointer-events-auto group relative flex items-center gap-2 rounded-full border border-white/15 bg-[#171717]/90 p-2.5 text-[#f2f0ea] shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all hover:border-[#c6a46c] hover:bg-[#222222] active:scale-95 sm:px-3 sm:py-2"
+                className="pointer-events-auto group relative flex items-center justify-start gap-2 rounded-full border border-white/15 bg-[#171717]/90 p-2.5 text-[#f2f0ea] shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all hover:border-[#c6a46c] hover:bg-[#222222] active:scale-95 sm:h-10 sm:w-36 sm:px-3 sm:py-2"
               >
-                <svg
-                  className="h-5 w-5 text-[#c6a46c] transition-transform group-hover:scale-110"
-                  viewBox="0 0 200 250"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="12"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  {/* Pin Outline */}
-                  <path d="M 100 16 C 50 16 20 52 20 102 C 20 152 100 230 100 230 C 100 230 180 152 180 102 C 180 52 150 16 100 16 Z" strokeWidth="12" />
-                  {/* Balance Scale */}
-                  <line x1="75" y1="58" x2="125" y2="58" strokeWidth="10" />
-                  <line x1="100" y1="58" x2="100" y2="82" strokeWidth="10" />
-                  <line x1="82" y1="82" x2="118" y2="82" strokeWidth="10" />
-                  <path d="M 72 74 L 84 74 A 6 5 0 0 1 72 74 Z" strokeWidth="8" fill="currentColor" />
-                  <path d="M 116 74 L 128 74 A 6 5 0 0 1 116 74 Z" strokeWidth="8" fill="currentColor" />
-                  {/* Plots and arrows */}
-                  <polygon points="56,110 84,110 92,134 48,134" strokeWidth="8" />
-                  <polygon points="116,110 144,110 152,134 108,134" strokeWidth="8" />
-                  {/* Bottom two-way arrow */}
-                  <line x1="72" y1="152" x2="128" y2="152" strokeWidth="9" />
-                  <polyline points="78,146 72,152 78,158" strokeWidth="9" />
-                  <polyline points="122,146 128,152 122,158" strokeWidth="9" />
-                </svg>
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+                  <svg
+                    className="h-5.5 w-5.5 text-[#c6a46c] transition-transform group-hover:scale-110"
+                    viewBox="0 0 100 100"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <rect x="18" y="22" width="26" height="26" rx="5.5" />
+                    <rect x="64" y="22" width="26" height="26" rx="5.5" />
+                    <rect x="18" y="53" width="72" height="5.5" rx="2.75" />
+                    <path d="M 48 56 H 60 L 70.5 76.5 A 5.5 5.5 0 0 1 65.6 84.5 H 42.4 A 5.5 5.5 0 0 1 37.5 76.5 Z" />
+                  </svg>
+                </div>
                 <span className="hidden text-xs font-semibold tracking-wide sm:inline">
                   Compare
                 </span>
@@ -2996,15 +2998,32 @@ export default function MapSection({
           <div className="pointer-events-none absolute top-4 inset-x-0 z-40 flex justify-center px-4">
             <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-[#c6a46c]/60 bg-[#141519]/95 px-4 py-3 text-xs text-[#f2f0ea] shadow-[0_12px_36px_rgba(0,0,0,0.65)] backdrop-blur-md ila-banner-animate">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c6a46c] text-[#141519] shadow-sm">
-                <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <rect x="4" y="2" width="16" height="20" rx="3" />
-                  <line x1="8" y1="6" x2="16" y2="6" />
-                  <circle cx="8" cy="11" r="1" fill="currentColor" />
-                  <circle cx="12" cy="11" r="1" fill="currentColor" />
-                  <circle cx="16" cy="11" r="1" fill="currentColor" />
-                  <circle cx="8" cy="15" r="1" fill="currentColor" />
-                  <circle cx="12" cy="15" r="1" fill="currentColor" />
-                  <circle cx="16" cy="15" r="1" fill="currentColor" />
+                <svg className="h-5 w-5" viewBox="0 0 100 120" aria-hidden="true">
+                  <defs>
+                    <mask id="map-banner-calc-cutout">
+                      <rect x="0" y="0" width="100" height="120" fill="#ffffff" />
+                      <g fill="#000000">
+                        <rect x="27.5" y="29" width="45" height="13.5" rx="3" />
+                        <rect x="27" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="63.2" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="27" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="63.2" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="27" y="89.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="89.5" width="27.9" height="9.5" rx="2.8" />
+                      </g>
+                    </mask>
+                  </defs>
+                  <rect
+                    x="17.5"
+                    y="14"
+                    width="65"
+                    height="92"
+                    rx="8.5"
+                    fill="currentColor"
+                    mask="url(#map-banner-calc-cutout)"
+                  />
                 </svg>
               </span>
               <div className="flex flex-col text-left">
@@ -3033,20 +3052,15 @@ export default function MapSection({
             <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-[#b38e52] bg-gradient-to-r from-[#c6a46c] to-[#b38e52] px-3.5 py-2 text-xs text-[#141519] shadow-[0_10px_28px_rgba(0,0,0,0.3)] backdrop-blur-md ila-banner-animate">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#141519] text-[#c6a46c] shadow-sm">
                 <svg
-                  className="h-4 w-4"
-                  viewBox="0 0 200 250"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="14"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
+                  className="h-5 w-5"
+                  viewBox="0 0 100 100"
+                  fill="currentColor"
+                  aria-hidden="true"
                 >
-                  <path d="M 100 16 C 50 16 20 52 20 102 C 20 152 100 230 100 230 C 100 230 180 152 180 102 C 180 52 150 16 100 16 Z" strokeWidth="14" />
-                  <line x1="72" y1="58" x2="128" y2="58" strokeWidth="12" />
-                  <line x1="100" y1="58" x2="100" y2="82" strokeWidth="12" />
-                  <polygon points="56,110 84,110 92,134 48,134" strokeWidth="10" />
-                  <polygon points="116,110 144,110 152,134 108,134" strokeWidth="10" />
+                  <rect x="18" y="22" width="26" height="26" rx="5.5" />
+                  <rect x="64" y="22" width="26" height="26" rx="5.5" />
+                  <rect x="18" y="53" width="72" height="5.5" rx="2.75" />
+                  <path d="M 48 56 H 60 L 70.5 76.5 A 5.5 5.5 0 0 1 65.6 84.5 H 42.4 A 5.5 5.5 0 0 1 37.5 76.5 Z" />
                 </svg>
               </span>
               <div className="flex flex-col text-left">

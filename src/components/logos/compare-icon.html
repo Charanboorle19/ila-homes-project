@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Balance / Comparison Icon</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #ffffff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Adjust width/max-width to scale the icon to any size */
+    .balance-icon {
+      width: 100%;
+      max-width: 120px;
+      height: auto;
+      display: block;
+      color: #000000; /* Controls the icon color via currentColor */
+    }
+  </style>
+</head>
+<body>
+
+  <svg class="balance-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <g fill="currentColor">
+      <!-- Left Rounded Square -->
+      <rect x="18" y="22" width="26" height="26" rx="5.5" />
+
+      <!-- Right Rounded Square -->
+      <rect x="64" y="22" width="26" height="26" rx="5.5" />
+
+      <!-- Horizontal Pill Beam -->
+      <rect x="18" y="53" width="72" height="5.5" rx="2.75" />
+
+      <!-- Fulcrum / Rounded Trapezoid Base -->
+      <path d="M 48 56 
+               H 60 
+               L 70.5 76.5 
+               A 5.5 5.5 0 0 1 65.6 84.5 
+               H 42.4 
+               A 5.5 5.5 0 0 1 37.5 76.5 
+               Z" />
+    </g>
+  </svg>
+
+</body>
+</html>

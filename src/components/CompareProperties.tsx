@@ -272,21 +272,11 @@ function PlusIcon({ className = "" }: { className?: string }) {
 
 function CompareIcon({ className = "" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M12 3v18"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M8 9l-3 3 3 3M16 9l3 3-3 3"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+    <svg className={className} viewBox="0 0 100 100" fill="currentColor" aria-hidden="true">
+      <rect x="18" y="22" width="26" height="26" rx="5.5" />
+      <rect x="64" y="22" width="26" height="26" rx="5.5" />
+      <rect x="18" y="53" width="72" height="5.5" rx="2.75" />
+      <path d="M 48 56 H 60 L 70.5 76.5 A 5.5 5.5 0 0 1 65.6 84.5 H 42.4 A 5.5 5.5 0 0 1 37.5 76.5 Z" />
     </svg>
   );
 }

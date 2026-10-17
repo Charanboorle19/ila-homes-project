@@ -9,6 +9,8 @@ import "./HomeReadyToVisit.css";
 
 const PHONE_PREFIX = "+91";
 const LOCAL_DIGITS = 10;
+const DEFAULT_HOME_MESSAGE =
+  "Hi, I want to book a private site visit. Could you please share the available slots and details?";
 
 function updatePhoneValue(value: string): string {
   let digits = value.replace(/\D/g, "");

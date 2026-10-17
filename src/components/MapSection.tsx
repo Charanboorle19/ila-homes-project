@@ -63,6 +63,7 @@ import {
   SATELLITE_TILES_URL,
 } from "@/lib/satelliteTiles";
 import { ILA_API_BASE_URL } from "@/lib/ilaApiConfig";
+import MapVersion, { type MapViewMode } from "@/components/map-version";
 
 type FilterKey = "all" | PlotStatus;
 type SheetTab = "about" | "plots" | "features" | "location";
@@ -658,6 +659,7 @@ export type MapSectionProps = {
   hideDetails?: boolean;
   hideSearch?: boolean;
   highlightAvailable?: boolean;
+  onMapLoaded?: () => void;
 };
 
 export default function MapSection({
@@ -666,6 +668,7 @@ export default function MapSection({
   hideDetails = false,
   hideSearch = false,
   highlightAvailable = false,
+  onMapLoaded,
 }: MapSectionProps = {}) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -690,6 +693,7 @@ export default function MapSection({
   const applyInteractionsRef = useRef<() => void>(() => {});
   const [desktopScrollHint, setDesktopScrollHint] = useState(false);
   const desktopScrollHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [userMapViewMode, setUserMapViewMode] = useState<MapViewMode>("default");
   const [maxZoomNotice, setMaxZoomNotice] = useState(false);
   const maxZoomNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapFrameRef = useRef<HTMLDivElement | null>(null);
@@ -2298,6 +2302,10 @@ export default function MapSection({
         }, 120);
       }
     }
+
+    if (mapReady && pins.length > 0) {
+      onMapLoaded?.();
+    }
   }, [
     activeProjectId,
     compareSelectedIds,
@@ -2305,6 +2313,7 @@ export default function MapSection({
     emiSelectingProperty,
     featureMatchedPropertyIds,
     mapReady,
+    onMapLoaded,
     panelOpen,
     pins,
     pinsBounds,
@@ -2366,21 +2375,21 @@ export default function MapSection({
   }, [activeProject, mapReady, panelOpen]);
 
   /**
-   * A layout is read against the ground it sits on, so the basemap switches to
-   * satellite imagery while a master plan is open and back to the vector style
-   * when it closes. Only toggles layer visibility, so nothing is re-requested
-   * unless the layer is actually on screen.
+   * Switches to satellite imagery if either the user explicitly toggled
+   * "satellite" mode, or while an active estate master plan layout is open.
    */
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !map.getLayer(SATELLITE_LAYER_ID)) return;
 
+    const showSatellite = userMapViewMode === "satellite" || layoutOpen;
+
     map.setLayoutProperty(
       SATELLITE_LAYER_ID,
       "visibility",
-      layoutOpen ? "visible" : "none",
+      showSatellite ? "visible" : "none",
     );
-  }, [layoutOpen, mapReady]);
+  }, [layoutOpen, mapReady, userMapViewMode]);
 
   // Highlight selected plot
   useEffect(() => {
@@ -2725,6 +2734,26 @@ export default function MapSection({
                 {activeProject?.name ?? activeProperty?.name}
               </h3>
             </div>
+          </div>
+        ) : null}
+
+        {/* Top Left: Map Version Switcher (Default View / Satellite Version) */}
+        {!compareSelectingMode ? (
+          <div className={`absolute z-30 transition-all ${
+            mapFullscreen
+              ? "top-3 left-28 sm:left-32"
+              : !hideDetails && panelOpen
+                ? "top-3 left-3 sm:top-4 md:left-[23.5rem]"
+                : !hideDetails
+                  ? "top-3 left-3 sm:top-4 md:left-40"
+                  : hideDetails && (activeProject?.name || activeProperty?.name)
+                    ? "top-3 left-3 sm:top-4 md:left-56"
+                    : "top-3 left-3 sm:top-4 sm:left-4"
+          }`}>
+            <MapVersion
+              currentMode={userMapViewMode}
+              onModeChange={(mode) => setUserMapViewMode(mode)}
+            />
           </div>
         ) : null}
 

@@ -64,6 +64,13 @@ import {
 } from "@/lib/satelliteTiles";
 import { ILA_API_BASE_URL } from "@/lib/ilaApiConfig";
 import MapVersion, { type MapViewMode } from "@/components/map-version";
+import {
+  LAYOUT_DESIGN,
+  LAYOUT_LAYER_IDS,
+  initLayoutLayers,
+  setLayoutData,
+  syncLayoutRaster,
+} from "@/components/map-section-layouts";
 
 type FilterKey = "all" | PlotStatus;
 type SheetTab = "about" | "plots" | "features" | "location";
@@ -104,35 +111,8 @@ const EMPTY_FC = {
   features: [],
 };
 
-/** Estate master-plan palette */
-const LAYOUT = {
-  siteFill: "#EFE6D6",
-  siteEdge: "#C6A46C",
-  openArea: "#7CB342",
-  openAreaEdge: "#E8F5C8",
-  available: "#1F8A68",
-  sold: "#8A8178",
-  plotEdge: "#FFFFFF",
-  selected: "#D4A84B",
-  selectedEdge: "#FFFFFF",
-  road: "#0B0B0B",
-  roadLine: "#FFFFFF",
-  roadCasing: "#2A2A2A",
-} as const;
-
-const LAYOUT_LAYER_IDS = [
-  "estate-site-pad-fill",
-  "estate-site-pad-edge",
-  "estate-open-fill",
-  "estate-open-edge",
-  "estate-plots-fill",
-  "estate-plots-outline",
-  "estate-plots-label",
-  "estate-roads-fill",
-  "estate-roads-casing",
-  "estate-roads-edge",
-  "estate-roads-center",
-] as const;
+/** Estate master-plan design tokens imported from map-section-layouts.tsx */
+const LAYOUT = LAYOUT_DESIGN;
 
 /** Keep the estate GeoJSON visible so plot polygons remain selectable on the map. */
 const SHOW_ESTATE_GEOJSON = true;
@@ -140,89 +120,16 @@ const SHOW_ESTATE_GEOJSON = true;
 /** Ceiling for the layout fit, so an estate always fills the frame. */
 const LAYOUT_MAX_ZOOM = 17.2;
 
-const LAYOUT_RASTER_SOURCE_ID = "estate-layout-image";
-const LAYOUT_RASTER_LAYER_ID = "estate-layout-raster";
 
-function syncLayoutRaster(
-  map: MapLibreMap,
-  raster: LayoutRaster | undefined,
-  layoutVisible: boolean,
-) {
-  const source = map.getSource(LAYOUT_RASTER_SOURCE_ID) as ImageSource | undefined;
-  if (!source || !map.getLayer(LAYOUT_RASTER_LAYER_ID)) {
-    console.warn("[ILA map] layout image source/layer missing", {
-      source: Boolean(source),
-      layer: Boolean(map.getLayer(LAYOUT_RASTER_LAYER_ID)),
-    });
-    return;
-  }
-
-  const showRaster = Boolean(layoutVisible && raster);
-
-  if (raster) {
-    console.log("[ILA map] applying layout image", {
-      id: raster.id,
-      coordinates: raster.coordinates,
-      // A preview arrives already decoded from a bucket with no CORS headers;
-      // the TIFF fallback is handed over as a PNG data URL instead.
-      imageKind: raster.image ? "decoded" : "url",
-      dataUrlKb: raster.url ? Math.round(raster.url.length / 1024) : 0,
-      opacity: raster.opacity,
-    });
-    // Exactly one of the two: a decoded image skips the network, a URL is
-    // fetched by the map itself.
-    if (raster.image) {
-      source.updateImage({
-        image: raster.image,
-        coordinates: raster.coordinates,
-      });
-    } else if (raster.url) {
-      source.updateImage({
-        url: raster.url,
-        coordinates: raster.coordinates,
-      });
-    }
-    map.setPaintProperty(
-      LAYOUT_RASTER_LAYER_ID,
-      "raster-opacity",
-      raster.opacity,
-    );
-  }
-
-  map.setLayoutProperty(
-    LAYOUT_RASTER_LAYER_ID,
-    "visibility",
-    showRaster ? "visible" : "none",
-  );
-
-  console.log(
-    `[ILA map] layout image ${showRaster ? "shown" : "hidden"} at zoom ${map.getZoom().toFixed(2)}`,
-  );
-
-  // Hide beige site pad when GeoJSON is off or a layout image is showing.
-  const showPad = Boolean(SHOW_ESTATE_GEOJSON && layoutVisible && !raster);
-  if (map.getLayer("estate-site-pad-fill")) {
-    map.setLayoutProperty(
-      "estate-site-pad-fill",
-      "visibility",
-      showPad ? "visible" : "none",
-    );
-  }
-  if (map.getLayer("estate-site-pad-edge")) {
-    map.setLayoutProperty(
-      "estate-site-pad-edge",
-      "visibility",
-      showPad ? "visible" : "none",
-    );
-  }
-}
 
 const PIN_ICON = `
   <span class="ila-project-pin__anchor" aria-hidden="true">
     <span class="ila-project-pin__halo"></span>
     <span class="ila-project-pin__core">
-      <svg viewBox="0 0 24 24" class="ila-project-pin__icon" aria-hidden="true">
-        <path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-5v-5H10v5H5a1 1 0 0 1-1-1v-8.5Z" fill="currentColor"/>
+      <svg viewBox="300 205 180 135" class="ila-project-pin__icon" aria-hidden="true" fill="currentColor">
+        <rect x="311" y="216" width="19" height="112" />
+        <path d="M 339 216 H 358 V 300 H 405 V 328 H 361 Q 339 328 339 306 Z" />
+        <path fill-rule="evenodd" d="M 378 296 L 414 216 H 434 L 470 296 H 449 L 441 278 H 406 L 398 296 Z M 412 262 H 435 L 424 236 Z" />
       </svg>
     </span>
     <span class="ila-project-pin__needle"></span>
@@ -605,20 +512,27 @@ function createProjectPin(
       ? `<span class="ila-project-pin__badge">${options.compareIndex}</span>`
       : "";
 
+  // Tag should consistently show price / starting from
+  const tagText =
+    project.formattedPrice ||
+    (project.price ? `From ${formatPrice(project.price)}` : "Price on request");
+
   el.innerHTML = `
     ${badgeHtml}
     <div class="ila-project-pin__anchor">
       <div class="ila-project-pin__halo" aria-hidden="true"></div>
       <div class="ila-project-pin__core">
-        <svg viewBox="0 0 24 24" class="ila-project-pin__icon" aria-hidden="true">
-          <path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-5v-5H10v5H5a1 1 0 0 1-1-1v-8.5Z" fill="currentColor"/>
+        <svg viewBox="300 205 180 135" class="ila-project-pin__icon" aria-hidden="true" fill="currentColor">
+          <rect x="311" y="216" width="19" height="112" />
+          <path d="M 339 216 H 358 V 300 H 405 V 328 H 361 Q 339 328 339 306 Z" />
+          <path fill-rule="evenodd" d="M 378 296 L 414 216 H 434 L 470 296 H 449 L 441 278 H 406 L 398 296 Z M 412 262 H 435 L 424 236 Z" />
         </svg>
       </div>
       <div class="ila-project-pin__needle" aria-hidden="true"></div>
       <div class="ila-project-pin__point" aria-hidden="true"></div>
     </div>
     <div class="ila-pin-tag" aria-hidden="true">
-      <span class="ila-pin-tag__text">${project.name}</span>
+      <span class="ila-pin-tag__text">${tagText}</span>
     </div>
     <div class="ila-pin-tooltip" aria-hidden="true">
       <span class="ila-pin-tooltip__eyebrow">Development</span>
@@ -631,27 +545,6 @@ function createProjectPin(
   return el;
 }
 
-function setLayoutData(map: MapLibreMap, project: EstateProject | null) {
-  const set = (id: string, data: object) => {
-    const source = map.getSource(id) as GeoJSONSource | undefined;
-    source?.setData(data as GeoJSON.FeatureCollection);
-  };
-
-  if (!project) {
-    set("estate-site-pad", EMPTY_FC);
-    set("estate-open-areas", EMPTY_FC);
-    set("estate-plots", EMPTY_FC);
-    set("estate-roads", EMPTY_FC);
-    set("estate-road-centers", EMPTY_FC);
-    return;
-  }
-
-  set("estate-site-pad", project.sitePadGeo);
-  set("estate-open-areas", project.openAreasGeo);
-  set("estate-plots", project.plotsGeo);
-  set("estate-roads", project.roadsGeo);
-  set("estate-road-centers", project.roadCenterlinesGeo);
-}
 
 export type MapSectionProps = {
   propertyId?: string;
@@ -1324,13 +1217,52 @@ export default function MapSection({
     for (const item of propertyList) {
       const anchor = propertyAnchor(item) ?? propertyAnchors[item.id];
       if (!anchor) continue;
-      const displayPrice = item.price_label || (item.price ? formatPrice(item.price) : null);
+
+      const itemAny = item as Record<string, unknown>;
+      const staticProp =
+        getPropertyById(item.id === "sark-green" ? "sark-green-plains" : item.id) ||
+        (item.slug ? getPropertyById(item.slug) : undefined);
+
+      const rawNum = (val: unknown): number | null => {
+        if (typeof val === "number" && Number.isFinite(val) && val > 0) return val;
+        if (typeof val === "string") {
+          const parsed = Number(val.trim());
+          if (Number.isFinite(parsed) && parsed > 0) return parsed;
+        }
+        return null;
+      };
+
+      const parsedMin = rawNum(itemAny.minimum_price);
+      const parsedTarget = rawNum(itemAny.target_price);
+      const parsedPrice = rawNum(item.price) ?? rawNum(staticProp?.price);
+
+      let displayPrice: string | null = null;
+      if (item.price_label && item.price_label.trim() && !item.price_label.toLowerCase().includes("request")) {
+        displayPrice = item.price_label.trim().replace(/\s+-\s+/g, " – ");
+        if (!/^(from|starting|₹)/i.test(displayPrice)) {
+          displayPrice = `From ${displayPrice}`;
+        }
+      } else if (staticProp?.priceLabel && !staticProp.priceLabel.toLowerCase().includes("request")) {
+        displayPrice = staticProp.priceLabel.trim().replace(/\s+-\s+/g, " – ");
+        if (!/^(from|starting|₹)/i.test(displayPrice)) {
+          displayPrice = `From ${displayPrice}`;
+        }
+      } else if (parsedMin && parsedTarget && parsedTarget > parsedMin) {
+        displayPrice = `${formatPrice(parsedMin)} – ${formatPrice(parsedTarget)}`;
+      } else if (parsedMin) {
+        displayPrice = `From ${formatPrice(parsedMin)}`;
+      } else if (parsedPrice) {
+        displayPrice = `From ${formatPrice(parsedPrice)}`;
+      } else if (staticProp?.price) {
+        displayPrice = `From ${formatInr(staticProp.price)}`;
+      }
+
       byId.set(item.id, {
         id: item.id,
         name: item.name,
         location: [item.locality, item.city].filter(Boolean).join(", ") || undefined,
         center: [anchor.longitude, anchor.latitude],
-        price: item.price,
+        price: parsedPrice ?? parsedMin ?? null,
         formattedPrice: displayPrice,
       });
     }
@@ -1338,7 +1270,11 @@ export default function MapSection({
     for (const project of projects) {
       if (!byId.has(project.id)) {
         const prop = getPropertyById(project.id === "sark-green" ? "sark-green-plains" : project.id);
-        const displayPrice = prop?.price ? formatInr(prop.price) : null;
+        const displayPrice = prop?.priceLabel
+          ? (prop.priceLabel.toLowerCase().startsWith("from") ? prop.priceLabel : `From ${prop.priceLabel}`)
+          : prop?.price
+            ? `From ${formatInr(prop.price)}`
+            : null;
         byId.set(project.id, {
           id: project.id,
           name: project.name,
@@ -1901,8 +1837,6 @@ export default function MapSection({
       map.addSource("estate-roads", { type: "geojson", data: EMPTY_FC });
       map.addSource("estate-road-centers", { type: "geojson", data: EMPTY_FC });
 
-      // Satellite imagery, hidden until a layout is open. Added before the
-      // estate layers so plots and labels stay on top of it.
       map.addSource(SATELLITE_SOURCE_ID, {
         type: "raster",
         tiles: [SATELLITE_TILES_URL],
@@ -1918,213 +1852,9 @@ export default function MapSection({
         paint: { "raster-fade-duration": 0 },
       });
 
-      // Created without a url: a layout preview is only known once a property
-      // is opened, and an image source left empty draws nothing until
-      // `updateImage` hands it one. The coordinates are the placeholder quad,
-      // replaced by the property's own extent on every load.
-      map.addSource(LAYOUT_RASTER_SOURCE_ID, {
-        type: "image",
-        coordinates: [
-          [78.37881930400647, 17.136994933863203], // NW
-          [78.3822802855224, 17.136994933863203], // NE
-          [78.3822802855224, 17.13329363718222], // SE
-          [78.37881930400647, 17.13329363718222], // SW
-        ],
-      });
-
-      map.addLayer({
-        id: LAYOUT_RASTER_LAYER_ID,
-        type: "raster",
-        source: LAYOUT_RASTER_SOURCE_ID,
-        layout: { visibility: "none" },
-        paint: {
-          "raster-opacity": 0.85,
-          "raster-fade-duration": 0,
-        },
-      });
-
-      map.addLayer({
-        id: "estate-site-pad-fill",
-        type: "fill",
-        source: "estate-site-pad",
-        layout: { visibility: "none" },
-        paint: {
-          "fill-color": LAYOUT.siteFill,
-          "fill-opacity": 0.72,
-        },
-      });
-      map.addLayer({
-        id: "estate-site-pad-edge",
-        type: "line",
-        source: "estate-site-pad",
-        layout: { visibility: "none" },
-        paint: {
-          "line-color": LAYOUT.siteEdge,
-          "line-width": 2,
-          "line-opacity": 0.85,
-          "line-dasharray": [1.5, 1.2],
-        },
-      });
-
-      map.addLayer({
-        id: "estate-open-fill",
-        type: "fill",
-        source: "estate-open-areas",
-        layout: { visibility: "none" },
-        paint: {
-          "fill-color": LAYOUT.openArea,
-          "fill-opacity": 0.55,
-        },
-      });
-      map.addLayer({
-        id: "estate-open-edge",
-        type: "line",
-        source: "estate-open-areas",
-        layout: { visibility: "none" },
-        paint: {
-          "line-color": LAYOUT.openAreaEdge,
-          "line-width": 1.4,
-        },
-      });
-
-      map.addLayer({
-        id: "estate-plots-fill",
-        type: "fill",
-        source: "estate-plots",
-        layout: { visibility: "none" },
-        paint: {
-          "fill-color": [
-            "match",
-            ["get", "statusNorm"],
-            "available",
-            LAYOUT.available,
-            LAYOUT.sold,
-          ],
-          "fill-opacity": 0.82,
-        },
-      });
-      map.addLayer({
-        id: "estate-plots-outline",
-        type: "line",
-        source: "estate-plots",
-        layout: { visibility: "none", "line-join": "miter" },
-        paint: {
-          "line-color": LAYOUT.plotEdge,
-          "line-width": 1.15,
-          "line-opacity": 0.95,
-        },
-      });
-      map.addLayer({
-        id: "estate-plots-label",
-        type: "symbol",
-        source: "estate-plots",
-        layout: {
-          visibility: "none",
-          "text-field": ["get", "plotNo"],
-          "text-size": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            15.5,
-            8,
-            17,
-            11,
-            18.5,
-            13,
-          ],
-          "text-allow-overlap": false,
-          "text-padding": 2,
-          "symbol-placement": "point",
-        },
-        paint: {
-          "text-color": "#1a1a1a",
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 1.4,
-          "text-opacity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            15.8,
-            0,
-            16.2,
-            1,
-          ],
-        },
-      });
-
-      map.addLayer({
-        id: "estate-roads-fill",
-        type: "fill",
-        source: "estate-roads",
-        layout: { visibility: "none" },
-        paint: {
-          "fill-color": LAYOUT.road,
-          "fill-opacity": 1,
-        },
-      });
-      map.addLayer({
-        id: "estate-roads-casing",
-        type: "line",
-        source: "estate-roads",
-        layout: { visibility: "none", "line-cap": "butt", "line-join": "miter" },
-        paint: {
-          "line-color": LAYOUT.roadCasing,
-          "line-width": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            14,
-            4,
-            16.5,
-            8,
-            18,
-            14,
-          ],
-        },
-      });
-      map.addLayer({
-        id: "estate-roads-edge",
-        type: "line",
-        source: "estate-roads",
-        layout: { visibility: "none", "line-cap": "butt", "line-join": "miter" },
-        paint: {
-          "line-color": LAYOUT.roadLine,
-          "line-width": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            14,
-            2,
-            16.5,
-            4.5,
-            18,
-            8,
-          ],
-          "line-opacity": 1,
-        },
-      });
-      map.addLayer({
-        id: "estate-roads-center",
-        type: "line",
-        source: "estate-road-centers",
-        layout: { visibility: "none", "line-cap": "butt", "line-join": "round" },
-        paint: {
-          "line-color": LAYOUT.roadLine,
-          "line-width": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            14,
-            1.2,
-            16.5,
-            2.6,
-            18,
-            4.5,
-          ],
-          "line-opacity": 1,
-          "line-dasharray": [2.2, 1.8],
-        },
-      });
+      // Master Plan Layout sources, raster image layer, and vector plot/road layers
+      // configured cleanly in map-section-layouts.tsx
+      initLayoutLayers(map);
 
       const selectRenderedPlot = (event: MapMouseEvent) => {
         const feature = map.queryRenderedFeatures(event.point, {
@@ -2437,74 +2167,6 @@ export default function MapSection({
       3.2,
       1.15,
     ]);
-
-    // When highlightAvailable is active and no single plot is picked,
-    // run a smooth, noticeable pulsing animation on all available plots.
-    if (highlightAvailable && !active) {
-      let animFrameId: number;
-      const startTime = performance.now();
-      const baseFill = activeProject?.layoutRaster ? 0.45 : 0.72;
-
-      // Pulse between emerald green and bright mint-green glow
-      const animatePulse = (currentTime: number) => {
-        const elapsed = (currentTime - startTime) / 1000;
-        // Smooth sine wave oscillating between 0 and 1 over ~2.0 seconds
-        const t = (Math.sin(elapsed * 3.14) + 1) / 2;
-        const availableOpacity = baseFill + t * 0.35;
-        const availableLineWidth = 1.3 + t * 2.2;
-        // Interpolate between deep emerald (#1F8A68) and vibrant glowing green (#34D399)
-        const pulseR = Math.round(31 + t * (52 - 31));
-        const pulseG = Math.round(138 + t * (211 - 138));
-        const pulseB = Math.round(104 + t * (153 - 104));
-        const pulseColor = `rgb(${pulseR}, ${pulseG}, ${pulseB})`;
-
-        if (map.getLayer("estate-plots-fill")) {
-          map.setPaintProperty("estate-plots-fill", "fill-color", [
-            "case",
-            ["==", ["get", "id"], active],
-            LAYOUT.selected,
-            [
-              "match",
-              ["get", "statusNorm"],
-              "available",
-              pulseColor,
-              LAYOUT.sold,
-            ],
-          ]);
-          map.setPaintProperty("estate-plots-fill", "fill-opacity", [
-            "match",
-            ["get", "statusNorm"],
-            "available",
-            Math.min(availableOpacity, 0.98),
-            baseOpacity * 0.7,
-          ]);
-        }
-
-        if (map.getLayer("estate-plots-outline")) {
-          map.setPaintProperty("estate-plots-outline", "line-width", [
-            "match",
-            ["get", "statusNorm"],
-            "available",
-            availableLineWidth,
-            1.15,
-          ]);
-          map.setPaintProperty("estate-plots-outline", "line-color", [
-            "match",
-            ["get", "statusNorm"],
-            "available",
-            t > 0.5 ? "#E6FFFA" : "#FFFFFF",
-            LAYOUT.plotEdge,
-          ]);
-        }
-
-        animFrameId = requestAnimationFrame(animatePulse);
-      };
-
-      animFrameId = requestAnimationFrame(animatePulse);
-      return () => {
-        cancelAnimationFrame(animFrameId);
-      };
-    }
   }, [
     selectedId,
     layoutOpen,
@@ -2512,7 +2174,6 @@ export default function MapSection({
     activeProject?.id,
     activeProject?.plots.length,
     activeProject?.layoutRaster,
-    highlightAvailable,
   ]);
 
   useEffect(() => {
@@ -2738,7 +2399,8 @@ export default function MapSection({
         ) : null}
 
         {/* Top Left: Map Version Switcher (Default View / Satellite Version) */}
-        {!compareSelectingMode ? (
+        {/* Hidden when a property is clicked/open */}
+        {!compareSelectingMode && !activeProjectId && !selectedProjectId && !desktopPropertyCardOpen ? (
           <div className={`absolute z-30 transition-all ${
             mapFullscreen
               ? "top-3 left-28 sm:left-32"

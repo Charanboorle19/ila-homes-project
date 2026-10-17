@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ILA - Static Vector Logo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #000000;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Adjust max-width to scale the logo to any size you need */
+    .ila-logo {
+      width: 100%;
+      max-width: 280px;
+      height: auto;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Cropped viewBox tightly framing just the I-L-A mark -->
+  <svg class="ila-logo" viewBox="300 205 180 135" xmlns="http://www.w3.org/2000/svg">
+    <g fill="#ffffff">
+      <!-- 'I' (Extends to lower baseline y=328) -->
+      <rect x="311" y="216" width="19" height="112" />
+
+      <!-- 'L' (Drops to y=328 with rounded bottom-left corner & step under 'A') -->
+      <path d="M 339 216 H 358 V 300 H 405 V 328 H 361 Q 339 328 339 306 Z" />
+
+      <!-- 'A' (Sits on upper baseline y=296, left leg tucked over 'L') -->
+      <path fill-rule="evenodd"
+        d="M 378 296 L 414 216 H 434 L 470 296 H 449 L 441 278 H 406 L 398 296 Z 
+           M 412 262 H 435 L 424 236 Z" />
+    </g>
+  </svg>
+
+</body>
+</html>

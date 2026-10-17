@@ -14,7 +14,7 @@ export default function IlaIntroLoader({ className = "" }: IlaIntroLoaderProps) 
       aria-label="Loading ILA Homes..."
       role="status"
     >
-      <div className="ila-intro-stage relative flex w-[92%] max-w-[680px] flex-col items-center gap-10">
+      <div className="ila-intro-stage relative flex w-[92%] max-w-[680px] flex-col items-center">
         <div className="ila-intro-ambient" aria-hidden />
 
         <svg
@@ -56,9 +56,6 @@ export default function IlaIntroLoader({ className = "" }: IlaIntroLoaderProps) 
           </defs>
 
           <g className="ila-intro-logo-master">
-            {/* STEP 01: Golden Laser Accent along baseline */}
-            <path className="intro-baseline-laser" d="M 44 148 H 145" fill="none" />
-
             {/* STEP 02: ROOF RISE (Glides & Draws) */}
             <g className="intro-roof-wrap">
               <path className="intro-roof-line outer" d="M 352 84 L 386 50 L 420 84 L 518 84" />
@@ -90,18 +87,8 @@ export default function IlaIntroLoader({ className = "" }: IlaIntroLoaderProps) 
               {/* S */}
               <path className="intro-char intro-c-8" d="M 446 94 H 484 Q 492 94 492 102 V 105 H 481 V 103 H 447 V 111 H 483 Q 492 111 492 120 V 129 Q 492 138 483 138 H 444 Q 435 138 435 129 V 125 H 446 V 129 H 481 V 120 H 445 Q 436 120 436 111 V 102 Q 436 94 446 94 Z" />
             </g>
-
-            {/* STEP 04: LIGHT SHEEN ACROSS SOLID LETTERS */}
-            <g clipPath="url(#intro-full-logo-mask)">
-              <rect className="intro-light-sheen" x="0" y="40" width="90" height="120" fill="url(#intro-sheen-grad)" />
-            </g>
           </g>
         </svg>
-
-        {/* Minimalist Progress Track */}
-        <div className="ila-intro-progress-track">
-          <div className="ila-intro-progress-fill" />
-        </div>
       </div>
     </div>
   );

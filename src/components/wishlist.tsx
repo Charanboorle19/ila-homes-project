@@ -260,7 +260,7 @@ export default function Wishlist({
       name: fav.name,
       location: local?.location || "Prime Location, Hyderabad",
       meta: fav.price_from ? `From ${formatInr(fav.price_from)}` : "Price on request",
-      highlight: local?.popupSample?.description || "Verified development listed on ILA Homes.",
+      highlight: local?.description || local?.tagline || "Verified development listed on ILA Homes.",
       coverUrl: cover,
       image: familyCommunityImg,
     };

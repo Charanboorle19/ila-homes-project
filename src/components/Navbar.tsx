@@ -6,9 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const NAV_LINKS = [
-  { href: "#about", label: "About" },
-  { href: "#projects", label: "Projects" },
-  { href: "#services", label: "Services" },
+  { href: "/why-us", label: "About" },
   { href: "/properties", label: "Properties" },
   { href: "#contact", label: "Contact" },
 ] as const;
@@ -20,17 +18,17 @@ export default function Navbar() {
   const pathname = usePathname();
 
   /**
-   * Current page, not current section.
-   *
-   * Four of the five links are homepage fragments — `#about`, `#projects`,
-   * `#services`, `#contact` all resolve inside components that only render on
-   * `/`. On `/properties/{id}` they have no target, so they can never be the
-   * section in view and are deliberately left out of this. `/properties` is the
-   * one link that does match a route, and `startsWith` keeps it active on the
-   * detail pages nested underneath it.
+   * Current page highlight matching.
    */
-  const isCurrent = (href: string) =>
-    href === "/properties" && pathname.startsWith("/properties");
+  const isCurrent = (href: string) => {
+    if (href === "/properties") {
+      return pathname.startsWith("/properties");
+    }
+    if (href === "/why-us") {
+      return pathname === "/why-us";
+    }
+    return false;
+  };
 
   useEffect(() => {
     const onScroll = () => {

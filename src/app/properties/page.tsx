@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import PropertiesList from "@/components/PropertiesList";
 import "@/components/PropertyDetail/PropertyDetail.css";
 
@@ -11,9 +12,31 @@ export default function PropertiesIndexPage() {
   return (
     <div className="property-page">
       <section
-        className="pd-section !pt-6 sm:!pt-[calc(var(--nav-h)+2rem)]"
+        className="pd-section !pt-4 sm:!pt-[calc(var(--nav-h)+1.5rem)]"
       >
         <div className="pd-section__inner">
+          {/* Top Left Back Navigation */}
+          <div className="mb-4 sm:mb-6">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-sm font-semibold tracking-wide text-[#5c5852] transition-colors hover:text-[#171717]"
+              aria-label="Back to home"
+            >
+              <svg
+                className="h-4 w-4 stroke-[2.5]"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              <span>Back</span>
+            </Link>
+          </div>
+
           <p className="pd-kicker">Catalogue</p>
           <h1 style={{ margin: 0, fontSize: "clamp(1.8rem, 4vw, 2.6rem)" }}>
             Properties

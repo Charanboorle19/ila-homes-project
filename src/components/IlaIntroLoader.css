@@ -109,33 +109,10 @@
 }
 
 /* =====================================================
-   STEP 04: SOLID REVEAL & LUXURY LIGHT SHEEN
+   STEP 04: SOLID REVEAL
    ===================================================== */
 .ila-intro-logo-master {
   animation: introMasterGlow 1.5s ease-out 2.25s forwards;
-}
-
-.intro-light-sheen {
-  transform: translateX(-180px) skewX(-25deg);
-  animation: introSheenSweep 1.15s cubic-bezier(0.22, 1, 0.36, 1) 2.35s forwards;
-}
-
-/* Minimalist Progress Scrubber */
-.ila-intro-progress-track {
-  width: 140px;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 2px;
-  overflow: hidden;
-  position: relative;
-}
-
-.ila-intro-progress-fill {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, var(--ila-intro-gold-primary), var(--ila-intro-white));
-  transform: translateX(-100%);
-  animation: introProgressRun 2.8s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards;
 }
 
 /* =====================================================

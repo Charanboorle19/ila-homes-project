@@ -149,15 +149,10 @@
     }
 
     /* =====================================================
-       STEP 04: SOLID REVEAL & LUXURY LIGHT SHEEN
+       STEP 04: SOLID REVEAL
        ===================================================== */
     .logo-master {
       animation: masterGlow 1.5s ease-out 2.25s forwards;
-    }
-
-    .light-sheen {
-      transform: translateX(-180px) skewX(-25deg);
-      animation: sheenSweep 1.15s cubic-bezier(0.22, 1, 0.36, 1) 2.35s forwards;
     }
 
     /* Minimalist Progress Scrubber */
@@ -329,9 +324,6 @@
       </defs>
 
       <g class="logo-master">
-        <!-- STEP 01: Subtle Golden Laser Accent along 'IL' baseline -->
-        <path class="baseline-laser" d="M 44 148 H 145" fill="none" />
-
         <!-- STEP 02: THE ROOF RISE (Draws + Glides Simultaneously) -->
         <g class="roof-wrap">
           <path class="roof-line outer" d="M 352 84 L 386 50 L 420 84 L 518 84" />
@@ -363,18 +355,8 @@
           <!-- S -->
           <path class="char c-8" d="M 446 94 H 484 Q 492 94 492 102 V 105 H 481 V 103 H 447 V 111 H 483 Q 492 111 492 120 V 129 Q 492 138 483 138 H 444 Q 435 138 435 129 V 125 H 446 V 129 H 481 V 120 H 445 Q 436 120 436 111 V 102 Q 436 94 446 94 Z" />
         </g>
-
-        <!-- STEP 04: DIAGONAL LIGHT SHEEN ACROSS SOLID LETTERS -->
-        <g clip-path="url(#full-logo-mask)">
-          <rect class="light-sheen" x="0" y="40" width="90" height="120" fill="url(#sheen-grad)" />
-        </g>
       </g>
     </svg>
-
-    <!-- Ultra-clean architectural progress bar -->
-    <div class="progress-track">
-      <div class="progress-fill"></div>
-    </div>
 
     <button class="replay-btn" onclick="replay()">Replay</button>
   </div>

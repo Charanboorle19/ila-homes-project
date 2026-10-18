@@ -2325,7 +2325,7 @@ export default function MapSection({
             ? "ila-map-frame ila-map-frame--fullscreen relative min-h-0 flex-1 overflow-hidden bg-neutral-200"
             : singlePropertyId
               ? "ila-map-frame relative mx-2 mb-2 min-h-72 flex-1 overflow-hidden rounded-xl border border-black/10 bg-neutral-200 shadow-[0_12px_36px_rgba(15,23,42,0.14)] md:absolute md:inset-3 md:m-0 md:min-h-0 md:rounded-xl"
-              : "ila-map-frame relative h-full min-h-[400px] flex-1 overflow-hidden bg-neutral-200 md:absolute md:inset-0 md:m-0"
+              : "ila-map-frame relative h-full min-h-100 flex-1 overflow-hidden bg-neutral-200 md:absolute md:inset-0 md:m-0"
         }
       >
         <div ref={mapContainerRef} className="absolute inset-0 h-full w-full min-h-full" />
@@ -2405,7 +2405,7 @@ export default function MapSection({
             mapFullscreen
               ? "top-3 left-28 sm:left-32"
               : !hideDetails && panelOpen
-                ? "top-3 left-3 sm:top-4 md:left-[23.5rem]"
+                ? "top-3 left-3 sm:top-4 md:left-94"
                 : !hideDetails
                   ? "top-3 left-3 sm:top-4 md:left-40"
                   : hideDetails && (activeProject?.name || activeProperty?.name)
@@ -2755,7 +2755,7 @@ export default function MapSection({
             {/* Scrollable cards strip */}
             <div
               ref={tagsScrollRef}
-              className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-1 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-1 scroll-smooth scrollbar-none [&::-webkit-scrollbar]:hidden"
             >
               {features.map((feature) => {
                 const isOn = selectedFeatureKeys.includes(feature.key);
@@ -2796,7 +2796,7 @@ export default function MapSection({
                       }`}
                     >
                       {isOn ? (
-                        <CheckIcon className="h-2.5 w-2.5 stroke-[3]" />
+                        <CheckIcon className="h-2.5 w-2.5 stroke-3" />
                       ) : null}
                     </span>
                   </button>
@@ -3049,7 +3049,7 @@ export default function MapSection({
         {/* ======================================================== */}
         {compareSelectingMode ? (
           <div className="pointer-events-none absolute top-3 inset-x-0 z-40 flex justify-center px-3 sm:px-4">
-            <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-[#b38e52] bg-gradient-to-r from-[#c6a46c] to-[#b38e52] px-3.5 py-2 text-xs text-[#141519] shadow-[0_10px_28px_rgba(0,0,0,0.3)] backdrop-blur-md ila-banner-animate">
+            <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-[#b38e52] bg-linear-to-r from-[#c6a46c] to-[#b38e52] px-3.5 py-2 text-xs text-[#141519] shadow-[0_10px_28px_rgba(0,0,0,0.3)] backdrop-blur-md ila-banner-animate">
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#141519] text-[#c6a46c] shadow-sm">
                 <svg
                   className="h-5 w-5"
@@ -3143,7 +3143,7 @@ export default function MapSection({
                   {Array.from({ length: Math.max(0, 5 - compareSelectedIds.length) }).map((_, idx) => (
                     <div
                       key={`empty-slot-${idx}`}
-                      className="flex h-14 w-32 shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-black/15 bg-black/[0.02] px-2 text-[11px] text-[#8a8275]"
+                      className="flex h-14 w-32 shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-black/15 bg-black/2 px-2 text-[11px] text-[#8a8275]"
                     >
                       <svg className="h-3.5 w-3.5 text-[#c6a46c]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                         <line x1="12" y1="5" x2="12" y2="19" />
@@ -3169,7 +3169,7 @@ export default function MapSection({
                       onClick={() => setCompareModalOpen(true)}
                       className={`flex items-center justify-center gap-1.5 rounded-xl px-5 py-2 text-xs font-bold tracking-wider uppercase transition shadow-md whitespace-nowrap ${
                         compareSelectedIds.length >= 2
-                          ? "bg-gradient-to-r from-[#c6a46c] to-[#b38e52] text-[#171717] hover:brightness-105 active:scale-[0.99]"
+                          ? "bg-linear-to-r from-[#c6a46c] to-[#b38e52] text-[#171717] hover:brightness-105 active:scale-[0.99]"
                           : "cursor-not-allowed bg-black/10 text-black/40"
                       }`}
                     >
@@ -3215,7 +3215,7 @@ export default function MapSection({
         {/* EMI Calculator / EmiAppreciation Popup Modal Overlay */}
         {emiOpen ? (
           <div
-            className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop"
+            className="fixed inset-0 z-300 flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop"
             onClick={() => setEmiOpen(false)}
           >
             <div

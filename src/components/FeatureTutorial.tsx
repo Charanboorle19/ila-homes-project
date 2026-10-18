@@ -245,16 +245,16 @@ export default function FeatureTutorial({
       zIndex: 510,
     };
   } else if (targetRect && currentStep.positionDesktop === "top-center") {
-    // Position comfortably high above the bottom FindYourPlot bar with ample clearance
-    const cardWidth = 380;
-    const leftOffset = Math.max(20, Math.min(targetRect.left + 24, window.innerWidth - cardWidth - 20));
-    // Clear the bottom strip with extra spacing so the strip and its tags are fully visible and unobstructed
-    const bottomOffset = window.innerHeight - targetRect.top + 32;
+    // Position comfortably high above the entire bottom FindYourPlot block, centered horizontally
+    const cardWidth = 400;
+    const bottomOffset = window.innerHeight - targetRect.top + 28;
     cardStyle = {
       position: "fixed",
-      left: `${leftOffset}px`,
+      left: "50%",
+      transform: isTransitioning ? "translate(-50%, 0) scale(0.97)" : "translate(-50%, 0) scale(1)",
       bottom: `${bottomOffset}px`,
       width: `${cardWidth}px`,
+      maxWidth: "calc(100vw - 32px)",
       zIndex: 510,
     };
   } else {
@@ -369,7 +369,11 @@ export default function FeatureTutorial({
           ...cardStyle,
           transition: "all 380ms cubic-bezier(0.25, 1, 0.5, 1)",
           opacity: isTransitioning ? 0.3 : 1,
-          transform: isTransitioning ? "scale(0.97)" : "scale(1)",
+          transform: cardStyle.transform
+            ? cardStyle.transform
+            : isTransitioning
+            ? "scale(0.97)"
+            : "scale(1)",
         }}
         className="pointer-events-auto flex flex-col rounded-2xl border border-[#c6a46c]/50 bg-gradient-to-b from-[#1c1f26]/98 to-[#13151a]/98 p-5 text-[#f2f0ea] shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_20px_rgba(198,164,108,0.15)] backdrop-blur-2xl"
         role="dialog"

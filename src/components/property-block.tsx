@@ -566,16 +566,6 @@ export default function PropertyBlock({
           </span>
         </div>
 
-        {/* Close Button (Top Right) */}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close popup"
-          className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white shadow-lg backdrop-blur-md transition hover:bg-black/80 active:scale-95"
-        >
-          <CloseIcon className="h-4 w-4" />
-        </button>
-
         {/* Navigation Arrows */}
         {galleryImages.length > 1 && (
           <>
@@ -618,25 +608,43 @@ export default function PropertyBlock({
         )}
       </div>
 
-      {/* 2. PROPERTY INFORMATION */}
+      {/* 2. PROPERTY INFORMATION / INTRO DETAILS */}
       <div className="rounded-2xl border border-[#ded9cf] bg-white p-4 shadow-[0_4px_16px_rgba(20,20,20,0.06)]">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-extrabold tracking-tight text-[#141414] sm:text-2xl">
               {propertyName}
             </h2>
+
             <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-[#5c5549]">
               <PinIcon className="h-3.5 w-3.5 shrink-0 text-[#c6a46c]" />
               <span className="truncate">{propertyLocation}</span>
             </p>
           </div>
-          <div className="shrink-0 text-right">
+          <div className="shrink-0 flex flex-col items-end">
             <span className="block text-[10px] font-extrabold uppercase tracking-wider text-[#7a7265]">
               Starting From
             </span>
             <span className="mt-0.5 block text-lg font-black text-[#876527] sm:text-xl">
               {startingPrice}
             </span>
+
+            {/* Wishlist Button directly below the Pricing */}
+            <button
+              type="button"
+              onClick={handleToggleWishlist}
+              disabled={wishlistLoading}
+              aria-label={wishlistSaved ? "Remove from wishlist" : "Save to wishlist"}
+              title={wishlistSaved ? "Saved to Wishlist" : "Add to Wishlist"}
+              className={`mt-1.5 flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-bold transition-all duration-200 active:scale-95 ${
+                wishlistSaved
+                  ? "border-[#c6a46c] bg-[#faf4e4] text-[#876527] ring-1 ring-[#c6a46c] shadow-xs"
+                  : "border-[#ded9cf] bg-[#faf8f4] text-[#5c5549] hover:border-[#c6a46c] hover:bg-[#faf4e4] hover:text-[#876527]"
+              }`}
+            >
+              <HeartIcon className="h-3.5 w-3.5 text-[#c6a46c]" filled={wishlistSaved} />
+              <span>{wishlistLoading ? "..." : wishlistSaved ? "Saved" : "Wishlist"}</span>
+            </button>
           </div>
         </div>
 

@@ -2924,7 +2924,10 @@ export default function MapSection({
 
         {/* FindYourPlot feature cards side-by-side at the bottom of the map */}
         {features.length > 0 && !selectedPlot && !compareSelectingMode && !emiSelectingProperty && !singlePropertyId ? (
-          <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-20 flex items-center gap-1.5 sm:left-4 sm:right-4 md:right-24">
+          <div
+            id="tutorial-target-find-your-plot"
+            className="pointer-events-none absolute bottom-3 left-3 right-3 z-20 flex items-center gap-1.5 sm:left-4 sm:right-4 md:right-24"
+          >
             {/* Left arrow (mobile/touch only) */}
             <button
               type="button"
@@ -2944,7 +2947,6 @@ export default function MapSection({
 
             {/* Scrollable cards strip */}
             <div
-              id="tutorial-target-find-your-plot"
               ref={tagsScrollRef}
               className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-1 scroll-smooth scrollbar-none [&::-webkit-scrollbar]:hidden"
             >

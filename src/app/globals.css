@@ -51,6 +51,22 @@ body {
   font-family: var(--font-montserrat), system-ui, sans-serif;
 }
 
+/* Hide scrollbar on homepage */
+html.no-scroll,
+body.no-scroll {
+  overflow: hidden !important;
+  height: 100% !important;
+  max-height: 100vh !important;
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none !important; /* IE and Edge */
+}
+
+html.no-scroll::-webkit-scrollbar,
+body.no-scroll::-webkit-scrollbar {
+  display: none !important; /* Chrome, Safari, Opera */
+}
+
+
 @keyframes hero-zoom {
   from {
     transform: scale(1.06);
@@ -496,14 +512,15 @@ body {
   padding: 0;
   background: transparent;
   cursor: pointer;
-  transform-origin: center bottom;
-  transition: transform 0.2s ease;
   z-index: 1;
 }
 
 .ila-project-pin:hover {
   z-index: 8;
-  transform: translateY(-3px);
+}
+
+.ila-project-pin:hover .ila-project-pin__anchor {
+  transform: translateY(-4px);
 }
 
 .ila-project-pin__anchor {
@@ -512,6 +529,7 @@ body {
   flex-direction: column;
   align-items: center;
   width: 36px;
+  transition: transform 0.2s ease;
 }
 
 .ila-project-pin__halo {
@@ -553,8 +571,8 @@ body {
 }
 
 .ila-project-pin__icon {
-  width: 15px;
-  height: 15px;
+  width: 17px;
+  height: 13px;
 }
 
 .ila-project-pin__needle {
@@ -581,6 +599,354 @@ body {
   border-bottom: 2px solid #c6a46c;
   box-shadow: 2px 2px 0 #ffffff;
 }
+
+/* EMI Selection Mode: subtle inviting pulse and bounce on map pointers.
+   NOTE: Must animate .ila-project-pin__anchor, NOT .ila-project-pin, because MapLibre GL
+   uses inline transform: translate(...) on the outer marker container. Animating the outer
+   element's transform breaks MapLibre's geographic coordinate positioning! */
+.ila-project-pin--pulse .ila-project-pin__anchor {
+  animation: ila-pin-bounce 1.6s ease-in-out infinite;
+}
+
+.ila-project-pin--pulse .ila-project-pin__halo {
+  background: rgba(198, 164, 108, 0.45);
+  box-shadow: 0 0 0 4px rgba(198, 164, 108, 0.28);
+  animation: ila-pin-halo-pulse 1.6s ease-out infinite;
+}
+
+.ila-project-pin--pulse {
+  opacity: 0.78 !important;
+  transition: opacity 0.3s ease;
+}
+
+.ila-project-pin--pulse:hover {
+  opacity: 1 !important;
+}
+
+.ila-project-pin--pulse .ila-project-pin__core {
+  background: #c6a46c;
+  color: #111111;
+  border-color: #ffffff;
+  box-shadow:
+    0 0 0 3px #111111,
+    0 0 16px rgba(198, 164, 108, 0.8),
+    0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+
+/* Feature Tag Matching Highlight and Dimmed states */
+.ila-project-pin {
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
+
+.ila-project-pin--highlighted {
+  z-index: 10 !important;
+  opacity: 1 !important;
+}
+
+.ila-project-pin--highlighted .ila-project-pin__anchor {
+  animation: ila-pin-bounce 2s ease-in-out infinite;
+}
+
+.ila-project-pin--highlighted .ila-project-pin__halo {
+  background: rgba(198, 164, 108, 0.55);
+  box-shadow: 0 0 0 6px rgba(198, 164, 108, 0.35);
+  animation: ila-pin-halo-pulse 2s ease-out infinite;
+}
+
+.ila-project-pin--highlighted .ila-project-pin__core {
+  background: #c6a46c;
+  color: #111111;
+  border-color: #ffffff;
+  box-shadow:
+    0 0 0 3px #111111,
+    0 0 20px rgba(198, 164, 108, 0.9),
+    0 10px 24px rgba(0, 0, 0, 0.55);
+}
+
+.ila-project-pin--dimmed {
+  opacity: 0.65 !important;
+  filter: grayscale(15%);
+  pointer-events: auto;
+  transition: opacity 0.35s ease, filter 0.35s ease;
+}
+
+.ila-project-pin--dimmed:hover {
+  opacity: 1 !important;
+  filter: none;
+}
+
+/* Compare selection mode: available pins stay inviting with background halo animation */
+.ila-project-pin--compare-mode {
+  opacity: 0.86 !important;
+  filter: none !important;
+  z-index: 10 !important;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.ila-project-pin--compare-mode:hover {
+  opacity: 1 !important;
+}
+
+.ila-project-pin--compare-mode .ila-project-pin__anchor {
+  animation: ila-pin-bounce 2s ease-in-out infinite;
+}
+
+.ila-project-pin--compare-mode .ila-project-pin__halo {
+  background: rgba(198, 164, 108, 0.75);
+  box-shadow: 0 0 0 8px rgba(198, 164, 108, 0.45);
+  animation: ila-pin-halo-pulse 2s ease-out infinite;
+}
+
+.ila-project-pin--compare-mode .ila-project-pin__core {
+  box-shadow:
+    0 0 0 3px #111111,
+    0 0 16px rgba(198, 164, 108, 0.9),
+    0 8px 18px rgba(0, 0, 0, 0.45);
+}
+
+.ila-project-pin--compare-mode .ila-pin-tag {
+  opacity: 0.88 !important;
+}
+
+/* Compare selection mode: numbers and glowing selection indicator */
+.ila-project-pin--compare-selected {
+  z-index: 20 !important;
+  opacity: 1 !important;
+}
+
+.ila-project-pin--compare-selected .ila-project-pin__anchor {
+  animation: ila-pin-bounce 2s ease-in-out infinite;
+}
+
+.ila-project-pin--compare-selected .ila-project-pin__halo {
+  background: rgba(198, 164, 108, 0.6);
+  box-shadow: 0 0 0 8px rgba(198, 164, 108, 0.4);
+  animation: ila-pin-halo-pulse 2s ease-out infinite;
+}
+
+.ila-project-pin--compare-selected .ila-project-pin__core {
+  background: #c6a46c;
+  color: #111111;
+  border-color: #ffffff;
+  box-shadow:
+    0 0 0 3px #111111,
+    0 0 24px rgba(198, 164, 108, 0.95),
+    0 10px 24px rgba(0, 0, 0, 0.55);
+}
+
+.ila-project-pin__badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  z-index: 5;
+  display: flex;
+  height: 20px;
+  width: 20px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #111111;
+  color: #f7eed7;
+  font-size: 11px;
+  font-weight: 800;
+  border: 2px solid #c6a46c;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes ila-pin-halo-pulse {
+  0% {
+    transform: translate(-50%, -58%) scale(0.9);
+    opacity: 0.9;
+  }
+  70% {
+    transform: translate(-50%, -58%) scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, -58%) scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* Persistent Luxury Property Name Tag on Pointers */
+.ila-pin-tag {
+  position: absolute;
+  pointer-events: none;
+  z-index: 12;
+  width: max-content;
+  max-width: 140px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.ila-pin-tag__text {
+  display: block;
+  width: auto;
+  min-width: 60px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #171717;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1.5px solid rgba(198, 164, 108, 0.7);
+  border-radius: 999px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.18),
+    0 1px 3px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  text-align: center;
+  transition: all 0.22s ease;
+}
+
+/* When zoomed in or hovered: expand horizontally and wrap into up to 2 clean lines */
+.map--zoomed-in .ila-pin-tag,
+.ila-project-pin:hover .ila-pin-tag {
+  max-width: 190px;
+}
+
+.map--zoomed-in .ila-pin-tag__text,
+.ila-project-pin:hover .ila-pin-tag__text {
+  max-width: 190px;
+  white-space: normal;
+  border-radius: 10px;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+/* Placements relative to the pin anchor */
+.ila-project-pin--tag-top .ila-pin-tag {
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.ila-project-pin--tag-right .ila-pin-tag {
+  top: 10px;
+  left: calc(100% + 6px);
+}
+
+.ila-project-pin--tag-bottom .ila-pin-tag {
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.ila-project-pin--tag-left .ila-pin-tag {
+  top: 10px;
+  right: calc(100% + 6px);
+}
+
+/* Hover effect on pin: lift tag slightly and highlight with gold tint */
+.ila-project-pin:hover .ila-pin-tag__text {
+  background: #111111;
+  color: #ffffff;
+  border-color: #c6a46c;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* In dimmed state, soften tag slightly to preserve map readability */
+.ila-project-pin--dimmed .ila-pin-tag {
+  opacity: 0.7;
+}
+
+.ila-project-pin--highlighted .ila-pin-tag__text {
+  background: #c6a46c;
+  color: #111111;
+  border-color: #ffffff;
+  box-shadow: 0 0 12px rgba(198, 164, 108, 0.8);
+}
+
+
+.ila-pin-tooltip {
+  position: absolute;
+  bottom: calc(100% + 14px);
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  min-width: 160px;
+  max-width: 240px;
+  padding: 8px 12px;
+  background: rgba(23, 23, 23, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(198, 164, 108, 0.45);
+  border-radius: 12px;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 30;
+  white-space: normal;
+}
+
+.ila-pin-tooltip__arrow {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: rgba(23, 23, 23, 0.94);
+  border-right: 1px solid rgba(198, 164, 108, 0.45);
+  border-bottom: 1px solid rgba(198, 164, 108, 0.45);
+}
+
+.ila-pin-tooltip__eyebrow {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #c6a46c;
+}
+
+.ila-pin-tooltip__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  line-height: 1.25;
+  margin-top: 1px;
+}
+
+.ila-pin-tooltip__loc {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.3;
+}
+
+.ila-pin-tooltip__price {
+  margin-top: 4px;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #171717;
+  background: linear-gradient(135deg, #d4b57e, #c6a46c);
+  padding: 2px 7px;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
+}
+
+/* Hover & Focus display */
+.ila-project-pin:hover .ila-pin-tooltip,
+.ila-project-pin:focus-visible .ila-pin-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
 
 /* Keep old plot-pin helpers available if reused later */
 .ila-plot-pin {
@@ -1029,3 +1395,153 @@ body {
     height: 100% !important;
   }
 }
+
+/* Smooth Entrance Animations for Modals and Popups */
+@keyframes ila-modal-backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ila-modal-slide-up {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 640px) {
+  @keyframes ila-modal-slide-up {
+    0% {
+      opacity: 0;
+      transform: translateY(40px) scale(0.97);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+}
+
+@keyframes ila-banner-slide-down {
+  0% {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.92);
+  }
+  60% {
+    opacity: 0.95;
+    transform: translateY(2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ila-banner-animate {
+  animation: ila-banner-slide-down 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.ila-modal-backdrop {
+  animation: ila-modal-backdrop-fade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.ila-modal-content {
+  animation: ila-modal-slide-up 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.ila-modal-content .pd-section {
+  padding: 0 !important;
+}
+
+.ila-modal-content .pd-kicker {
+  color: #c6a46c !important;
+  font-weight: 700 !important;
+  font-size: 0.75rem !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.ila-modal-content #pd-emi-title {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.ila-modal-content .pd-section__lead {
+  color: #c8c1b2 !important;
+}
+
+/* ==========================================================================
+   Print / PDF Export Styles for Compare Properties Block
+   ========================================================================== */
+@media print {
+  @page {
+    size: landscape;
+    margin: 8mm;
+  }
+
+  /* Reset body and html container when printing */
+  html,
+  body {
+    background: #141519 !important;
+    color: #ffffff !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 100% !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide everything on the page except the compare modal when it is active */
+  body:has(.ila-compare-modal) > *:not(main),
+  body:has(.ila-compare-modal) main > *:not([data-section="hero_map"]):not([data-section="compare_plots"]) {
+    display: none !important;
+  }
+
+  /* Hide map frame behind the modal */
+  body:has(.ila-compare-modal) .ila-map-frame {
+    display: none !important;
+  }
+
+  .ila-compare-modal {
+    position: static !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: #141519 !important;
+    color: #ffffff !important;
+    overflow: visible !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    z-index: 99999 !important;
+  }
+
+  .ila-compare-modal .ila-search-scroll {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    display: block !important;
+  }
+
+  .ila-compare-modal .grid {
+    display: grid !important;
+    width: 100% !important;
+  }
+
+  /* Force background colors and typography to render in full fidelity */
+  .ila-compare-modal * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+

@@ -6,9 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 const NAV_LINKS = [
-  { href: "#about", label: "About" },
-  { href: "#projects", label: "Projects" },
-  { href: "#services", label: "Services" },
+  { href: "/why-us", label: "About" },
   { href: "/properties", label: "Properties" },
   { href: "#contact", label: "Contact" },
 ] as const;
@@ -20,17 +18,17 @@ export default function Navbar() {
   const pathname = usePathname();
 
   /**
-   * Current page, not current section.
-   *
-   * Four of the five links are homepage fragments — `#about`, `#projects`,
-   * `#services`, `#contact` all resolve inside components that only render on
-   * `/`. On `/properties/{id}` they have no target, so they can never be the
-   * section in view and are deliberately left out of this. `/properties` is the
-   * one link that does match a route, and `startsWith` keeps it active on the
-   * detail pages nested underneath it.
+   * Current page highlight matching.
    */
-  const isCurrent = (href: string) =>
-    href === "/properties" && pathname.startsWith("/properties");
+  const isCurrent = (href: string) => {
+    if (href === "/properties") {
+      return pathname.startsWith("/properties");
+    }
+    if (href === "/why-us") {
+      return pathname === "/why-us";
+    }
+    return false;
+  };
 
   useEffect(() => {
     const onScroll = () => {
@@ -77,12 +75,12 @@ export default function Navbar() {
       }`}
     >
       <nav
-        className="ila-gutter-x flex h-14 w-full items-center justify-between sm:h-16"
+        className="flex h-14 w-full items-center justify-between px-3 sm:h-16 sm:px-6 lg:px-8"
         aria-label="Primary"
       >
         <Link
           href="/"
-          className="relative z-10 flex shrink-0 items-center"
+          className="relative z-10 -ml-1 flex shrink-0 items-center transition-transform hover:scale-[1.02] sm:ml-0"
           onClick={() => setOpen(false)}
         >
           <Image
@@ -91,62 +89,107 @@ export default function Navbar() {
             width={1086}
             height={362}
             priority
-            className="h-12 w-auto object-contain sm:h-14 lg:h-16"
+            className="h-11 w-auto object-contain sm:h-14 lg:h-16"
           />
         </Link>
 
-        <ul className="hidden items-center gap-8 md:flex">
-          {NAV_LINKS.map((link) => {
-            const current = isCurrent(link.href);
-            return (
-              <li key={link.href}>
-                <Link
-                  href={link.href}
-                  aria-current={current ? "page" : undefined}
-                  className={`relative text-sm tracking-[0.14em] uppercase transition-colors duration-200 hover:text-white ${
-                    current
-                      ? /* Full white plus a gold rule. Colour alone would be
-                           indistinguishable from hover, and hover is
-                           transient — an active state that only looks different
-                           while the cursor is on it is not an active state. */
-                        "text-white after:absolute after:-bottom-1.5 after:left-0 after:h-px after:w-full after:bg-[#c6a46c]"
-                      : "text-white/70"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="hidden items-center gap-6 md:flex">
+          <ul className="flex items-center gap-8">
+            {NAV_LINKS.map((link) => {
+              const current = isCurrent(link.href);
+              return (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    aria-current={current ? "page" : undefined}
+                    className={`relative text-sm tracking-[0.14em] uppercase transition-colors duration-200 hover:text-white ${
+                      current
+                        ? /* Full white plus a gold rule. Colour alone would be
+                             indistinguishable from hover, and hover is
+                             transient — an active state that only looks different
+                             while the cursor is on it is not an active state. */
+                          "text-white after:absolute after:-bottom-1.5 after:left-0 after:h-px after:w-full after:bg-[#c6a46c]"
+                        : "text-white/70"
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
 
-        <button
-          type="button"
-          className="relative z-10 flex h-10 w-10 items-center justify-center text-white md:hidden"
-          aria-expanded={open}
-          aria-controls="mobile-nav"
-          aria-label={open ? "Close menu" : "Open menu"}
-          onClick={() => setOpen((prev) => !prev)}
-        >
-          <span className="sr-only">{open ? "Close menu" : "Open menu"}</span>
-          <span className="flex w-5 flex-col gap-1.5">
+          <Link
+            href={pathname === "/why-us" ? "/" : "/why-us"}
+            aria-current={pathname === "/why-us" ? "page" : undefined}
+            className="group relative inline-flex items-center justify-center overflow-hidden rounded-full p-[1px] transition-transform duration-300 active:scale-95"
+          >
+            {/* Subtle rotating gradient beam along the stroke */}
             <span
-              className={`block h-px w-full bg-white transition-transform duration-200 ${
-                open ? "translate-y-1.75 rotate-45" : ""
-              }`}
+              className="absolute inset-[-100%] animate-[spin_4.5s_linear_infinite] [background:conic-gradient(from_90deg_at_50%_50%,transparent_0%,transparent_75%,rgba(234,179,8,0.7)_88%,transparent_100%)]"
+              aria-hidden
             />
+            {/* Button body */}
+            <span className={`relative inline-flex h-full w-full items-center justify-center rounded-full border border-yellow-500/20 px-4 py-1.5 text-xs font-semibold tracking-wider uppercase backdrop-blur-md transition-colors duration-200 group-hover:bg-[#1a1a1a] group-hover:text-yellow-300 ${
+              pathname === "/why-us"
+                ? "bg-yellow-500/15 text-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.2)]"
+                : "bg-[#121212]/95 text-yellow-400/90"
+            }`}>
+              {pathname === "/why-us" ? "Home" : "Why Us ?"}
+            </span>
+          </Link>
+        </div>
+
+        <div className="relative z-10 flex items-center gap-3 md:hidden">
+          <Link
+            href={pathname === "/why-us" ? "/" : "/why-us"}
+            aria-current={pathname === "/why-us" ? "page" : undefined}
+            className="group relative inline-flex items-center justify-center overflow-hidden rounded-full p-[1px] transition-transform duration-300 active:scale-95"
+            onClick={() => setOpen(false)}
+          >
+            {/* Subtle rotating gradient beam along the stroke */}
             <span
-              className={`block h-px w-full bg-white transition-opacity duration-200 ${
-                open ? "opacity-0" : "opacity-100"
-              }`}
+              className="absolute inset-[-100%] animate-[spin_4.5s_linear_infinite] [background:conic-gradient(from_90deg_at_50%_50%,transparent_0%,transparent_75%,rgba(234,179,8,0.7)_88%,transparent_100%)]"
+              aria-hidden
             />
-            <span
-              className={`block h-px w-full bg-white transition-transform duration-200 ${
-                open ? "-translate-y-1.75 -rotate-45" : ""
-              }`}
-            />
-          </span>
-        </button>
+            {/* Button body */}
+            <span className={`relative inline-flex h-full w-full items-center justify-center rounded-full border border-yellow-500/20 px-3 py-1 text-[11px] font-semibold tracking-wider uppercase backdrop-blur-md transition-colors duration-200 group-hover:bg-[#1a1a1a] group-hover:text-yellow-300 ${
+              pathname === "/why-us"
+                ? "bg-yellow-500/15 text-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.2)]"
+                : "bg-[#121212]/95 text-yellow-400/90"
+            }`}>
+              {pathname === "/why-us" ? "Home" : "Why Us ?"}
+            </span>
+          </Link>
+
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center text-white"
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            aria-label={open ? "Close menu" : "Open menu"}
+            onClick={() => setOpen((prev) => !prev)}
+          >
+            <span className="sr-only">{open ? "Close menu" : "Open menu"}</span>
+            <span className="flex w-5 flex-col gap-1.5">
+              <span
+                className={`block h-px w-full bg-white transition-transform duration-200 ${
+                  open ? "translate-y-1.75 rotate-45" : ""
+                }`}
+              />
+              <span
+                className={`block h-px w-full bg-white transition-opacity duration-200 ${
+                  open ? "opacity-0" : "opacity-100"
+                }`}
+              />
+              <span
+                className={`block h-px w-full bg-white transition-transform duration-200 ${
+                  open ? "-translate-y-1.75 -rotate-45" : ""
+                }`}
+              />
+            </span>
+          </button>
+        </div>
       </nav>
 
       <div

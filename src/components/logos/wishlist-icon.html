@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Heart Outline Icon</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #ffffff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Adjust max-width to scale the icon to any size */
+    .heart-icon {
+      width: 100%;
+      max-width: 120px;
+      height: auto;
+      display: block;
+      color: #000000; /* Controls the icon color via currentColor */
+    }
+  </style>
+</head>
+<body>
+
+  <svg class="heart-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <path 
+      d="M 50 85 
+         L 20 54.5 
+         A 20 20 0 0 1 48 24.8 
+         L 50 27.2 
+         L 52 24.8 
+         A 20 20 0 0 1 80 54.5 
+         Z" 
+      fill="none" 
+      stroke="currentColor" 
+      stroke-width="7" 
+      stroke-linecap="round" 
+      stroke-linejoin="round" 
+    />
+  </svg>
+
+</body>
+</html>

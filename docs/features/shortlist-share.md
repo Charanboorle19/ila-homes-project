@@ -1,6 +1,6 @@
 # Shortlist / WhatsApp Share feature
 
-This document describes the current homepage `ShortlistShare` implementation only. It is based on the inspected TypeScript/React source, stylesheet, property-list API, tracked-share service, homepage integration, and directly related analytics/configuration files. It does not describe a server-side shortlist collection or the separate Property Details wishlist/share controls.
+This document describes the current `ShortlistShare` implementation only. It is based on the inspected TypeScript/React source, stylesheet, property-list API, tracked-share service, integration, and directly related analytics/configuration files. It does not describe a server-side shortlist collection or the separate Property Details wishlist/share controls. The component is currently unmounted — see §2.
 
 ## 1. Feature purpose
 
@@ -8,11 +8,12 @@ This document describes the current homepage `ShortlistShare` implementation onl
 
 ## 2. Where it appears
 
-The feature appears on the homepage route `/` as the `ShortlistShare` section. Its root element has `id="shortlist-share"` and `aria-label="Shortlist and share"`. No separate feature route is confirmed.
+- The full `ShortlistShare` section was on `/` (currently unmounted on the homepage).
+- **PropertyBlock Share modal integration**: When "Share" is tapped on [PropertyBlock](file:///c:/Users/surya/Desktop/ILA-HOMES-PROJECT/src/components/property-block.tsx), it creates tracked share links and displays the WhatsApp preview modal dialog ([ShortlistPreviewModal](file:///c:/Users/surya/Desktop/ILA-HOMES-PROJECT/src/components/ShortlistPreviewModal.tsx)), allowing visitors to copy or directly share the selected property on WhatsApp.
 
 ## 3. Homepage position
 
-`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` renders the relevant sequence as:
+There is no current position. `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` previously rendered this sequence:
 
 1. `Hero`
 2. `MapSection`
@@ -28,13 +29,13 @@ The feature appears on the homepage route `/` as the `ShortlistShare` section. I
 12. `Faq`
 13. `HomeReadyToVisit`
 
-Shortlist / WhatsApp Share appears between `CompareProperties` and `BuyingJourney`, styled with a sleek dark palette (`#14171c` canvas, `#1b1e24` and `#1c2026` card surfaces, `#c9a84c` gold accents, and `#f7f4ee` text).
+Shortlist / WhatsApp Share used to appear between `CompareProperties` and `BuyingJourney`; only `MapSection` (entry 2 above) remains mounted. Its palette is a sleek dark one (`#14171c` canvas, `#1b1e24` and `#1c2026` card surfaces, `#c9a84c` gold accents, and `#f7f4ee` text).
 
 ## 4. Component/file paths
 
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\ShortlistShare.tsx` — component, API-property projection, state, selection handlers, tracked WhatsApp URL creation, touch/wheel behavior, markup, and analytics calls.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\ShortlistShare.css` — feature layout, option/card styling, selected/disabled states, scrolling, and responsive rules.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — homepage import and render position.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — previously the homepage import and render position; the import and render were removed.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` — API property-list request and `PropertyListItem` type used to load shortlist options.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\shareService.ts` — tracked share creation and public tracking-URL construction.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\ilaApiConfig.ts` — source of `ILA_PROPERTY_ID`, used only as the analytics fallback property id.
@@ -48,7 +49,7 @@ Option cards render the property's own `cover_url` from `GET /api/properties`. T
 
 ## 5. Component names
 
-The default-exported homepage component is `ShortlistShare` from `ShortlistShare.tsx`.
+The default-exported component is `ShortlistShare` from `ShortlistShare.tsx`.
 
 Internal implementation names include `ShortlistPlot`, `PROPERTY_IMAGES`, `FEATURES`, `toPlot`, `buildShareText`, `togglePlot`, `shareOnWhatsApp`, `renderChoose`, and `handlePanelsWheel`.
 
@@ -162,7 +163,7 @@ It is the ordered set of full `ShortlistPlot` objects corresponding to the selec
 
 ## 17. Storage behavior
 
-The homepage `ShortlistShare` implementation does not use `localStorage`, `sessionStorage`, cookies, URL query parameters, URL fragments, or an API to persist the shortlist. The selected ids exist only in React state for the mounted component instance. The selection therefore does not survive a page refresh or a component remount.
+The `ShortlistShare` implementation does not use `localStorage`, `sessionStorage`, cookies, URL query parameters, URL fragments, or an API to persist the shortlist. The selected ids exist only in React state for the mounted component instance. The selection therefore does not survive a page refresh or a component remount.
 
 This state is separate from Property Details keys such as `ila-wishlist-{id}` and `ila-interested-{id}`; no code connection between those keys and `pinned` was found.
 
@@ -297,7 +298,7 @@ Direct dependencies are React hooks and types, Next.js `Image`, local static ima
 
 ## 36. Important constraints
 
-- Preserve the current component name/default export `ShortlistShare` and homepage placement unless the homepage integration intentionally changes.
+- Preserve the current component name/default export `ShortlistShare` and its integration point unless that integration intentionally changes. The component is currently unmounted (§2).
 - Treat `pinned` as the current in-memory API property UUID array; do not assume it is a persisted wishlist/favourites store.
 - Preserve the `fetchProperties({ status: "ALL", page: 1, perPage: 100 })` request and the API `id` values used for selection and share creation.
 - Preserve the exact WhatsApp construction `https://wa.me/?text=${encodeURIComponent(text)}` and include one `buildShareUrl` result for every selected property.

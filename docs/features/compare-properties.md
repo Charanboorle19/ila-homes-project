@@ -738,7 +738,7 @@ Whether `COMPARE_ADD` / `COMPARE_REMOVE` should instead be enabled in the batch 
 - `/properties` — `PropertiesList`, primary entry point (§2).
 - Homepage developments map — `MapSection` sidebar cards (§2).
 - Property detail — `PropertyPageView` / `PropertyFinalCta` (§2).
-- `GrowthCorridors` — homepage locality property results, an additional possible entry point; it renders property links to `/properties/{propertyId}` ([`map.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\map.md) §21).
+- `GrowthCorridors` — locality property results, an additional possible entry point; it renders property links to `/properties/{propertyId}` ([`map.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\map.md) §21). It is currently unmounted.
 - `SimilarProperties` — adjacent but **not** a comparison; it is one-directional and local-only ([`property-details.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-details.md) §36, §50).
 - `ShortlistShare` — functional precedent for multi-select of API property UUIDs with a visible count and a disabled action at zero; not a shared store.
 - `LifeStageMatch` and `LegalDocuments` — the Buyer Fit and verification comparison sources.

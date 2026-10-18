@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import "./Footer.css";
 
 const FOOTER_LINKS = [
@@ -11,6 +14,13 @@ const FOOTER_LINKS = [
 ] as const;
 
 export default function Footer() {
+  const pathname = usePathname();
+
+  // Exclude footer on the homepage so MapSection can occupy full viewport
+  if (pathname === "/") {
+    return null;
+  }
+
   return (
     <footer data-section="footer" className="footer">
       <div className="footer__inner">

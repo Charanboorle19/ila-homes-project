@@ -4966,22 +4966,22 @@ a.pd-legal__card:hover .pd-legal__view {
    Print / PDF Export Styles for EMI Calculator Results
    ========================================================================== */
 @media print {
-  /* Hide overall global navigation, headers, footers, floating chat / sticky bars */
-  header,
-  nav,
-  footer,
-  #nav,
+  /* Hide overall global navigation, headers, footers, floating chat / sticky bars when not printing compare modal */
+  body:not(:has(.ila-compare-modal)) header,
+  body:not(:has(.ila-compare-modal)) nav,
+  body:not(:has(.ila-compare-modal)) footer,
+  body:not(:has(.ila-compare-modal)) #nav,
   .pd-sticky-bar,
   .pd-afford__cta,
   .mobile-nav,
-  body > *:not(main):not(#__next) {
+  body:not(:has(.ila-compare-modal)) > *:not(main):not(#__next) {
     display: none !important;
   }
 
-  /* Reset body and wrapper margins for clean single-page PDF formatting */
-  body,
-  .property-page,
-  main {
+  /* Reset body and wrapper margins for clean single-page PDF formatting when printing EMI */
+  body:not(:has(.ila-compare-modal)),
+  body:not(:has(.ila-compare-modal)) .property-page,
+  body:not(:has(.ila-compare-modal)) main {
     background: #ffffff !important;
     color: #171717 !important;
     margin: 0 !important;

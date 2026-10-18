@@ -280,11 +280,11 @@ export default function PriceEmiFuture({
         {/* Header - on print, display as executive summary header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-black/10 pb-6 print:border-b-2 print:border-neutral-900 print:pb-4">
           <div>
-            <p className="pd-kicker print:text-[#7a6134] print:font-bold">Affordability & Financing</p>
-            <h2 id="pd-emi-title" className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[#171717] print:text-2xl">
+            <p className="pd-kicker text-[#c6a46c] font-bold text-xs tracking-wider uppercase print:text-[#7a6134]">Affordability & Financing</p>
+            <h2 id="pd-emi-title" className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-[#171717] dark:text-white print:text-2xl mt-1">
               Calculate Your EMI Before You Buy
             </h2>
-            <p className="pd-section__lead mt-2 text-sm sm:text-base text-[#5c5852] print:text-xs print:mt-1">
+            <p className="pd-section__lead mt-2 text-sm sm:text-base text-[#5c5852] dark:text-neutral-300 print:text-xs print:mt-1">
               Explore your monthly EMI, down payment, and loan options for your chosen property.
             </p>
             <div className="hidden print:block mt-2 text-xs font-semibold text-neutral-800">

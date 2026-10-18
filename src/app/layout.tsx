@@ -26,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${montserrat.variable} h-full antialiased`}
     >
-      <body className={`${montserrat.className} flex min-h-full flex-col bg-black text-white`}>
+      <body className={`${montserrat.className} flex min-h-full flex-col overflow-x-hidden bg-black text-white`}>
         <VisitorInitializer />
         <SessionInitializer />
         <AnalyticsInitializer />
@@ -36,7 +36,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             Next.js's own scroll handling is not enough on this site. */}
         <ScrollToTop />
         <Navbar />
-        <main className="flex flex-1 flex-col">{children}</main>
+        <main className="flex min-h-0 flex-1 flex-col">{children}</main>
         <Footer />
       </body>
     </html>

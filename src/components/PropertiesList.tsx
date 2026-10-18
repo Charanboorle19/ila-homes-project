@@ -156,7 +156,12 @@ export default function PropertiesList() {
     }
 
     load().catch((error: unknown) => {
-      if (signal.aborted) return;
+      if (
+        signal.aborted ||
+        (error instanceof Error && (error.name === "AbortError" || error.message.includes("aborted")))
+      ) {
+        return;
+      }
       console.warn("[properties] list fetch failed", error);
       setState("error");
     });

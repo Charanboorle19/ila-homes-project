@@ -17,3 +17,7 @@
     scroll-behavior: auto !important;
   }
 }
+
+#plots-pulse .ila-loader {
+  animation: ila-loader-spin 1.5s infinite !important;
+}

@@ -1,28 +1,28 @@
 # Search feature
 
-This document describes the current Search implementation only. It complements [`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-details.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-details.md) and [`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-enquiry.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-enquiry.md). Search is not a single shared feature: the homepage hero has a search-shaped navigation form, while `MapSection` has the actual client-side property filtering behavior.
+This document describes the current Search implementation only. It complements [`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-details.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-details.md) and [`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-enquiry.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-enquiry.md). Search is not a single shared feature: the hero has a search-shaped navigation form, while `MapSection` has the actual client-side property filtering behavior. **`Hero` is currently unmounted** — `/` renders `MapSection` alone — so only the `MapSection` filtering described here is reachable today.
 
 ## 1. Feature purpose
 
 The current Search UI provides:
 
-- A homepage hero input that accepts a query, records a property-search analytics event, queries the search endpoint `GET /api/search?q={query}&limit=20` (with graceful catalogue fallback), and renders exact matches and recommendations in a dialog, displaying and highlighting any returned explanatory `message` before the data list.
+- A hero input (`Hero.tsx`, currently unmounted) that accepts a query, records a property-search analytics event, queries the search endpoint `GET /api/search?q={query}&limit=20` (with graceful catalogue fallback), and renders exact matches and recommendations in a dialog, displaying and highlighting any returned explanatory `message` before the data list.
 - A map-panel input that filters the currently loaded API property catalogue in memory.
 
 There is no shared search store, URL query parameter, search-results route, autocomplete result list, or standalone Search component.
 
 ## 2. Where search appears
 
-- Homepage hero: `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\Hero.tsx`.
-- Homepage developments map, `MapSection`: mobile search panel in the section header and desktop search overlay in the map/sidebar area, both in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\MapSection.tsx`.
+- Hero: `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\Hero.tsx` — currently unmounted.
+- Developments map, `MapSection`: mobile search panel in the section header and desktop search overlay in the map/sidebar area, both in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\MapSection.tsx`. `MapSection` is the only section rendered on `/`.
 
 The `/properties` catalogue rendered by `PropertiesList` has no search input or client-side search state.
 
 ## 3. Component/file paths
 
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\Hero.tsx` — homepage search form, submit behavior, highlighted message callout, and results dialog.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\Hero.tsx` — search form, submit behavior, highlighted message callout, and results dialog. Not mounted on any route.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\MapSection.tsx` — map search input, property filtering, filter buttons, and result selection.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — renders `Hero` followed by `MapSection`.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx` — renders `MapSection` only; the `Hero` import and render were removed.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts` — supplies `searchProperties`, `PropertySearchResult`, `PropertySearchResponse`, and the property catalogue consumed by `MapSection`.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\tracker.ts` — receives the hero `PROPERTY_SEARCH` event.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\analytics\events.ts` — declares `PROPERTY_SEARCH` and its batch-sendable status.
@@ -46,7 +46,7 @@ There is no public Search component prop contract.
 
 ## 6. Data sources
 
-The homepage hero search queries the public natural language property search API:
+The hero search in `Hero.tsx` (currently unmounted) queries the public natural language property search API:
 
 `GET /api/search?q={query}&limit=20`
 
@@ -299,7 +299,7 @@ Hero search results are selectable cards linking to `item.href` (or `/properties
 
 Hero submission no longer navigates. It opens a results dialog in place.
 
-Map property-card selection stays within the homepage map and opens the selected layout. `PropertySheet`'s `View Project` link navigates to `/properties/{property.id}` when a normalized property is available. The map panel's bottom link uses `#contact` and is not a Search result navigation.
+Map property-card selection stays within the map and opens the selected layout. `PropertySheet`'s `View Project` link navigates to `/properties/{property.id}` when a normalized property is available. The map panel's bottom link uses `#contact` — which no longer has a target on `/`, since `FindYourPlot` is unmounted — and it is not a Search result navigation.
 
 The `/properties` catalogue uses its own result links to `/properties/{property.id}`, but it has no Search input.
 
@@ -399,7 +399,7 @@ The hero `#projects` target is the `id="projects"` on `MapSection`.
 
 `PropertiesList` at `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\PropertiesList.tsx` is the `/properties` catalogue. It independently fetches all properties with `GET /api/properties?status=ALL&page=1&per_page=100`, enriches them with detail calls, and renders links.
 
-It has no `query` state, search input, matching logic, result limit beyond its API request, or shared state with `MapSection`. Search filtering on the homepage does not alter the catalogue.
+It has no `query` state, search input, matching logic, result limit beyond its API request, or shared state with `MapSection`. The map's own filtering on `/` does not alter the catalogue.
 
 ## 30. Relationship with Locations
 

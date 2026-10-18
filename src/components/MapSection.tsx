@@ -4,6 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import PropertyBlock from "@/components/property-block";
+import Wishlist from "@/components/wishlist";
+import CompareProperties from "@/components/CompareProperties";
 import {
   LngLatBounds,
   Map as MapLibreMap,
@@ -41,6 +44,14 @@ import {
   type PropertyLayoutCords,
   type PropertyListItem,
 } from "@/services/propertiesService";
+import {
+  fetchActiveFeatures,
+  findPropertiesByFeatures,
+  type PropertyFeature,
+} from "@/services/featuresService";
+
+import PriceEmiFuture from "@/components/PropertyDetail/PriceEmiFuture";
+import EmiAppreciation from "@/components/EmiAppreciation";
 import { trackEvent } from "@/services/analytics/tracker";
 import { formatInr } from "@/lib/propertyUtils";
 import { loadLayoutPreviewRaster } from "@/lib/layoutPreview";
@@ -52,8 +63,17 @@ import {
   SATELLITE_TILES_URL,
 } from "@/lib/satelliteTiles";
 import { ILA_API_BASE_URL } from "@/lib/ilaApiConfig";
+import MapVersion, { type MapViewMode } from "@/components/map-version";
+import {
+  LAYOUT_DESIGN,
+  LAYOUT_LAYER_IDS,
+  initLayoutLayers,
+  setLayoutData,
+  syncLayoutRaster,
+} from "@/components/map-section-layouts";
 
 type FilterKey = "all" | PlotStatus;
+type SheetTab = "about" | "plots" | "features" | "location";
 
 // Next/Turbopack cannot resolve MapLibre's bundled worker sibling imports.
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
@@ -91,35 +111,8 @@ const EMPTY_FC = {
   features: [],
 };
 
-/** Estate master-plan palette */
-const LAYOUT = {
-  siteFill: "#EFE6D6",
-  siteEdge: "#C6A46C",
-  openArea: "#7CB342",
-  openAreaEdge: "#E8F5C8",
-  available: "#1F8A68",
-  sold: "#8A8178",
-  plotEdge: "#FFFFFF",
-  selected: "#D4A84B",
-  selectedEdge: "#FFFFFF",
-  road: "#0B0B0B",
-  roadLine: "#FFFFFF",
-  roadCasing: "#2A2A2A",
-} as const;
-
-const LAYOUT_LAYER_IDS = [
-  "estate-site-pad-fill",
-  "estate-site-pad-edge",
-  "estate-open-fill",
-  "estate-open-edge",
-  "estate-plots-fill",
-  "estate-plots-outline",
-  "estate-plots-label",
-  "estate-roads-fill",
-  "estate-roads-casing",
-  "estate-roads-edge",
-  "estate-roads-center",
-] as const;
+/** Estate master-plan design tokens imported from map-section-layouts.tsx */
+const LAYOUT = LAYOUT_DESIGN;
 
 /** Keep the estate GeoJSON visible so plot polygons remain selectable on the map. */
 const SHOW_ESTATE_GEOJSON = true;
@@ -127,89 +120,16 @@ const SHOW_ESTATE_GEOJSON = true;
 /** Ceiling for the layout fit, so an estate always fills the frame. */
 const LAYOUT_MAX_ZOOM = 17.2;
 
-const LAYOUT_RASTER_SOURCE_ID = "estate-layout-image";
-const LAYOUT_RASTER_LAYER_ID = "estate-layout-raster";
 
-function syncLayoutRaster(
-  map: MapLibreMap,
-  raster: LayoutRaster | undefined,
-  layoutVisible: boolean,
-) {
-  const source = map.getSource(LAYOUT_RASTER_SOURCE_ID) as ImageSource | undefined;
-  if (!source || !map.getLayer(LAYOUT_RASTER_LAYER_ID)) {
-    console.warn("[ILA map] layout image source/layer missing", {
-      source: Boolean(source),
-      layer: Boolean(map.getLayer(LAYOUT_RASTER_LAYER_ID)),
-    });
-    return;
-  }
-
-  const showRaster = Boolean(layoutVisible && raster);
-
-  if (raster) {
-    console.log("[ILA map] applying layout image", {
-      id: raster.id,
-      coordinates: raster.coordinates,
-      // A preview arrives already decoded from a bucket with no CORS headers;
-      // the TIFF fallback is handed over as a PNG data URL instead.
-      imageKind: raster.image ? "decoded" : "url",
-      dataUrlKb: raster.url ? Math.round(raster.url.length / 1024) : 0,
-      opacity: raster.opacity,
-    });
-    // Exactly one of the two: a decoded image skips the network, a URL is
-    // fetched by the map itself.
-    if (raster.image) {
-      source.updateImage({
-        image: raster.image,
-        coordinates: raster.coordinates,
-      });
-    } else if (raster.url) {
-      source.updateImage({
-        url: raster.url,
-        coordinates: raster.coordinates,
-      });
-    }
-    map.setPaintProperty(
-      LAYOUT_RASTER_LAYER_ID,
-      "raster-opacity",
-      raster.opacity,
-    );
-  }
-
-  map.setLayoutProperty(
-    LAYOUT_RASTER_LAYER_ID,
-    "visibility",
-    showRaster ? "visible" : "none",
-  );
-
-  console.log(
-    `[ILA map] layout image ${showRaster ? "shown" : "hidden"} at zoom ${map.getZoom().toFixed(2)}`,
-  );
-
-  // Hide beige site pad when GeoJSON is off or a layout image is showing.
-  const showPad = Boolean(SHOW_ESTATE_GEOJSON && layoutVisible && !raster);
-  if (map.getLayer("estate-site-pad-fill")) {
-    map.setLayoutProperty(
-      "estate-site-pad-fill",
-      "visibility",
-      showPad ? "visible" : "none",
-    );
-  }
-  if (map.getLayer("estate-site-pad-edge")) {
-    map.setLayoutProperty(
-      "estate-site-pad-edge",
-      "visibility",
-      showPad ? "visible" : "none",
-    );
-  }
-}
 
 const PIN_ICON = `
   <span class="ila-project-pin__anchor" aria-hidden="true">
     <span class="ila-project-pin__halo"></span>
     <span class="ila-project-pin__core">
-      <svg viewBox="0 0 24 24" class="ila-project-pin__icon" aria-hidden="true">
-        <path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-5v-5H10v5H5a1 1 0 0 1-1-1v-8.5Z" fill="currentColor"/>
+      <svg viewBox="300 205 180 135" class="ila-project-pin__icon" aria-hidden="true" fill="currentColor">
+        <rect x="311" y="216" width="19" height="112" />
+        <path d="M 339 216 H 358 V 300 H 405 V 328 H 361 Q 339 328 339 306 Z" />
+        <path fill-rule="evenodd" d="M 378 296 L 414 216 H 434 L 470 296 H 449 L 441 278 H 406 L 398 296 Z M 412 262 H 435 L 424 236 Z" />
       </svg>
     </span>
     <span class="ila-project-pin__needle"></span>
@@ -228,6 +148,8 @@ export type MapPin = {
   /** Locality, when the listing gives us one. */
   location?: string;
   center: [number, number];
+  price?: number | null;
+  formattedPrice?: string | null;
 };
 
 function PinIcon({ className = "" }: { className?: string }) {
@@ -316,621 +238,119 @@ function ChevronIcon({ className = "" }: { className?: string }) {
   );
 }
 
-const SHEET_TABS = ["about", "location", "amenities", "developer"] as const;
-type SheetTab = (typeof SHEET_TABS)[number];
-
-/**
- * Surfaces for the two hosts `PropertySheet` renders in.
- *
- * The component is shared between two surfaces that are genuinely different
- * colours — the desktop sidebar sits in a light `#d9d2c7` panel, and the phone
- * bottom sheet is dark — so it cannot resolve its own palette from `dense`,
- * which means "compact type", not "dark surface". `tone` is therefore explicit,
- * and defaults to `light` so the desktop caller is unchanged.
- *
- * Every themed colour is a class string in this table rather than an
- * arbitrary-value `var()` call, so the compiled CSS stays statically analysable
- * and a missing key is a TypeScript error rather than an invisible fallback.
- *
- * Keys are only added when two or more call sites share them; a colour used
- * once is written inline. That is why this table is not a 1:1 map of every hex
- * in the component.
- */
-const SHEET_TONE = {
-  light: {
-    /** Tab-body surface. */
-    panel: "border-[#ded9cf] bg-white",
-    panelBody: "text-[#3f3a34]",
-    panelLabel: "text-[#8a6d34]",
-    /** Hairlines: the outer edge of a block versus a divider inside it. */
-    edge: "border-[#ded9cf]",
-    divider: "border-[#f0ece3]",
-    /** Type. */
-    ink: "text-[#24231f]",
-    muted: "text-[#77736a]",
-    faint: "text-[#8a8174]",
-    goldInk: "text-[#a07c3c]",
-    tabActive: "text-[#24231f]",
-    tabIdle: "text-[#8a8174] hover:text-[#24231f]",
-    /** Status chips. */
-    greenChip: "border-[#d9e3da] bg-[#f2f7f2] text-[#1f5c45]",
-    goldChip: "border-[#e6d7b0] bg-[#faf4e4] text-[#8a6d34]",
-    softChip: "border-[#e5ddcd] bg-[#faf7f0] text-[#5c5348]",
-    /** Price block — already an inverted surface in both themes, so only the
-        gradient steps change. */
-    price: "border-[#3a362e] bg-linear-to-br from-[#35322b] via-[#24231f] to-[#171614]",
-    priceLabel: "text-[#d7c39b]",
-    priceMuted: "text-white/55",
-    /** Actions. */
-    primary: "bg-[#24231f] text-white hover:bg-[#2f2e29]",
-    secondary:
-      "border-[#ded9cf] bg-white text-[#24231f] hover:border-[#c6a46c] hover:bg-[#faf6ec]",
-    tertiary:
-      "border-[#ded9cf] bg-white text-[#5c5348] hover:bg-[#eee9dd]",
-    /** Media and container surfaces. */
-    media: "border-[#ded9cf] bg-[#e8e4dc]",
-    strip: "border-[#e6e0d4] bg-white/70",
-    /** On-photo copy — the hero already carries a black gradient scrim. */
-    onPhoto: "text-white",
-    onPhotoMuted: "text-white/85",
-    onPhotoGold: "text-[#e8d3a6]",
-    onPhotoRule: "bg-[#c6a46c]",
-    noPhotoGold: "bg-[#c6a46c]",
-    tile: "bg-[#f1e5c9] text-[#8a6d34]",
-  },
-  dark: {
-    panel: "border-white/10 bg-white/[0.06]",
-    panelBody: "text-[#c9c5bd]",
-    panelLabel: "text-[#c6a46c]",
-    edge: "border-white/12",
-    divider: "border-white/8",
-    ink: "text-[#f2f0ea]",
-    muted: "text-[#a8a49c]",
-    faint: "text-[#8a857c]",
-    goldInk: "text-[#c6a46c]",
-    tabActive: "text-[#f2f0ea]",
-    tabIdle: "text-[#8a857c] hover:text-[#f2f0ea]",
-    greenChip:
-      "border-[#1f8a68]/45 bg-[#1f8a68]/15 text-[#6fd0a8]",
-    goldChip:
-      "border-[#c6a46c]/40 bg-[#c6a46c]/12 text-[#c6a46c]",
-    softChip: "border-white/12 bg-white/[0.06] text-[#c9c5bd]",
-    price:
-      "border-[#c6a46c]/30 bg-linear-to-br from-[#2b2f36] via-[#21252b] to-[#1a1e23]",
-    priceLabel: "text-[#c6a46c]",
-    priceMuted: "text-white/55",
-    primary: "bg-[#c6a46c] text-[#171717] hover:bg-[#d4b57e]",
-    secondary:
-      "border-white/15 bg-white/[0.06] text-[#f2f0ea] hover:border-[#c6a46c]/50 hover:bg-white/10",
-    tertiary:
-      "border-white/12 bg-white/[0.04] text-[#c9c5bd] hover:bg-white/[0.09]",
-    media: "border-white/12 bg-[#23262b]",
-    strip: "border-white/12 bg-white/[0.05]",
-    onPhoto: "text-white",
-    onPhotoMuted: "text-white/85",
-    onPhotoGold: "text-[#e8d3a6]",
-    onPhotoRule: "bg-[#c6a46c]",
-    noPhotoGold: "bg-[#c6a46c]",
-    tile: "bg-[#c6a46c]/15 text-[#c6a46c]",
-  },
-} as const;
-
-type PropertySheetProps = {
-  project: EstateProject;
-  property: PropertyRecord | undefined;
-  /** Live API detail for UUID-backed properties. */
-  apiProperty?: ApiProperty | null;
-  expanded: boolean;
-  dense: boolean;
-  /**
-   * Surface palette. Defaults to `light` — the desktop sidebar. The phone
-   * bottom sheet passes `dark`.
-   */
-  tone?: keyof typeof SHEET_TONE;
-  /** When false the card always renders its full form and drops the toggle. */
-  collapsible?: boolean;
-  tab: SheetTab;
-  onTabChange: (tab: SheetTab) => void;
-  onToggle?: () => void;
-  className?: string;
-};
-
-/**
- * Shared property summary used by the phone bottom sheet and the desktop
- * sidebar slot. `dense` renders the compact phone scale; otherwise it uses
- * the roomier desktop scale so labels stay legible inside the side panel.
- */
-function PropertySheet({
-  project,
-  property,
-  apiProperty = null,
-  expanded,
-  dense,
-  tone = "light",
-  collapsible = true,
-  tab,
-  onTabChange,
-  onToggle = () => undefined,
-  className = "",
-}: PropertySheetProps) {
-  const popupImage = apiProperty?.cover_url
-    ? { src: apiProperty.cover_url, alt: apiProperty.name }
-    : property?.gallery?.[0];
-  const popupSample = property?.popupSample;
-  const apiLocation = [
-    apiProperty?.locality,
-    apiProperty?.city,
-  ].filter(Boolean).join(", ");
-  const projectName = apiProperty?.name ?? property?.name ?? project.name;
-  const projectLocation =
-    apiLocation ||
-    apiProperty?.location_name ||
-    apiProperty?.address ||
-    property?.location ||
-    project.location;
-  const totalPlots =
-    apiProperty?.total_plots ??
-    popupSample?.totalPlots ??
-    apiProperty?.total_inventory ??
-    project.plots.length;
-  const availablePlots =
-    apiProperty?.available_plots_count ??
-    popupSample?.availablePlots ??
-    apiProperty?.available_inventory ??
-    project.plots.filter((plot) => plot.status === "available").length;
-  const apiAreaRange = apiProperty?.area_range;
-  const apiPlotSize = apiAreaRange
-    ? [apiAreaRange.min, apiAreaRange.max]
-        .filter((value): value is number => value !== null && Number.isFinite(value))
-        .map((value) => `${value} sq yd`)
-        .join(" – ")
-    : null;
-  const projectExtent =
-    (apiProperty?.area != null ? `${apiProperty.area} acres` : null) ??
-    popupSample?.projectExtent ??
-    property?.areaCents ??
-    "—";
-  const plotSize = apiPlotSize ?? popupSample?.plotSizes ?? property?.sqYards ?? "—";
-  const price =
-    apiProperty?.price_label ??
-    (apiProperty?.price ? formatPrice(apiProperty.price) : null) ??
-    popupSample?.pricePerSqYard ??
-    (property?.price ? formatInr(property.price) : "Price on request");
-  const starting =
-    apiProperty?.minimum_price != null
-      ? formatPrice(Number(apiProperty.minimum_price))
-      : apiProperty?.price
-        ? formatPrice(apiProperty.price)
-        : popupSample?.startingPrice ??
-          (property?.price ? formatInr(property.price) : "—");
-  const approval =
-    (apiProperty?.rera_registered ? "RERA registered" : null) ??
-    popupSample?.approvalLabel ?? property?.approval ?? "Approval pending";
-  const apiAmenities = apiProperty?.amenities?.filter(Boolean) ?? [];
-  const viewPropertyId =
-    property?.id ??
-    apiProperty?.id ??
-    (project?.id === "sark-green" ? "sark-green-plains" : project?.id);
-  const loanCalculatorHref = viewPropertyId
-    ? `/properties/${viewPropertyId}#affordability-financing`
-    : "#affordability-financing";
-
-  // Type scale: the phone sheet is tight, the sidebar has room to breathe.
-  const t = dense
-    ? {
-        eyebrow: "text-[10px]",
-        name: "text-[16px]",
-        location: "text-[12px]",
-        price: "text-[16px]",
-        sub: "text-[12px]",
-        chip: "text-[10px]",
-        chipPad: "px-2.5 py-0.5",
-        statPad: "py-2",
-        statValue: "text-[13px]",
-        statLabel: "text-[9px]",
-        tab: "text-sm",
-        body: "text-sm",
-        action: "text-[13px]",
-        actionPad: "py-3",
-      }
-    : {
-        eyebrow: "text-[11px]",
-        name: "text-xl",
-        location: "text-[13px]",
-        price: "text-2xl",
-        sub: "text-xs",
-        chip: "text-[11px]",
-        chipPad: "px-2.5 py-1",
-        statPad: "py-3",
-        statValue: "text-[15px]",
-        statLabel: "text-[10px]",
-        tab: "text-sm",
-        body: "text-sm",
-        action: "text-sm",
-        actionPad: "py-3.5",
-      };
-
-  // Surface palette for this host. See `SHEET_TONE`.
-  const c = SHEET_TONE[tone];
-
-  // Non-collapsible hosts (desktop sidebar) always render the full card.
-  const showFull = expanded || !collapsible;
-
-  // Every tab body shares one surface, so switching tabs never changes the
-  // card's padding, border or shadow. `text` is set here on purpose: the page
-  // sets body colour to white, so a panel with no explicit colour of its own
-  // would render its body copy white-on-white in either theme.
-  const panel = `rounded-2xl border ${c.panel} p-4 shadow-[0_2px_10px_rgba(36,35,31,0.05)] sm:p-5 ${c.panelBody}`;
-  const panelLabel =
-    `block text-[11px] font-semibold tracking-[0.16em] uppercase ${c.panelLabel}`;
-
-  // Chips always wrap — long approval labels must never be clipped.
-  const chips = (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span
-        className={`inline-flex max-w-full items-center gap-1.5 rounded-full border ${c.greenChip} ${t.chipPad} ${t.chip} font-semibold`}
-      >
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#1f8a68]" />
-        <span className="wrap-break-word">{approval}</span>
-      </span>
-      {property?.reraRegistered ? (
-        <span
-          className={`inline-flex shrink-0 items-center gap-1 rounded-full border ${c.goldChip} ${t.chipPad} ${t.chip} font-semibold tracking-[0.08em] uppercase`}
-        >
-          <span className="text-[9px] leading-none">✦</span>
-          RERA
-        </span>
-      ) : null}
-    </div>
-  );
-
-  if (showFull) {
-    return (
-      <div className={className}>
-        {popupImage ? (
-          <div className={`relative h-52 w-full shrink-0 overflow-hidden rounded-2xl border ${c.media} shadow-[0_10px_26px_rgba(36,35,31,0.10)] sm:h-60`}>
-            <Image
-              src={popupImage.src}
-              alt={popupImage.alt}
-              fill
-              sizes="(min-width: 768px) 420px, 100vw"
-              className="object-cover"
-            />
-            {/* Inventory is the number buyers look for first, so it is lifted
-                out of the stats grid and pinned to the hero. */}
-            <span className="absolute top-3 right-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/90 py-1 pr-2.5 pl-2 text-[10px] font-semibold tracking-[0.04em] text-[#1f5c45] shadow-[0_2px_8px_rgba(0,0,0,0.18)] backdrop-blur">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#1f8a68]" />
-              {availablePlots} available
-            </span>
-            <div className="absolute inset-0 bg-linear-to-t from-black/88 via-black/35 to-black/10" />
-            <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
-              <p
-                className={`${t.eyebrow} flex items-center gap-2 font-semibold tracking-[0.2em] uppercase ${c.onPhotoGold}`}
-              >
-                <span className={`h-px w-4 shrink-0 ${c.onPhotoRule}`} />
-                Selected property
-              </p>
-              <h3
-                className={`${t.name} mt-1.5 text-balance font-semibold tracking-tight ${c.onPhoto}`}
-              >
-                {projectName}
-              </h3>
-              <p
-                className={`${t.location} mt-1.5 flex items-start gap-1.5 ${c.onPhotoMuted}`}
-              >
-                <PinIcon className={`mt-[0.15em] h-3.5 w-3.5 shrink-0 ${c.onPhotoGold}`} />
-                <span className="min-w-0 wrap-break-word">{projectLocation}</span>
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="shrink-0 pr-9">
-            <p
-              className={`${t.eyebrow} flex items-center gap-2 font-semibold tracking-[0.2em] uppercase ${c.goldInk}`}
-            >
-              <span className={`h-px w-4 shrink-0 ${c.noPhotoGold}`} />
-              Selected property
-            </p>
-            <h3
-              className={`${t.name} mt-1.5 text-balance font-semibold tracking-tight ${c.ink}`}
-            >
-              {projectName}
-            </h3>
-            <p className={`${t.location} mt-1.5 flex items-start gap-1.5 ${c.muted}`}>
-              <PinIcon className={`mt-[0.15em] h-3.5 w-3.5 shrink-0 ${c.noPhotoGold}`} />
-              <span className="min-w-0 wrap-break-word">{projectLocation}</span>
-            </p>
-          </div>
-        )}
-
-        {/* Price is the most-sought value, so it owns the only inverted surface in
-            the card; approval and RERA stay together in the status strip below. */}
-        <div className={`relative mt-4 overflow-hidden rounded-2xl border ${c.price} p-4 shadow-[0_12px_28px_rgba(36,35,31,0.16)] sm:p-5`}>
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-x-5 top-0 h-px bg-linear-to-r from-transparent via-[#c6a46c]/70 to-transparent"
-          />
-          <span
-            className={`${t.eyebrow} block font-semibold tracking-[0.18em] uppercase ${c.priceLabel}`}
-          >
-            Price
-          </span>
-          <strong
-            className={`${t.price} mt-1.5 block max-w-full wrap-break-word font-bold tracking-tight text-white`}
-          >
-            {price}
-          </strong>
-          <div className="mt-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-white/12 pt-3 text-xs">
-            <span className={c.priceMuted}>Starting from</span>
-            <span className="font-semibold text-white">{starting}</span>
-          </div>
-        </div>
-
-        <div className="mt-3.5">{chips}</div>
-
-        {/* Four values read as one spec sheet: a label/value row each, rather
-            than four tall tiles. Accents echo the master-plan palette so a
-            number can be traced back to its meaning on the map. */}
-        <dl className={`mt-4 overflow-hidden rounded-2xl border ${c.panel} shadow-[0_2px_10px_rgba(36,35,31,0.05)]`}>
-          {[
-            { label: "Total plots", value: totalPlots, accent: "#8a8174" },
-            { label: "Available", value: availablePlots, accent: "#1F8A68" },
-            { label: "Acres", value: projectExtent, accent: "#7CB342" },
-            { label: "Plot size", value: plotSize, accent: "#C6A46C" },
-          ].map((stat, index) => (
-            <div
-              key={stat.label}
-              className={`flex min-w-0 items-baseline justify-between gap-3 px-3.5 py-2 sm:px-4 ${
-                index === 0 ? "" : `border-t ${c.divider}`
-              }`}
-            >
-              <dt
-                className={`${t.statLabel} flex min-w-0 items-center gap-2 font-semibold tracking-[0.1em] uppercase ${c.faint}`}
-              >
-                <span
-                  aria-hidden
-                  className="h-1.5 w-1.5 shrink-0 self-center rounded-full"
-                  style={{ backgroundColor: stat.accent }}
-                />
-                <span className="wrap-break-word">{stat.label}</span>
-              </dt>
-              <dd
-                className={`${t.statValue} min-w-0 wrap-break-word text-right font-bold ${c.ink}`}
-              >
-                {stat.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-
-        <div
-          role="tablist"
-          aria-label="Property information"
-          className={`ila-tabs-scroll mt-5 flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden border-b [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-6 ${c.edge}`}
-        >
-          {SHEET_TABS.map((item) => (
-            <button
-              key={item}
-              type="button"
-              role="tab"
-              id={`property-tab-${item}`}
-              aria-selected={tab === item}
-              aria-controls={`property-panel-${item}`}
-              onClick={() => onTabChange(item)}
-              className={`relative shrink-0 whitespace-nowrap snap-start pb-2.5 font-semibold capitalize transition-colors ${t.tab} ${
-                tab === item
-                  ? `${c.tabActive} after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-[#c6a46c]`
-                  : c.tabIdle
-              }`}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-
-        {/* Every tab renders inside the same surface, and only the active one
-            is mounted, so the block never shifts as the reader switches. */}
-        <div
-          role="tabpanel"
-          id={`property-panel-${tab}`}
-          aria-labelledby={`property-tab-${tab}`}
-          className="mt-3.5"
-        >
-          {tab === "about" ? (
-            <div className={panel}>
-              <p className={`${panelLabel} mb-2.5`}>About the project</p>
-              <p className={`${t.body} leading-relaxed`}>
-                {apiProperty?.description ??
-                  property?.description ??
-                  property?.tagline ??
-                  "Project details are available on the property page."}
-              </p>
-            </div>
-          ) : null}
-          {tab === "location" ? (
-            <div className={panel}>
-              <p className={`${panelLabel} mb-2.5`}>Nearby landmarks</p>
-              <ul>
-                {(
-                  popupSample?.locationHighlights ??
-                  property?.nearbyAmenities.map(
-                    (item) => `${item.name} · ${item.distanceKm} km`,
-                  ) ?? [projectLocation]
-                ).map((item, index) => (
-                  <li
-                    key={item}
-                    className={`flex min-w-0 items-center gap-2.5 py-2 ${
-                      index === 0 ? "" : `border-t ${c.divider}`
-                    }`}
-                  >
-                    <span className="h-1.5 w-1.5 shrink-0 self-center rounded-full bg-[#c6a46c]" />
-                    <span className={`min-w-0 flex-1 wrap-break-word ${t.body}`}>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {tab === "amenities" ? (
-            <div className={panel}>
-              <p className={panelLabel}>Amenities</p>
-              {/* Exactly two rows, side by side. `grid-flow-col` fills the
-                  first row then the second, so the list scrolls sideways
-                  instead of growing taller as amenities are added. */}
-              <ul className="ila-tabs-scroll -mx-1 mt-2.5 grid auto-cols-max grid-flow-col grid-rows-2 gap-1.5 overflow-x-auto overflow-y-hidden px-1 pb-1 [grid-auto-columns:max-content] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {(
-                  (apiAmenities.length ? apiAmenities : null) ??
-                  popupSample?.amenities ??
-                  property?.features ??
-                  property?.nearbyAmenities.map((item) => item.name) ?? [
-                    "Details available on request",
-                  ]
-                ).map((item) => (
-                  <li
-                    key={item}
-                    className={`${t.sub} flex items-center rounded-full border ${c.softChip} px-3 py-1.5 font-medium`}
-                  >
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {tab === "developer" ? (
-            <div className={panel}>
-              <p className={`${panelLabel} mb-2.5`}>Developer</p>
-              <div className="flex items-center gap-3">
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base ${c.tile}`}>
-                  ◆
-                </span>
-                <div className="min-w-0">
-                  <strong className={`block wrap-break-word text-sm font-semibold ${c.ink}`}>
-                    {popupSample?.developer ?? "Developer information"}
-                  </strong>
-                  <p className={`mt-0.5 wrap-break-word text-xs ${c.muted}`}>
-                    {popupSample
-                      ? `${popupSample.developerExperience} · ${popupSample.projectsCompleted} projects completed`
-                      : "Developer details available on the property page."}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mt-5 space-y-2">
-          {viewPropertyId ? (
-            <Link
-              href={`/properties/${viewPropertyId}`}
-              className={`${t.action} group flex w-full items-center justify-center gap-2 rounded-xl px-3 py-3.5 font-semibold shadow-[0_8px_20px_rgba(36,35,31,0.18)] transition active:scale-[0.99] ${c.primary}`}
-            >
-              View Project
-              <ArrowIcon className="h-4 w-4 transition group-hover:translate-x-0.5" />
-            </Link>
-          ) : null}
-          <div className="grid grid-cols-2 gap-2">
-            <Link
-              href="#brochure"
-              className={`${t.action} flex items-center justify-center rounded-xl px-2 py-3.5 text-center font-medium transition ${c.secondary}`}
-            >
-              Brochure
-            </Link>
-            <Link
-              href={loanCalculatorHref}
-              className={`${t.action} flex items-center justify-center rounded-xl px-2 py-3.5 text-center font-medium transition ${c.secondary}`}
-            >
-              Loan Calculator
-            </Link>
-          </div>
-        </div>
-
-        {collapsible ? (
-          <button
-            type="button"
-            aria-expanded
-            onClick={onToggle}
-            className={`${t.action} ${t.actionPad} mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 font-semibold transition active:scale-[0.99] ${c.tertiary}`}
-          >
-            Show less
-            <ChevronIcon className="h-4 w-4 rotate-180" />
-          </button>
-        ) : null}
-      </div>
-    );
-  }
-
-  // Minimized phone sheet. Deliberately two short bands — identity, then one
-  // tappable status strip — so it occupies only the bottom sliver of the map
-  // and leaves the layout it describes visible.
+function FamilyIcon({ className = "" }: { className?: string }) {
   return (
-    <div className={className}>
-      <div className="flex items-center gap-2.5">
-        {popupImage ? (
-          <div className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border ${c.media}`}>
-            <Image
-              src={popupImage.src}
-              alt={popupImage.alt}
-              fill
-              sizes="48px"
-              className="object-cover"
-            />
-            <span className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent" />
-            <span className="absolute inset-x-0 bottom-0 pb-0.5 text-center text-[9px] font-bold text-white">
-              {availablePlots}/{totalPlots}
-            </span>
-          </div>
-        ) : null}
-
-        <div className="min-w-0 flex-1">
-          <h3
-            className={`${t.name} line-clamp-1 text-balance font-semibold tracking-tight ${c.ink}`}
-          >
-            {projectName}
-          </h3>
-          <p
-            className={`${t.location} mt-0.5 flex items-center gap-1 ${c.muted}`}
-          >
-            <PinIcon className={`h-3 w-3 shrink-0 ${c.noPhotoGold}`} />
-            <span className="min-w-0 truncate">{projectLocation}</span>
-          </p>
-          <div className="mt-0.5 flex items-baseline gap-1.5">
-            <strong
-              className={`${t.price} min-w-0 truncate font-bold tracking-tight ${c.ink}`}
-            >
-              {price}
-            </strong>
-            <span className={`${t.sub} min-w-0 truncate font-medium ${c.muted}`}>
-              · from {starting}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Status and key numbers on one fixed-height row. The row is still
-          tappable, but the expand affordance now lives in the control row
-          above, so no chevron is needed here. */}
-      <button
-        type="button"
-        aria-expanded={false}
-        onClick={onToggle}
-        className={`mt-2 flex w-full items-center rounded-lg border px-2 py-1.5 text-left transition active:scale-[0.99] ${c.strip}`}
-      >
-        <span className="flex w-full min-w-0 items-center gap-1.5">
-          <span
-            className={`inline-flex max-w-[7rem] shrink-0 items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${c.greenChip}`}
-          >
-            <span className="h-1 w-1 shrink-0 rounded-full bg-[#1f8a68]" />
-            {property?.reraRegistered ? "RERA" : approval}
-          </span>
-          <span
-            className={`${t.sub} min-w-0 truncate font-semibold ${c.muted}`}
-          >
-            {availablePlots} avail · {projectExtent} · {plotSize}
-          </span>
-        </span>
-      </button>
-    </div>
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="9.5" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M3.5 20v-1.5A4.5 4.5 0 0 1 8 14h3a4.5 4.5 0 0 1 4.5 4.5V20"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16.5 5.3a3 3 0 0 1 0 5.4M18 14.2A4.5 4.5 0 0 1 20.5 18.5V20"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
+
+function TreeIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 2.5 6.5 9.5h11L12 2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 7 5 16h14L12 7Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 16v5.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ShieldIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 2.5 4.5 5.8v5.6c0 4.5 3.1 8.2 7.5 10.1 4.4-1.9 7.5-5.6 7.5-10.1V5.8L12 2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function GrowthIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M3.5 16.5 9 11l3.5 3.5L20.5 6.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M15.5 6.5h5v5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CheckIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M5 13l4.5 4.5L19 7"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function featureIcon(key: string, className = "h-4 w-4"): React.ReactNode {
+  const k = key.toLowerCase();
+
+  if (/famil|child|kid|play/.test(k)) {
+    return <FamilyIcon className={className} />;
+  }
+  if (/tree|green|park|nature|lake|garden|palm/.test(k)) {
+    return <TreeIcon className={className} />;
+  }
+  if (/shiel|secur|safe|gated|cctv|guard|boundary/.test(k)) {
+    return <ShieldIcon className={className} />;
+  }
+  if (/growth|grow|appreciat|return|invest|yield|profit|future/.test(k)) {
+    return <GrowthIcon className={className} />;
+  }
+  return null;
+}
+
 
 /**
  * One row of the "Our Developments" list: a row straight from
@@ -1050,40 +470,81 @@ function fitBounds(
  * pins are placed at their exact coordinates instead of being nudged apart to
  * stop labels colliding.
  */
-function createProjectPin(project: MapPin) {
+function createProjectPin(
+  project: MapPin,
+  options?: {
+    isHighlighted?: boolean;
+    isDimmed?: boolean;
+    compareSelected?: boolean;
+    isCompareMode?: boolean;
+    compareIndex?: number;
+    tagPlacement?: "top" | "right" | "left" | "bottom";
+  },
+) {
   const el = document.createElement("button");
   el.type = "button";
-  el.className = "ila-project-pin";
+  const placementClass = `ila-project-pin--tag-${options?.tagPlacement || "right"}`;
+  let classes = `ila-project-pin group ${placementClass}`;
+  if (options?.compareSelected) {
+    classes += " ila-project-pin--compare-selected";
+  } else if (options?.isCompareMode) {
+    classes += " ila-project-pin--compare-mode";
+  } else if (options?.isHighlighted) {
+    classes += " ila-project-pin--highlighted";
+  } else if (options?.isDimmed) {
+    classes += " ila-project-pin--dimmed";
+  }
+  el.className = classes;
   el.setAttribute(
     "aria-label",
     project.location ? `${project.name}, ${project.location}` : project.name,
   );
-  el.title = `${project.name} — open master plan`;
-  el.innerHTML = PIN_ICON;
+
+  const priceHtml = project.formattedPrice
+    ? `<span class="ila-pin-tooltip__price">${project.formattedPrice}</span>`
+    : "";
+  const locationHtml = project.location
+    ? `<span class="ila-pin-tooltip__loc">${project.location}</span>`
+    : "";
+
+  const badgeHtml =
+    typeof options?.compareIndex === "number"
+      ? `<span class="ila-project-pin__badge">${options.compareIndex}</span>`
+      : "";
+
+  // Tag should consistently show price / starting from
+  const tagText =
+    project.formattedPrice ||
+    (project.price ? `From ${formatPrice(project.price)}` : "Price on request");
+
+  el.innerHTML = `
+    ${badgeHtml}
+    <div class="ila-project-pin__anchor">
+      <div class="ila-project-pin__halo" aria-hidden="true"></div>
+      <div class="ila-project-pin__core">
+        <svg viewBox="300 205 180 135" class="ila-project-pin__icon" aria-hidden="true" fill="currentColor">
+          <rect x="311" y="216" width="19" height="112" />
+          <path d="M 339 216 H 358 V 300 H 405 V 328 H 361 Q 339 328 339 306 Z" />
+          <path fill-rule="evenodd" d="M 378 296 L 414 216 H 434 L 470 296 H 449 L 441 278 H 406 L 398 296 Z M 412 262 H 435 L 424 236 Z" />
+        </svg>
+      </div>
+      <div class="ila-project-pin__needle" aria-hidden="true"></div>
+      <div class="ila-project-pin__point" aria-hidden="true"></div>
+    </div>
+    <div class="ila-pin-tag" aria-hidden="true">
+      <span class="ila-pin-tag__text">${tagText}</span>
+    </div>
+    <div class="ila-pin-tooltip" aria-hidden="true">
+      <span class="ila-pin-tooltip__eyebrow">Development</span>
+      <strong class="ila-pin-tooltip__name">${project.name}</strong>
+      ${locationHtml}
+      ${priceHtml}
+      <span class="ila-pin-tooltip__arrow"></span>
+    </div>
+  `;
   return el;
 }
 
-function setLayoutData(map: MapLibreMap, project: EstateProject | null) {
-  const set = (id: string, data: object) => {
-    const source = map.getSource(id) as GeoJSONSource | undefined;
-    source?.setData(data as GeoJSON.FeatureCollection);
-  };
-
-  if (!project) {
-    set("estate-site-pad", EMPTY_FC);
-    set("estate-open-areas", EMPTY_FC);
-    set("estate-plots", EMPTY_FC);
-    set("estate-roads", EMPTY_FC);
-    set("estate-road-centers", EMPTY_FC);
-    return;
-  }
-
-  set("estate-site-pad", project.sitePadGeo);
-  set("estate-open-areas", project.openAreasGeo);
-  set("estate-plots", project.plotsGeo);
-  set("estate-roads", project.roadsGeo);
-  set("estate-road-centers", project.roadCenterlinesGeo);
-}
 
 export type MapSectionProps = {
   propertyId?: string;
@@ -1091,6 +552,7 @@ export type MapSectionProps = {
   hideDetails?: boolean;
   hideSearch?: boolean;
   highlightAvailable?: boolean;
+  onMapLoaded?: () => void;
 };
 
 export default function MapSection({
@@ -1099,6 +561,7 @@ export default function MapSection({
   hideDetails = false,
   hideSearch = false,
   highlightAvailable = false,
+  onMapLoaded,
 }: MapSectionProps = {}) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -1123,6 +586,9 @@ export default function MapSection({
   const applyInteractionsRef = useRef<() => void>(() => {});
   const [desktopScrollHint, setDesktopScrollHint] = useState(false);
   const desktopScrollHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [userMapViewMode, setUserMapViewMode] = useState<MapViewMode>("default");
+  const [maxZoomNotice, setMaxZoomNotice] = useState(false);
+  const maxZoomNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapFrameRef = useRef<HTMLDivElement | null>(null);
   const fittedPinsRef = useRef("");
   /** Coalesces the auto-fit while pins stream in, so the camera moves once. */
@@ -1192,6 +658,173 @@ export default function MapSection({
   const [propertyAnchors, setPropertyAnchors] = useState<
     Record<string, PropertyAnchor>
   >({});
+
+  // Feature preferences (Find Your Plot tags)
+  const [features, setFeatures] = useState<PropertyFeature[]>([]);
+  const [selectedFeatureKeys, setSelectedFeatureKeys] = useState<string[]>([]);
+  const tagsScrollRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  // Fetch active features for the bottom chips
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchActiveFeatures(controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setFeatures(data);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        console.warn("[MapSection] could not load features", err);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const checkTagsScroll = useCallback(() => {
+    const el = tagsScrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    checkTagsScroll();
+    const el = tagsScrollRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", checkTagsScroll, { passive: true });
+    window.addEventListener("resize", checkTagsScroll);
+    return () => {
+      el.removeEventListener("scroll", checkTagsScroll);
+      window.removeEventListener("resize", checkTagsScroll);
+    };
+  }, [features, checkTagsScroll]);
+
+  const scrollTags = (direction: "left" | "right") => {
+    const el = tagsScrollRef.current;
+    if (!el) return;
+    const amount = direction === "left" ? -240 : 240;
+    el.scrollBy({ left: amount, behavior: "smooth" });
+  };
+
+  const toggleFeatureKey = (key: string) => {
+    setSelectedFeatureKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  };
+
+  // IDs of properties that match the selected features (from API or local amenities)
+  const [featureMatchedPropertyIds, setFeatureMatchedPropertyIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (selectedFeatureKeys.length === 0) {
+      setFeatureMatchedPropertyIds([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    findPropertiesByFeatures(selectedFeatureKeys, controller.signal)
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        const apiIds = (res.items ?? []).map((item) => item.property_id);
+        
+        // Also fallback/augment with local amenities matching for demo/offline resilience
+        const localMatches = propertyList
+          .filter((item) => {
+            const propAmenities = (item.amenities || []).map((a) => a.toLowerCase());
+            const propRec = getPropertyById(
+              item.id === "sark-green" ? "sark-green-plains" : item.id,
+            );
+            const propFeatures = (propRec?.features || []).map((f) => f.toLowerCase());
+            const allTags = [...propAmenities, ...propFeatures];
+
+            return selectedFeatureKeys.some((fKey) => {
+              const k = fKey.toLowerCase();
+              return allTags.some((tag) => tag.includes(k) || k.includes(tag));
+            });
+          })
+          .map((item) => item.id);
+
+        const combined = Array.from(new Set([...apiIds, ...localMatches]));
+        setFeatureMatchedPropertyIds(combined);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        console.warn("[MapSection] findPropertiesByFeatures error, falling back to local amenities:", err);
+
+        // Fallback to local amenities & features check
+        const localMatches = propertyList
+          .filter((item) => {
+            const propAmenities = (item.amenities || []).map((a) => a.toLowerCase());
+            const propRec = getPropertyById(
+              item.id === "sark-green" ? "sark-green-plains" : item.id,
+            );
+            const propFeatures = (propRec?.features || []).map((f) => f.toLowerCase());
+            const allTags = [...propAmenities, ...propFeatures];
+
+            return selectedFeatureKeys.some((fKey) => {
+              const k = fKey.toLowerCase();
+              return allTags.some((tag) => tag.includes(k) || k.includes(tag));
+            });
+          })
+          .map((item) => item.id);
+
+        setFeatureMatchedPropertyIds(localMatches);
+      });
+
+    return () => controller.abort();
+  }, [selectedFeatureKeys, propertyList]);
+
+  // Wishlist and EMI calculator overlays
+  const [wishlistOpen, setWishlistOpen] = useState(false);
+  const [emiOpen, setEmiOpen] = useState(false);
+  const [emiSelectingProperty, setEmiSelectingProperty] = useState(false);
+  const emiSelectingPropertyRef = useRef(false);
+  emiSelectingPropertyRef.current = emiSelectingProperty;
+  const [emiSelectedProperty, setEmiSelectedProperty] = useState<{
+    id: string;
+    name: string;
+    price: number;
+    location?: string;
+  } | null>(null);
+  const [desktopPropertyCardOpen, setDesktopPropertyCardOpen] = useState(false);
+
+  // Compare mode state (selecting properties on map & viewing comparison table)
+  const [compareSelectingMode, setCompareSelectingMode] = useState(false);
+  const compareSelectingModeRef = useRef(false);
+  compareSelectingModeRef.current = compareSelectingMode;
+  const [compareSelectedIds, setCompareSelectedIds] = useState<string[]>([]);
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+
+  const startCompareMode = useCallback((initialId?: string) => {
+    // Close any open property cards, layout, or mobile bottom-sheets
+    setActiveProjectId(null);
+    setSelectedProjectId(null);
+    setSelectedId(null);
+    setDesktopPropertyCardOpen(false);
+    setPropertySheetExpanded(false);
+    setMobilePlotExpanded(false);
+    setPanelOpen(false);
+
+    // Activate compare mode and auto-select initialId
+    setCompareSelectingMode(true);
+    if (initialId) {
+      setCompareSelectedIds((prev) =>
+        prev.includes(initialId) ? prev : [...prev, initialId],
+      );
+    }
+  }, []);
+
+  const toggleCompareId = useCallback((id: string) => {
+    setCompareSelectedIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((i) => i !== id);
+      }
+      if (prev.length >= 5) return prev;
+      return [...prev, id];
+    });
+  }, []);
+
 
   /**
    * Attaches the master plan to the open estate.
@@ -1317,7 +950,7 @@ export default function MapSection({
   const selectProperty = useCallback(
     async (
       propertyId: string,
-      options: { openLayout?: boolean; openSheet?: boolean; silent?: boolean } = {},
+      options: { openLayout?: boolean; openSheet?: boolean; openDesktopCard?: boolean; silent?: boolean } = {},
     ) => {
       // Any in-flight selection is now stale; abort it rather than racing it.
       selectAbortRef.current?.abort();
@@ -1359,6 +992,7 @@ export default function MapSection({
 
           if (options.openLayout) setActiveProjectId(staticProject.id);
           if (options.openSheet) setSelectedProjectId(staticProject.id);
+          if (options.openDesktopCard) setDesktopPropertyCardOpen(true);
 
           console.info(
             `[ILA Static] loaded ${staticProject.plots.length} plots`,
@@ -1426,6 +1060,7 @@ export default function MapSection({
           setPanelOpen(true);
           setFilter("all");
           if (options.openSheet) setSelectedProjectId(propertyId);
+          if (options.openDesktopCard) setDesktopPropertyCardOpen(true);
           console.info("[ILA API] property has no units and no coordinates", detail.name);
           return;
         }
@@ -1473,6 +1108,7 @@ export default function MapSection({
         // The layout can only be opened once its geometry is loaded.
         if (options.openLayout) setActiveProjectId(estate.id);
         if (options.openSheet) setSelectedProjectId(estate.id);
+        if (options.openDesktopCard) setDesktopPropertyCardOpen(true);
 
         console.info(
           `[ILA API] loaded ${estate.plots.length} plots`,
@@ -1581,21 +1217,71 @@ export default function MapSection({
     for (const item of propertyList) {
       const anchor = propertyAnchor(item) ?? propertyAnchors[item.id];
       if (!anchor) continue;
+
+      const itemAny = item as Record<string, unknown>;
+      const staticProp =
+        getPropertyById(item.id === "sark-green" ? "sark-green-plains" : item.id) ||
+        (item.slug ? getPropertyById(item.slug) : undefined);
+
+      const rawNum = (val: unknown): number | null => {
+        if (typeof val === "number" && Number.isFinite(val) && val > 0) return val;
+        if (typeof val === "string") {
+          const parsed = Number(val.trim());
+          if (Number.isFinite(parsed) && parsed > 0) return parsed;
+        }
+        return null;
+      };
+
+      const parsedMin = rawNum(itemAny.minimum_price);
+      const parsedTarget = rawNum(itemAny.target_price);
+      const parsedPrice = rawNum(item.price) ?? rawNum(staticProp?.price);
+
+      let displayPrice: string | null = null;
+      if (item.price_label && item.price_label.trim() && !item.price_label.toLowerCase().includes("request")) {
+        displayPrice = item.price_label.trim().replace(/\s+-\s+/g, " – ");
+        if (!/^(from|starting|₹)/i.test(displayPrice)) {
+          displayPrice = `From ${displayPrice}`;
+        }
+      } else if (staticProp?.priceLabel && !staticProp.priceLabel.toLowerCase().includes("request")) {
+        displayPrice = staticProp.priceLabel.trim().replace(/\s+-\s+/g, " – ");
+        if (!/^(from|starting|₹)/i.test(displayPrice)) {
+          displayPrice = `From ${displayPrice}`;
+        }
+      } else if (parsedMin && parsedTarget && parsedTarget > parsedMin) {
+        displayPrice = `${formatPrice(parsedMin)} – ${formatPrice(parsedTarget)}`;
+      } else if (parsedMin) {
+        displayPrice = `From ${formatPrice(parsedMin)}`;
+      } else if (parsedPrice) {
+        displayPrice = `From ${formatPrice(parsedPrice)}`;
+      } else if (staticProp?.price) {
+        displayPrice = `From ${formatInr(staticProp.price)}`;
+      }
+
       byId.set(item.id, {
         id: item.id,
         name: item.name,
         location: [item.locality, item.city].filter(Boolean).join(", ") || undefined,
         center: [anchor.longitude, anchor.latitude],
+        price: parsedPrice ?? parsedMin ?? null,
+        formattedPrice: displayPrice,
       });
     }
 
     for (const project of projects) {
       if (!byId.has(project.id)) {
+        const prop = getPropertyById(project.id === "sark-green" ? "sark-green-plains" : project.id);
+        const displayPrice = prop?.priceLabel
+          ? (prop.priceLabel.toLowerCase().startsWith("from") ? prop.priceLabel : `From ${prop.priceLabel}`)
+          : prop?.price
+            ? `From ${formatInr(prop.price)}`
+            : null;
         byId.set(project.id, {
           id: project.id,
           name: project.name,
           location: project.location,
           center: project.center,
+          price: prop?.price ?? null,
+          formattedPrice: displayPrice,
         });
       }
     }
@@ -1830,6 +1516,7 @@ export default function MapSection({
     setActiveProjectId(null);
     setSelectedProjectId(null);
     setSelectedId(null);
+    setDesktopPropertyCardOpen(false);
     setMobilePlotExpanded(false);
     setPropertySheetExpanded(false);
     setFilter("all");
@@ -1869,18 +1556,56 @@ export default function MapSection({
   }, []);
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    if (mapFullscreen) {
-      document.body.style.overflow = "hidden";
+    const onFullscreenChange = () => {
+      const isFs = Boolean(
+        document.fullscreenElement ||
+          (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement,
+      );
+      setMapFullscreen(isFs);
+      window.requestAnimationFrame(() => {
+        applyInteractionsRef.current();
+        mapRef.current?.resize();
+      });
+    };
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+    };
+  }, []);
+
+  const toggleNativeFullscreen = () => {
+    const el = sectionRef.current;
+    if (!el) return;
+
+    if (!document.fullscreenElement) {
+      if (el.requestFullscreen) {
+        void el.requestFullscreen().catch(() => setMapFullscreen(true));
+      } else if ((el as unknown as { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen) {
+        void (el as unknown as { webkitRequestFullscreen: () => Promise<void> }).webkitRequestFullscreen();
+      } else {
+        setMapFullscreen(true);
+      }
     } else {
-      document.body.style.overflow = previousOverflow;
+      if (document.exitFullscreen) {
+        void document.exitFullscreen().catch(() => setMapFullscreen(false));
+      } else if ((document as unknown as { webkitExitFullscreen?: () => Promise<void> }).webkitExitFullscreen) {
+        void (document as unknown as { webkitExitFullscreen: () => Promise<void> }).webkitExitFullscreen();
+      } else {
+        setMapFullscreen(false);
+      }
     }
+  };
+
+  useEffect(() => {
     const id = window.requestAnimationFrame(() => {
       applyInteractionsRef.current();
       mapRef.current?.resize();
     });
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.cancelAnimationFrame(id);
     };
   }, [mapFullscreen]);
@@ -1900,17 +1625,19 @@ export default function MapSection({
       const isMobileScreen =
         typeof window !== "undefined" &&
         !window.matchMedia("(min-width: 768px)").matches;
+      const enableCooperativeGestures = Boolean(singlePropertyId) && isMobileScreen;
       map = new MapLibreMap({
         container: mapContainerRef.current,
         style: MAP_STYLE,
         center: [78.42, 17.17],
         zoom: 11.4,
         pitch: 0,
+        maxZoom: 18.5,
         attributionControl: { compact: true },
-        dragRotate: false,
-        pitchWithRotate: false,
-        touchPitch: false,
-        cooperativeGestures: isMobileScreen,
+        dragRotate: true,
+        pitchWithRotate: true,
+        touchPitch: true,
+        cooperativeGestures: enableCooperativeGestures,
       });
     } catch (error) {
       console.error("Unable to initialize the developments map", error);
@@ -2001,49 +1728,27 @@ export default function MapSection({
     const applyMobileInteractions = () => {
       clearMobileTouchListeners();
       const isMobile = mobileQuery.matches;
-      const fullscreen = mapFullscreenRef.current;
+      const isPropertyPage = Boolean(singlePropertyId);
 
-      if (isMobile && !fullscreen) {
-        // Embedded map on mobile: cooperative gestures handles 2-finger panning & pinch zoom,
-        // allowing single-finger vertical page scroll through the map canvas.
+      if (isPropertyPage && isMobile && !mapFullscreenRef.current) {
+        // Enforce restriction to use two fingers on property pages:
         map.cooperativeGestures?.enable();
-        map.scrollZoom.enable();
+        map.scrollZoom.disable();
         map.dragPan.enable();
         map.touchZoomRotate.enable();
-        map.touchZoomRotate.disableRotation();
-        map.dragRotate.disable();
-        map.touchPitch.disable();
+        map.touchZoomRotate.enableRotation();
+        map.dragRotate.enable();
         setMobileTouchAction(true);
-        return;
-      }
-
-      // Fullscreen (expanded): full free map interaction (scroll zoom + drag pan)
-      if (fullscreen) {
+      } else {
+        // Unrestricted full interaction on desktop or homepage:
         map.cooperativeGestures?.disable();
         map.scrollZoom.enable();
         map.dragPan.enable();
         map.touchZoomRotate.enable();
-        map.dragRotate.disable();
-        map.touchPitch.disable();
-        if (isMobile) {
-          map.touchZoomRotate.disableRotation();
-        } else {
-          map.touchZoomRotate.enableRotation();
-        }
+        map.touchZoomRotate.enableRotation();
+        map.dragRotate.enable();
         setMobileTouchAction(false);
-        return;
       }
-
-      // Embedded on desktop: prevent scroll/touchpad from capturing page scroll,
-      // require clicking maximize / fullscreen button to interact freely.
-      map.cooperativeGestures?.disable();
-      map.scrollZoom.disable();
-      map.dragPan.enable();
-      map.touchZoomRotate.enable();
-      map.dragRotate.disable();
-      map.touchPitch.disable();
-      map.touchZoomRotate.enableRotation();
-      setMobileTouchAction(false);
     };
 
     const onWheel = () => {
@@ -2081,10 +1786,32 @@ export default function MapSection({
       window.requestAnimationFrame(() => map.resize());
       if (mobileQuery.matches) setMobileTouchAction(true);
 
+      const updateZoomClass = () => {
+        if (!mapContainerRef.current) return;
+        const currentZoom = map.getZoom();
+        if (currentZoom >= 12.5) {
+          mapContainerRef.current.classList.add("map--zoomed-in");
+        } else {
+          mapContainerRef.current.classList.remove("map--zoomed-in");
+        }
+
+        if (currentZoom >= 18.2) {
+          setMaxZoomNotice(true);
+          if (maxZoomNoticeTimerRef.current) clearTimeout(maxZoomNoticeTimerRef.current);
+          maxZoomNoticeTimerRef.current = setTimeout(() => {
+            setMaxZoomNotice(false);
+            maxZoomNoticeTimerRef.current = null;
+          }, 3200);
+        }
+      };
+      updateZoomClass();
+      map.on("zoom", updateZoomClass);
+
       // MAP_ZOOM_REGION: report the viewport the visitor settled on, so we can
       // tell which part of the layout they are exploring.
       let lastZoomRegion = "";
       map.on("moveend", () => {
+        updateZoomClass();
         const center = map.getCenter();
         const region = `${center.lat.toFixed(2)},${center.lng.toFixed(2)}@${map
           .getZoom()
@@ -2110,8 +1837,6 @@ export default function MapSection({
       map.addSource("estate-roads", { type: "geojson", data: EMPTY_FC });
       map.addSource("estate-road-centers", { type: "geojson", data: EMPTY_FC });
 
-      // Satellite imagery, hidden until a layout is open. Added before the
-      // estate layers so plots and labels stay on top of it.
       map.addSource(SATELLITE_SOURCE_ID, {
         type: "raster",
         tiles: [SATELLITE_TILES_URL],
@@ -2127,213 +1852,9 @@ export default function MapSection({
         paint: { "raster-fade-duration": 0 },
       });
 
-      // Created without a url: a layout preview is only known once a property
-      // is opened, and an image source left empty draws nothing until
-      // `updateImage` hands it one. The coordinates are the placeholder quad,
-      // replaced by the property's own extent on every load.
-      map.addSource(LAYOUT_RASTER_SOURCE_ID, {
-        type: "image",
-        coordinates: [
-          [78.37881930400647, 17.136994933863203], // NW
-          [78.3822802855224, 17.136994933863203], // NE
-          [78.3822802855224, 17.13329363718222], // SE
-          [78.37881930400647, 17.13329363718222], // SW
-        ],
-      });
-
-      map.addLayer({
-        id: LAYOUT_RASTER_LAYER_ID,
-        type: "raster",
-        source: LAYOUT_RASTER_SOURCE_ID,
-        layout: { visibility: "none" },
-        paint: {
-          "raster-opacity": 0.85,
-          "raster-fade-duration": 0,
-        },
-      });
-
-      map.addLayer({
-        id: "estate-site-pad-fill",
-        type: "fill",
-        source: "estate-site-pad",
-        layout: { visibility: "none" },
-        paint: {
-          "fill-color": LAYOUT.siteFill,
-          "fill-opacity": 0.72,
-        },
-      });
-      map.addLayer({
-        id: "estate-site-pad-edge",
-        type: "line",
-        source: "estate-site-pad",
-        layout: { visibility: "none" },
-        paint: {
-          "line-color": LAYOUT.siteEdge,
-          "line-width": 2,
-          "line-opacity": 0.85,
-          "line-dasharray": [1.5, 1.2],
-        },
-      });
-
-      map.addLayer({
-        id: "estate-open-fill",
-        type: "fill",
-        source: "estate-open-areas",
-        layout: { visibility: "none" },
-        paint: {
-          "fill-color": LAYOUT.openArea,
-          "fill-opacity": 0.55,
-        },
-      });
-      map.addLayer({
-        id: "estate-open-edge",
-        type: "line",
-        source: "estate-open-areas",
-        layout: { visibility: "none" },
-        paint: {
-          "line-color": LAYOUT.openAreaEdge,
-          "line-width": 1.4,
-        },
-      });
-
-      map.addLayer({
-        id: "estate-plots-fill",
-        type: "fill",
-        source: "estate-plots",
-        layout: { visibility: "none" },
-        paint: {
-          "fill-color": [
-            "match",
-            ["get", "statusNorm"],
-            "available",
-            LAYOUT.available,
-            LAYOUT.sold,
-          ],
-          "fill-opacity": 0.82,
-        },
-      });
-      map.addLayer({
-        id: "estate-plots-outline",
-        type: "line",
-        source: "estate-plots",
-        layout: { visibility: "none", "line-join": "miter" },
-        paint: {
-          "line-color": LAYOUT.plotEdge,
-          "line-width": 1.15,
-          "line-opacity": 0.95,
-        },
-      });
-      map.addLayer({
-        id: "estate-plots-label",
-        type: "symbol",
-        source: "estate-plots",
-        layout: {
-          visibility: "none",
-          "text-field": ["get", "plotNo"],
-          "text-size": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            15.5,
-            8,
-            17,
-            11,
-            18.5,
-            13,
-          ],
-          "text-allow-overlap": false,
-          "text-padding": 2,
-          "symbol-placement": "point",
-        },
-        paint: {
-          "text-color": "#1a1a1a",
-          "text-halo-color": "#ffffff",
-          "text-halo-width": 1.4,
-          "text-opacity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            15.8,
-            0,
-            16.2,
-            1,
-          ],
-        },
-      });
-
-      map.addLayer({
-        id: "estate-roads-fill",
-        type: "fill",
-        source: "estate-roads",
-        layout: { visibility: "none" },
-        paint: {
-          "fill-color": LAYOUT.road,
-          "fill-opacity": 1,
-        },
-      });
-      map.addLayer({
-        id: "estate-roads-casing",
-        type: "line",
-        source: "estate-roads",
-        layout: { visibility: "none", "line-cap": "butt", "line-join": "miter" },
-        paint: {
-          "line-color": LAYOUT.roadCasing,
-          "line-width": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            14,
-            4,
-            16.5,
-            8,
-            18,
-            14,
-          ],
-        },
-      });
-      map.addLayer({
-        id: "estate-roads-edge",
-        type: "line",
-        source: "estate-roads",
-        layout: { visibility: "none", "line-cap": "butt", "line-join": "miter" },
-        paint: {
-          "line-color": LAYOUT.roadLine,
-          "line-width": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            14,
-            2,
-            16.5,
-            4.5,
-            18,
-            8,
-          ],
-          "line-opacity": 1,
-        },
-      });
-      map.addLayer({
-        id: "estate-roads-center",
-        type: "line",
-        source: "estate-road-centers",
-        layout: { visibility: "none", "line-cap": "butt", "line-join": "round" },
-        paint: {
-          "line-color": LAYOUT.roadLine,
-          "line-width": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            14,
-            1.2,
-            16.5,
-            2.6,
-            18,
-            4.5,
-          ],
-          "line-opacity": 1,
-          "line-dasharray": [2.2, 1.8],
-        },
-      });
+      // Master Plan Layout sources, raster image layer, and vector plot/road layers
+      // configured cleanly in map-section-layouts.tsx
+      initLayoutLayers(map);
 
       const selectRenderedPlot = (event: MapMouseEvent) => {
         const feature = map.queryRenderedFeatures(event.point, {
@@ -2402,8 +1923,42 @@ export default function MapSection({
       ? pins.filter((pin) => pin.id !== activeProjectId)
       : pins;
 
-    visiblePins.forEach((project) => {
-      const el = createProjectPin(project);
+    const hasFeatureFilter = selectedFeatureKeys.length > 0;
+    const isComparing = compareSelectingMode;
+
+    visiblePins.forEach((project, index) => {
+      // Compare mode takes priority for pin appearance
+      const compareIndex = isComparing
+        ? compareSelectedIds.indexOf(project.id)
+        : -1;
+      const compareSelected = compareIndex >= 0;
+      const isCompareDimmed = isComparing && !compareSelected;
+
+      // Determine if pin matches active FindYourPlot selected features
+      const isMatch = hasFeatureFilter && featureMatchedPropertyIds.includes(project.id);
+      const isDimmed = isCompareDimmed || (!isComparing && hasFeatureFilter && !isMatch);
+      const isHighlighted = !isComparing && hasFeatureFilter && isMatch;
+
+      const placements: Array<"right" | "top" | "bottom" | "left"> = [
+        "right",
+        "top",
+        "bottom",
+        "left",
+      ];
+      const tagPlacement = placements[index % placements.length];
+
+      const el = createProjectPin(project, {
+        isHighlighted,
+        isDimmed,
+        compareSelected,
+        isCompareMode: isComparing,
+        compareIndex: compareSelected ? compareIndex + 1 : undefined,
+        tagPlacement,
+      });
+
+      if (emiSelectingProperty) {
+        el.classList.add("ila-project-pin--pulse");
+      }
       el.addEventListener("click", (event) => {
         event.stopPropagation();
 
@@ -2414,11 +1969,37 @@ export default function MapSection({
           metadata: { source: "map_pin", section_type: "hero_map" },
         });
 
-        // Pins are shown for every property, so a tap has to load that
-        // property. Both breakpoints draw the master plan; mobile also gets
-        // the compact property sheet floating over it.
+        // If user is currently in Compare Selection mode:
+        if (compareSelectingModeRef.current) {
+          toggleCompareId(project.id);
+          return;
+        }
+
+        // If user is selecting a property specifically for EMI calculation:
+        // Do not zoom in or load the estate layout; only set the selection and open the popup.
+        if (emiSelectingPropertyRef.current) {
+          const matchedItem = propertyList.find((p) => p.id === project.id);
+          const effectivePrice =
+            project.price ??
+            matchedItem?.price ??
+            5000000;
+          setEmiSelectedProperty({
+            id: project.id,
+            name: project.name,
+            price: effectivePrice,
+            location: project.location || [matchedItem?.locality, matchedItem?.city].filter(Boolean).join(", ") || undefined,
+          });
+          setEmiSelectingProperty(false);
+          setEmiOpen(true);
+          return;
+        }
+
+        // Normal mode: Pins are shown for every property, so a tap has to load that
+        // property. Desktop gets a floating property block on left center;
+        // mobile gets the minimized popup bottom sheet.
         void selectProperty(project.id, {
-          openSheet: isMobile,
+          openSheet: true,
+          openDesktopCard: !isMobile,
           openLayout: true,
         });
       });
@@ -2451,7 +2032,25 @@ export default function MapSection({
         }, 120);
       }
     }
-  }, [activeProjectId, mapReady, panelOpen, pins, pinsBounds, selectProperty]);
+
+    if (mapReady && pins.length > 0) {
+      onMapLoaded?.();
+    }
+  }, [
+    activeProjectId,
+    compareSelectedIds,
+    compareSelectingMode,
+    emiSelectingProperty,
+    featureMatchedPropertyIds,
+    mapReady,
+    onMapLoaded,
+    panelOpen,
+    pins,
+    pinsBounds,
+    selectProperty,
+    selectedFeatureKeys,
+    toggleCompareId,
+  ]);
 
   // A property with no plot geometry still gets the camera, just without a layout.
   useEffect(() => {
@@ -2506,21 +2105,21 @@ export default function MapSection({
   }, [activeProject, mapReady, panelOpen]);
 
   /**
-   * A layout is read against the ground it sits on, so the basemap switches to
-   * satellite imagery while a master plan is open and back to the vector style
-   * when it closes. Only toggles layer visibility, so nothing is re-requested
-   * unless the layer is actually on screen.
+   * Switches to satellite imagery if either the user explicitly toggled
+   * "satellite" mode, or while an active estate master plan layout is open.
    */
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !map.getLayer(SATELLITE_LAYER_ID)) return;
 
+    const showSatellite = userMapViewMode === "satellite" || layoutOpen;
+
     map.setLayoutProperty(
       SATELLITE_LAYER_ID,
       "visibility",
-      layoutOpen ? "visible" : "none",
+      showSatellite ? "visible" : "none",
     );
-  }, [layoutOpen, mapReady]);
+  }, [layoutOpen, mapReady, userMapViewMode]);
 
   // Highlight selected plot
   useEffect(() => {
@@ -2568,74 +2167,6 @@ export default function MapSection({
       3.2,
       1.15,
     ]);
-
-    // When highlightAvailable is active and no single plot is picked,
-    // run a smooth, noticeable pulsing animation on all available plots.
-    if (highlightAvailable && !active) {
-      let animFrameId: number;
-      const startTime = performance.now();
-      const baseFill = activeProject?.layoutRaster ? 0.45 : 0.72;
-
-      // Pulse between emerald green and bright mint-green glow
-      const animatePulse = (currentTime: number) => {
-        const elapsed = (currentTime - startTime) / 1000;
-        // Smooth sine wave oscillating between 0 and 1 over ~2.0 seconds
-        const t = (Math.sin(elapsed * 3.14) + 1) / 2;
-        const availableOpacity = baseFill + t * 0.35;
-        const availableLineWidth = 1.3 + t * 2.2;
-        // Interpolate between deep emerald (#1F8A68) and vibrant glowing green (#34D399)
-        const pulseR = Math.round(31 + t * (52 - 31));
-        const pulseG = Math.round(138 + t * (211 - 138));
-        const pulseB = Math.round(104 + t * (153 - 104));
-        const pulseColor = `rgb(${pulseR}, ${pulseG}, ${pulseB})`;
-
-        if (map.getLayer("estate-plots-fill")) {
-          map.setPaintProperty("estate-plots-fill", "fill-color", [
-            "case",
-            ["==", ["get", "id"], active],
-            LAYOUT.selected,
-            [
-              "match",
-              ["get", "statusNorm"],
-              "available",
-              pulseColor,
-              LAYOUT.sold,
-            ],
-          ]);
-          map.setPaintProperty("estate-plots-fill", "fill-opacity", [
-            "match",
-            ["get", "statusNorm"],
-            "available",
-            Math.min(availableOpacity, 0.98),
-            baseOpacity * 0.7,
-          ]);
-        }
-
-        if (map.getLayer("estate-plots-outline")) {
-          map.setPaintProperty("estate-plots-outline", "line-width", [
-            "match",
-            ["get", "statusNorm"],
-            "available",
-            availableLineWidth,
-            1.15,
-          ]);
-          map.setPaintProperty("estate-plots-outline", "line-color", [
-            "match",
-            ["get", "statusNorm"],
-            "available",
-            t > 0.5 ? "#E6FFFA" : "#FFFFFF",
-            LAYOUT.plotEdge,
-          ]);
-        }
-
-        animFrameId = requestAnimationFrame(animatePulse);
-      };
-
-      animFrameId = requestAnimationFrame(animatePulse);
-      return () => {
-        cancelAnimationFrame(animFrameId);
-      };
-    }
   }, [
     selectedId,
     layoutOpen,
@@ -2643,7 +2174,6 @@ export default function MapSection({
     activeProject?.id,
     activeProject?.plots.length,
     activeProject?.layoutRaster,
-    highlightAvailable,
   ]);
 
   useEffect(() => {
@@ -2759,90 +2289,46 @@ export default function MapSection({
         mapFullscreen
           ? "fixed inset-0 z-50 flex w-full flex-col overflow-hidden bg-neutral-200"
           : className
-            ? `relative flex w-full flex-col overflow-hidden bg-[#ebe6de] md:bg-neutral-200 ${className}`
-            : "relative flex h-[calc(100svh-var(--nav-h))] w-full flex-col overflow-hidden bg-[#ebe6de] md:h-[calc(100dvh-var(--nav-h))] md:bg-neutral-200"
+            ? `relative flex w-full flex-col overflow-hidden bg-neutral-200 ${className}`
+            : "relative flex h-[calc(100vh-var(--nav-h))] min-h-[calc(100vh-var(--nav-h))] w-full flex-col overflow-hidden bg-neutral-200"
       }
       aria-label="ILA Homes developments map"
       aria-busy={remoteStatus === "loading"}
     >
-      {/* Mobile heading. The desktop equivalent lives in the md+ sidebar, so
-          both breakpoints show the same title and supporting line. */}
-      <header
-        className={`shrink-0 px-3 pt-3 pb-2 md:hidden ${mapFullscreen ? "hidden" : ""}`}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold tracking-[0.22em] text-[#7a5c28] uppercase">
-              {singlePropertyId ? "Master Plan & Layout" : "Our Developments"}
-            </p>
-            <h2 className="mt-1 text-lg leading-tight font-semibold tracking-tight text-[#171717]">
-              {singlePropertyId
-                ? (activeProject?.name ?? "Plot Layout")
-                : "Find Your Place in Hyderabad."}
-            </h2>
-            <p className="mt-1 text-xs leading-relaxed text-[#3f3a34]">
-              {singlePropertyId
-                ? "Tap any plot to view dimensions, facing and availability."
-                : "Tap a project pin to open its estate layout on the map."}
-            </p>
-          </div>
-          {/* Mobile search option removed upon user request */}
-        </div>
-
-        {!hideSearch && searchOpen ? (
-          <div className="ila-map-search-panel--open mt-2 overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_8px_24px_rgba(15,23,42,0.12)]">
-            <div className="flex items-center justify-between border-b border-black/10 px-3 py-1.5">
-              <span className="text-xs font-semibold text-[#5c5348]">Filter Plots</span>
-              <button
-                type="button"
-                aria-label="Close filters"
-                onClick={() => setSearchOpen(false)}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#171717] text-white transition hover:bg-[#333333]"
-              >
-                <CloseIcon className="h-3 w-3" />
-              </button>
-            </div>
-            <div className="grid grid-cols-3">
-              {filters.map((item) => {
-                const active = filter === item.key;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => setFilter(item.key)}
-                    className={`border-r border-black/10 px-2 py-2 text-left transition last:border-r-0 ${
-                      active
-                        ? "bg-[#171717] text-white"
-                        : "bg-transparent text-[#171717] hover:bg-[#cfc3a8]"
-                    }`}
-                  >
-                    <span className="block text-[11px] font-semibold">
-                      {item.label}
-                    </span>
-                    <span
-                      className={`mt-0.5 block text-[10px] font-medium ${
-                        active ? "text-white/70" : "text-[#5c5348]"
-                      }`}
-                    >
-                      {item.count}
-                    </span>
-                  </button>
-                );
-              })}
+      {/* Mobile heading. Suppressed when hideDetails is true or fullscreen. */}
+      {!hideDetails && !mapFullscreen ? (
+        <header className="shrink-0 px-3 pt-3 pb-2 md:hidden">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold tracking-[0.22em] text-[#7a5c28] uppercase">
+                {singlePropertyId ? "Master Plan & Layout" : "Our Developments"}
+              </p>
+              <h2 className="mt-1 text-lg leading-tight font-semibold tracking-tight text-[#171717]">
+                {singlePropertyId
+                  ? (activeProject?.name ?? "Plot Layout")
+                  : "Find Your Place in Hyderabad."}
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-[#3f3a34]">
+                {singlePropertyId
+                  ? "Tap any plot to view dimensions, facing and availability."
+                  : "Tap a project pin to open its estate layout on the map."}
+              </p>
             </div>
           </div>
-        ) : null}
-      </header>
+        </header>
+      ) : null}
 
       <div
         ref={mapFrameRef}
         className={
           mapFullscreen
             ? "ila-map-frame ila-map-frame--fullscreen relative min-h-0 flex-1 overflow-hidden bg-neutral-200"
-            : "ila-map-frame relative mx-2 mb-2 min-h-72 flex-1 overflow-hidden rounded-xl border border-black/10 bg-neutral-200 shadow-[0_12px_36px_rgba(15,23,42,0.14)] md:absolute md:inset-3 md:m-0 md:min-h-0 md:rounded-xl"
+            : singlePropertyId
+              ? "ila-map-frame relative mx-2 mb-2 min-h-72 flex-1 overflow-hidden rounded-xl border border-black/10 bg-neutral-200 shadow-[0_12px_36px_rgba(15,23,42,0.14)] md:absolute md:inset-3 md:m-0 md:min-h-0 md:rounded-xl"
+              : "ila-map-frame relative h-full min-h-[400px] flex-1 overflow-hidden bg-neutral-200 md:absolute md:inset-0 md:m-0"
         }
       >
-        <div ref={mapContainerRef} className="absolute inset-0 h-full w-full" />
+        <div ref={mapContainerRef} className="absolute inset-0 h-full w-full min-h-full" />
 
         {mapError ? (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#ebe6de]/95 px-6 text-center">
@@ -2891,7 +2377,7 @@ export default function MapSection({
           <button
             type="button"
             aria-label="Exit fullscreen map"
-            onClick={() => setMapFullscreen(false)}
+            onClick={toggleNativeFullscreen}
             className="pointer-events-auto absolute top-3 left-3 z-30 flex items-center gap-2 rounded-lg bg-[#171717] px-3 py-2.5 text-xs font-semibold tracking-[0.12em] text-white uppercase shadow-[0_8px_24px_rgba(15,23,42,0.28)] transition hover:bg-[#333333]"
           >
             ← Back
@@ -2912,21 +2398,30 @@ export default function MapSection({
           </div>
         ) : null}
 
-        {/* Desktop zoom / touchpad hint: indicates using the maximize button when scrolling while embedded */}
-        {!mapFullscreen && desktopScrollHint ? (
-          <div
-            className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-40 hidden md:flex items-center gap-2 rounded-full border border-black/15 bg-neutral-900/90 px-4 py-2 text-xs font-semibold text-white shadow-xl backdrop-blur-sm animate-map-hint-fade"
-            role="status"
-          >
-            <span>Tap the maximize button</span>
-            <span className="flex h-5 w-5 items-center justify-center rounded bg-white/20 text-[10px]">
-              ⤢
-            </span>
-            <span>to freely zoom and interact</span>
+        {/* Top Left: Map Version Switcher (Default View / Satellite Version) */}
+        {/* Hidden when a property is clicked/open */}
+        {!compareSelectingMode && !activeProjectId && !selectedProjectId && !desktopPropertyCardOpen ? (
+          <div className={`absolute z-30 transition-all ${
+            mapFullscreen
+              ? "top-3 left-28 sm:left-32"
+              : !hideDetails && panelOpen
+                ? "top-3 left-3 sm:top-4 md:left-[23.5rem]"
+                : !hideDetails
+                  ? "top-3 left-3 sm:top-4 md:left-40"
+                  : hideDetails && (activeProject?.name || activeProperty?.name)
+                    ? "top-3 left-3 sm:top-4 md:left-56"
+                    : "top-3 left-3 sm:top-4 sm:left-4"
+          }`}>
+            <MapVersion
+              currentMode={userMapViewMode}
+              onModeChange={(mode) => setUserMapViewMode(mode)}
+            />
           </div>
         ) : null}
 
-        {!hideDetails && panelOpen ? (
+
+
+        {!hideDetails && panelOpen && !compareSelectingMode ? (
           <aside className="pointer-events-none absolute inset-y-0 left-0 z-20 hidden w-88 flex-col py-3 pl-3 md:flex sm:py-4">
             <div className="pointer-events-auto relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[8px_0_28px_rgba(15,23,42,0.14)]">
               {activeProject && !singlePropertyId ? (
@@ -2945,15 +2440,32 @@ export default function MapSection({
                 // The property card replaces both the heading and the plot
                 // list while a layout is open on the desktop sidebar.
                 <div className="ila-scroll min-h-0 max-h-full shrink overflow-y-auto overscroll-contain border-b border-black/10 px-3 pt-12 pb-4 sm:px-4 sm:pt-12">
-                  <PropertySheet
+                  <PropertyBlock
+                    desktopOpen={true}
+                    onCloseDesktop={closeLayout}
+                    portalReady={portalReady}
+                    selectedPlot={selectedPlot}
+                    mapFullscreen={mapFullscreen}
+                    mobileExpanded={propertySheetExpanded}
+                    onToggleMobileExpand={() => setPropertySheetExpanded((open) => !open)}
+                    onCloseMobile={() => {
+                      closeLayout();
+                      setPropertySheetExpanded(false);
+                    }}
                     project={activeProject}
                     property={activeProperty}
                     apiProperty={activePopupApiProperty}
-                    expanded
-                    dense={false}
-                    collapsible={false}
                     tab={propertySheetTab}
                     onTabChange={setPropertySheetTab}
+                    onOpenCompare={(propId) => {
+                      const idToCompare = propId || activePropertyId || activeProject?.id || activeProperty?.id;
+                      startCompareMode(idToCompare);
+                    }}
+                    onOpenEmi={(propertyInfo) => {
+                      setEmiSelectedProperty(propertyInfo);
+                      setEmiOpen(true);
+                      setEmiSelectingProperty(false);
+                    }}
                   />
                 </div>
               ) : (
@@ -3037,7 +2549,7 @@ export default function MapSection({
               </div>
             </div>
           </aside>
-        ) : !hideDetails ? (
+        ) : !hideDetails && !compareSelectingMode ? (
           <button
             type="button"
             aria-label="Open developments panel"
@@ -3049,151 +2561,36 @@ export default function MapSection({
           </button>
         ) : null}
 
-        {/* Desktop overlay — status filters (search box removed upon user request) */}
-        {!hideSearch ? (
-          <div className="pointer-events-none absolute top-3 right-3 z-20 hidden flex-col items-end gap-2 md:flex sm:top-4 sm:right-4">
-            <div className="pointer-events-auto flex w-auto flex-col overflow-hidden rounded-2xl border border-black/15 bg-[#eae4da]/95 shadow-[0_12px_32px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all">
-              <div className="grid grid-cols-3 divide-x divide-black/10">
-                {filters.map((item) => {
-                  const active = filter === item.key;
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => setFilter(item.key)}
-                      className={`px-2.5 py-2 text-left transition ${
-                        active
-                          ? "bg-[#171717] text-white"
-                          : "bg-transparent text-[#171717] hover:bg-[#cfc3a8]/60"
-                      }`}
-                    >
-                      <span className="block text-[11px] font-semibold sm:text-xs">
-                        {item.label}
-                      </span>
-                      <span
-                        className={`mt-0.5 block text-[10px] font-medium ${
-                          active ? "text-white/70" : "text-[#5c5348]"
-                        }`}
-                      >
-                        {item.count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        ) : null}
 
-        {/* Mobile development popup — shown when a property marker is tapped.
-            Suppressed in fullscreen or when hideDetails is true. */}
-        {portalReady && !hideDetails && selectedProject && !selectedPlot && !mapFullscreen
-          ? createPortal(
-              <div
-                className={`pointer-events-auto fixed inset-x-0 bottom-0 z-[200] flex flex-col overflow-hidden rounded-t-[1.5rem] border-x border-t border-white/10 bg-[#141519] pb-[calc(env(safe-area-inset-bottom)+0.5rem)] shadow-[0_-12px_32px_rgba(0,0,0,0.5)] transition-[height,max-height] duration-300 md:hidden ${propertySheetExpanded ? "h-[88%] max-h-[88%]" : "h-48 max-h-48"}`}
-              >
-                {/* Controls sit in normal flow above the body, so the card no longer needs
-                    side padding to clear a floating button. Close on the left,
-                    maximize on the right, grabber centred between two equal
-                    slots — the row is symmetric, so the grabber stays centred
-                    whether or not the right slot is filled.
 
-                    **Both controls were `h-7 w-7` (28px) and are now `h-10 w-10`
-                    (40px).** 28px is well under the 44px touch minimum, and on a
-                    sheet whose whole job is being tapped at with one thumb it was
-                    the smallest target in the section. The right-hand spacer is
-                    the same `h-10 w-10` — a mismatch would push the centred
-                    grabber off-centre by the size difference.
-
-                    **They are now filled rather than ghosted.** Both were
-                    `bg-white/85` with a `border-white/70` hairline, which on the
-                    sheet's own `#f5f2ea` is a near-invisible 3% step: the only
-                    thing separating them from the cream behind was a shadow.
-                    Each now carries a solid fill, and the two differ so they are
-                    distinguishable at a glance rather than as a matched pair:
-
-                    - **Close** — `#171717` with a white glyph. The same near-black
-                      fill the sibling plot sheet's close button already uses, so
-                      the destructive exit looks identical in both sheets.
-                    - **Maximize** — `#c6a46c` with `#171717`. The section's own
-                      gold, which is the accent used for the one action that
-                      *adds* something (opens the full card) rather than ending
-                      it. It is also the gold the price block and the chips sit
-                      on, so the expand control joins that set. */}
-                <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-2.5 pb-2">
-                  <button
-                    type="button"
-                    aria-label="Close property details"
-                    onClick={() => {
-                      closeLayout();
-                      setPropertySheetExpanded(false);
-                    }}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f2f0ea] text-[#141519] shadow-[0_6px_16px_rgba(0,0,0,0.45)] transition active:scale-95"
-                  >
-                    <CloseIcon className="h-4 w-4" />
-                  </button>
-
-                  {propertySheetExpanded ? (
-                    <button
-                      type="button"
-                      aria-label="Minimize property details"
-                      aria-expanded={true}
-                      onClick={() => setPropertySheetExpanded(false)}
-                      className="flex h-6 w-20 items-center justify-center rounded-full transition active:scale-95"
-                    >
-                      <span className="h-1 w-10 rounded-full bg-white/25" />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-label="Show full property details"
-                      aria-expanded={false}
-                      onClick={() => setPropertySheetExpanded(true)}
-                      className="flex h-6 w-20 items-center justify-center rounded-full transition active:scale-95"
-                    >
-                      <span className="h-1 w-10 rounded-full bg-white/45" />
-                    </button>
-                  )}
-
-                  {propertySheetExpanded ? (
-                    <button
-                      type="button"
-                      aria-label="Minimize property details"
-                      aria-expanded={true}
-                      onClick={() => setPropertySheetExpanded(false)}
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#c6a46c] text-[#171717] shadow-[0_6px_16px_rgba(36,35,31,0.28)] transition active:scale-95"
-                    >
-                      <MinimizeIcon className="h-4.5 w-4.5" />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-label="Maximize property details"
-                      aria-expanded={false}
-                      onClick={() => setPropertySheetExpanded(true)}
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#c6a46c] text-[#171717] shadow-[0_6px_16px_rgba(36,35,31,0.28)] transition active:scale-95"
-                    >
-                      <ExpandIcon className="h-4.5 w-4.5" />
-                    </button>
-                  )}
-                </div>
-                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-3">
-                  <PropertySheet
-                    project={selectedProject}
-                    property={selectedProperty}
-                    apiProperty={activePopupApiProperty}
-                    expanded={propertySheetExpanded}
-                    dense
-                    tone="dark"
-                    tab={propertySheetTab}
-                    onTabChange={setPropertySheetTab}
-                    onToggle={() => setPropertySheetExpanded((open) => !open)}
-                  />
-                </div>
-              </div>,
-              document.body,
-            )
-          : null}
+        {/* Integrated Desktop & Mobile Property Block */}
+        <PropertyBlock
+          desktopOpen={desktopPropertyCardOpen}
+          onCloseDesktop={() => setDesktopPropertyCardOpen(false)}
+          portalReady={portalReady}
+          selectedPlot={selectedPlot}
+          mapFullscreen={mapFullscreen}
+          mobileExpanded={propertySheetExpanded}
+          onToggleMobileExpand={() => setPropertySheetExpanded((open) => !open)}
+          onCloseMobile={() => {
+            closeLayout();
+            setPropertySheetExpanded(false);
+          }}
+          project={selectedProject}
+          property={selectedProperty}
+          apiProperty={activePopupApiProperty}
+          tab={propertySheetTab}
+          onTabChange={setPropertySheetTab}
+          onOpenCompare={(propId) => {
+            const idToCompare = propId || activePropertyId || selectedProject?.id || selectedProperty?.id;
+            startCompareMode(idToCompare);
+          }}
+          onOpenEmi={(propertyInfo) => {
+            setEmiSelectedProperty(propertyInfo);
+            setEmiOpen(true);
+            setEmiSelectingProperty(false);
+          }}
+        />
         {/* Mobile bottom-sheet plot details — compact first, expandable on demand */}
         {selectedPlot ? (
           <div className="pointer-events-none fixed inset-x-0 bottom-0 z-60 md:hidden">
@@ -3335,25 +2732,554 @@ export default function MapSection({
           </div>
         ) : null}
 
-        {/* map zoom + fullscreen controls */}
-        <div
-          className={`pointer-events-none absolute right-3 z-20 flex flex-col gap-1.5 sm:right-4 ${
-            mapFullscreen
-              ? "bottom-6"
-              : activeProject
-                ? "bottom-14"
-                : "bottom-4"
-          }`}
-        >
+        {/* FindYourPlot feature cards side-by-side at the bottom of the map */}
+        {features.length > 0 && !selectedPlot && !compareSelectingMode && !emiSelectingProperty && !singlePropertyId ? (
+          <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-20 flex items-center gap-1.5 sm:left-4 sm:right-4 md:right-24">
+            {/* Left arrow (mobile/touch only) */}
+            <button
+              type="button"
+              aria-label="Scroll tags left"
+              disabled={!canScrollLeft}
+              onClick={() => scrollTags("left")}
+              className={`pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#171717]/90 text-white/90 shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur-md transition md:hidden ${
+                canScrollLeft
+                  ? "hover:border-[#c6a46c]/50 hover:bg-[#202020] active:scale-95"
+                  : "cursor-not-allowed opacity-30"
+              }`}
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M15 19l-7-7 7-7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+
+            {/* Scrollable cards strip */}
+            <div
+              ref={tagsScrollRef}
+              className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-1 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {features.map((feature) => {
+                const isOn = selectedFeatureKeys.includes(feature.key);
+                return (
+                  <button
+                    key={feature.key}
+                    type="button"
+                    aria-pressed={isOn}
+                    onClick={() => toggleFeatureKey(feature.key)}
+                    className={`group relative flex h-9 shrink-0 items-center gap-2 rounded-xl border px-3 text-left backdrop-blur-md transition-all duration-200 select-none active:scale-[0.98] ${
+                      isOn
+                        ? "border-[#c6a46c] bg-[#1a1814]/95 text-white ring-1 ring-[#c6a46c]/40 shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
+                        : "border-white/10 bg-[#171717]/90 text-[#d9d5cd] hover:border-white/25 hover:bg-[#202020] hover:text-white"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                        isOn
+                          ? "bg-[#c6a46c] text-[#141519] shadow-xs"
+                          : "bg-white/5 text-[#c6a46c] ring-1 ring-white/10 group-hover:bg-[#c6a46c]/20"
+                      }`}
+                    >
+                      {featureIcon(feature.key, "h-3.5 w-3.5") ?? (
+                        <CheckIcon className="h-2.5 w-2.5" />
+                      )}
+                    </span>
+                    <span className={`whitespace-nowrap text-[12px] tracking-tight ${
+                      isOn ? "font-bold text-white" : "font-medium"
+                    }`}>
+                      {feature.name}
+                    </span>
+                    <span
+                      aria-hidden
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-all ${
+                        isOn
+                          ? "bg-[#c6a46c] text-[#141519] scale-105 shadow-xs"
+                          : "border border-white/20 text-transparent group-hover:border-white/40"
+                      }`}
+                    >
+                      {isOn ? (
+                        <CheckIcon className="h-2.5 w-2.5 stroke-[3]" />
+                      ) : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Clear filter button when any tags are active */}
+            {selectedFeatureKeys.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedFeatureKeys([])}
+                aria-label="Clear selected filters"
+                title={`Clear filters (${selectedFeatureKeys.length})`}
+                className="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-500/50 bg-[#3a1518] text-red-400 shadow-[0_4px_16px_rgba(239,68,68,0.2)] backdrop-blur-md transition hover:border-red-400 hover:bg-red-900/80 hover:text-red-200 active:scale-95"
+              >
+                <CloseIcon className="h-4 w-4 stroke-[2.5]" />
+              </button>
+            )}
+
+            {/* Maximize map button positioned cleanly above the right arrow - hidden when maximized */}
+            {!mapFullscreen ? (
+              <button
+                type="button"
+                aria-label="Maximize map to full screen"
+                title="Maximize map"
+                onClick={toggleNativeFullscreen}
+                className="pointer-events-auto absolute -top-10 right-0 flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-[#171717]/90 text-white/90 shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur-md transition hover:border-[#c6a46c]/60 hover:bg-[#202020] hover:text-[#c6a46c] active:scale-95"
+              >
+                <ExpandIcon className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+
+            {/* Right arrow (mobile/touch only) - exactly in original position */}
+            <button
+              type="button"
+              aria-label="Scroll tags right"
+              disabled={!canScrollRight}
+              onClick={() => scrollTags("right")}
+              className={`pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#171717]/90 text-white/90 shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur-md transition md:hidden ${
+                canScrollRight
+                  ? "hover:border-[#c6a46c]/50 hover:bg-[#202020] active:scale-95"
+                  : "cursor-not-allowed opacity-30"
+              }`}
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        ) : null}
+
+        {/* Maximize map button when singlePropertyId is active (since bottom feature bar is hidden) */}
+        {singlePropertyId && !mapFullscreen ? (
+          <button
+            type="button"
+            aria-label="Maximize map to full screen"
+            title="Maximize map"
+            onClick={toggleNativeFullscreen}
+            className="pointer-events-auto absolute bottom-3 right-3 z-20 flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[#171717]/90 text-white/90 shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur-md transition hover:border-[#c6a46c]/60 hover:bg-[#202020] hover:text-[#c6a46c] active:scale-95 sm:bottom-4 sm:right-4"
+          >
+            <ExpandIcon className="h-4 w-4" />
+          </button>
+        ) : null}
+
+        {/* Right center quick actions: Wishlist, EMI Calculator & Compare (hidden when maximized, in compare mode, or on single property page) */}
+        {!compareSelectingMode && !mapFullscreen && !singlePropertyId ? (
+          <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 z-30 flex flex-col items-end gap-2.5 sm:right-4">
+            {/* Wishlist Component - hidden when selecting property for EMI */}
+            {!emiSelectingProperty ? (
+              <Wishlist
+                isOpen={wishlistOpen}
+                onOpen={() => setWishlistOpen(true)}
+                onClose={() => setWishlistOpen(false)}
+              />
+            ) : null}
+
+            {/* EMI Calculator Button */}
+            <button
+              type="button"
+              aria-label="Open EMI loan calculator"
+              onClick={() => {
+                setEmiOpen(false);
+                setEmiSelectingProperty((prev) => !prev);
+              }}
+              className={`pointer-events-auto group relative flex items-center justify-start gap-2 rounded-full border p-2.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all active:scale-95 sm:h-10 sm:w-36 sm:px-3 sm:py-2 ${
+                emiSelectingProperty
+                  ? "border-[#c6a46c] bg-[#c6a46c] text-[#171717] ring-4 ring-[#c6a46c]/30"
+                  : "border-white/15 bg-[#171717]/90 text-[#f2f0ea] hover:border-[#c6a46c] hover:bg-[#222222]"
+              }`}
+            >
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+                <svg
+                  className={`h-5.5 w-5.5 transition-transform group-hover:scale-110 ${
+                    emiSelectingProperty ? "text-[#171717]" : "text-[#c6a46c]"
+                  }`}
+                  viewBox="0 0 100 120"
+                  aria-hidden="true"
+                >
+                  <defs>
+                    <mask id="map-calc-cutout">
+                      <rect x="0" y="0" width="100" height="120" fill="#ffffff" />
+                      <g fill="#000000">
+                        <rect x="27.5" y="29" width="45" height="13.5" rx="3" />
+                        <rect x="27" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="63.2" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="27" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="63.2" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="27" y="89.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="89.5" width="27.9" height="9.5" rx="2.8" />
+                      </g>
+                    </mask>
+                  </defs>
+                  <rect
+                    x="17.5"
+                    y="14"
+                    width="65"
+                    height="92"
+                    rx="8.5"
+                    fill="currentColor"
+                    mask="url(#map-calc-cutout)"
+                  />
+                </svg>
+              </div>
+              <span className="hidden text-xs font-semibold tracking-wide sm:inline">
+                {emiSelectingProperty ? "Select on map" : "EMI Calculator"}
+              </span>
+            </button>
+
+            {/* Compare Properties Button - hidden when selecting property for EMI */}
+            {!emiSelectingProperty ? (
+              <button
+                type="button"
+                aria-label="Compare properties on map"
+                onClick={() => {
+                  if (compareSelectingMode) {
+                    setCompareSelectingMode(false);
+                  } else {
+                    setEmiSelectingProperty(false);
+                    setCompareSelectingMode(true);
+                    setDesktopPropertyCardOpen(false);
+                    setPropertySheetExpanded(false);
+                  }
+                }}
+                className="pointer-events-auto group relative flex items-center justify-start gap-2 rounded-full border border-white/15 bg-[#171717]/90 p-2.5 text-[#f2f0ea] shadow-[0_8px_24px_rgba(0,0,0,0.4)] backdrop-blur-md transition-all hover:border-[#c6a46c] hover:bg-[#222222] active:scale-95 sm:h-10 sm:w-36 sm:px-3 sm:py-2"
+              >
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+                  <svg
+                    className="h-5.5 w-5.5 text-[#c6a46c] transition-transform group-hover:scale-110"
+                    viewBox="0 0 100 100"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <rect x="18" y="22" width="26" height="26" rx="5.5" />
+                    <rect x="64" y="22" width="26" height="26" rx="5.5" />
+                    <rect x="18" y="53" width="72" height="5.5" rx="2.75" />
+                    <path d="M 48 56 H 60 L 70.5 76.5 A 5.5 5.5 0 0 1 65.6 84.5 H 42.4 A 5.5 5.5 0 0 1 37.5 76.5 Z" />
+                  </svg>
+                </div>
+                <span className="hidden text-xs font-semibold tracking-wide sm:inline">
+                  Compare
+                </span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Maximum zoom reached notification popup note */}
+        {maxZoomNotice ? (
+          <div className="pointer-events-none absolute top-4 inset-x-0 z-40 flex justify-center px-4">
+            <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-amber-500/50 bg-[#141519]/95 px-4 py-2.5 text-xs text-[#f2f0ea] shadow-[0_12px_36px_rgba(0,0,0,0.65)] backdrop-blur-md ila-banner-animate">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </span>
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] font-bold tracking-wider text-amber-400 uppercase">Maximum Zoom Reached</span>
+                <span className="font-medium text-white/90">Higher satellite resolution is not available for this area</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMaxZoomNotice(false)}
+                className="ml-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60 transition hover:bg-white/20 hover:text-white"
+                aria-label="Dismiss notice"
+              >
+                <CloseIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Floating guidance popup note centered at top middle when EMI Calculator is awaiting property selection */}
+        {emiSelectingProperty ? (
+          <div className="pointer-events-none absolute top-4 inset-x-0 z-40 flex justify-center px-4">
+            <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-[#c6a46c]/60 bg-[#141519]/95 px-4 py-3 text-xs text-[#f2f0ea] shadow-[0_12px_36px_rgba(0,0,0,0.65)] backdrop-blur-md ila-banner-animate">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c6a46c] text-[#141519] shadow-sm">
+                <svg className="h-5 w-5" viewBox="0 0 100 120" aria-hidden="true">
+                  <defs>
+                    <mask id="map-banner-calc-cutout">
+                      <rect x="0" y="0" width="100" height="120" fill="#ffffff" />
+                      <g fill="#000000">
+                        <rect x="27.5" y="29" width="45" height="13.5" rx="3" />
+                        <rect x="27" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="63.2" y="53" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="27" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="63.2" y="71.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="27" y="89.5" width="9.8" height="9.5" rx="2.8" />
+                        <rect x="45.1" y="89.5" width="27.9" height="9.5" rx="2.8" />
+                      </g>
+                    </mask>
+                  </defs>
+                  <rect
+                    x="17.5"
+                    y="14"
+                    width="65"
+                    height="92"
+                    rx="8.5"
+                    fill="currentColor"
+                    mask="url(#map-banner-calc-cutout)"
+                  />
+                </svg>
+              </span>
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] font-bold tracking-wider text-[#c6a46c] uppercase">EMI Calculate</span>
+                <span className="font-semibold text-white">Select a property on the map to EMI calculate</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmiSelectingProperty(false)}
+                className="ml-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60 transition hover:bg-white/20 hover:text-white"
+                aria-label="Cancel property selection"
+              >
+                <CloseIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+
+
+        {/* ======================================================== */}
+        {/* COMPARE MODE: Top Guidance Notice (Gold/Yellow BG, Black text) */}
+        {/* ======================================================== */}
+        {compareSelectingMode ? (
+          <div className="pointer-events-none absolute top-3 inset-x-0 z-40 flex justify-center px-3 sm:px-4">
+            <div className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-[#b38e52] bg-gradient-to-r from-[#c6a46c] to-[#b38e52] px-3.5 py-2 text-xs text-[#141519] shadow-[0_10px_28px_rgba(0,0,0,0.3)] backdrop-blur-md ila-banner-animate">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#141519] text-[#c6a46c] shadow-sm">
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 100 100"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <rect x="18" y="22" width="26" height="26" rx="5.5" />
+                  <rect x="64" y="22" width="26" height="26" rx="5.5" />
+                  <rect x="18" y="53" width="72" height="5.5" rx="2.75" />
+                  <path d="M 48 56 H 60 L 70.5 76.5 A 5.5 5.5 0 0 1 65.6 84.5 H 42.4 A 5.5 5.5 0 0 1 37.5 76.5 Z" />
+                </svg>
+              </span>
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] font-extrabold tracking-wider text-[#141519]/80 uppercase">Compare Properties</span>
+                <span className="text-xs sm:text-[13px] font-extrabold tracking-tight text-[#141519]">Tap pins on the map to select up to 5 properties</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCompareSelectingMode(false);
+                  setCompareSelectedIds([]);
+                }}
+                className="ml-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-black/20 bg-[#141519] text-white shadow-sm transition hover:bg-black hover:scale-105 active:scale-95"
+                aria-label="Cancel compare mode"
+                title="Exit compare mode"
+              >
+                <CloseIcon className="h-3 w-3 stroke-[2.5]" />
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ======================================================== */}
+        {/* COMPARE MODE: Bottom Drawer Selection Strip (cards on top, actions below) */}
+        {/* ======================================================== */}
+        {compareSelectingMode ? (
+          <div className="pointer-events-none absolute bottom-0 inset-x-0 z-50 flex justify-center">
+            <div className="pointer-events-auto flex w-full flex-col border-t border-black/15 bg-[#faf6ee]/95 px-3 pt-2.5 pb-3 sm:px-6 shadow-[0_-8px_32px_rgba(0,0,0,0.18)] backdrop-blur-md">
+              <div className="mx-auto flex w-full max-w-5xl flex-col gap-2.5">
+                {/* Upper Row: Selected Property Cards & Empty Slots */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                  {/* Render selected property chips */}
+                  {compareSelectedIds.map((id) => {
+                    const propItem = propertyList.find((p) => p.id === id);
+                    const propRec = getPropertyById(id === "sark-green" ? "sark-green-plains" : id);
+                    const name = propItem?.name || propRec?.name || id;
+                    const cover = propItem?.cover_url || propRec?.gallery?.[0]?.src || "/hero-image.png";
+
+                    return (
+                      <div
+                        key={id}
+                        className="group relative flex h-14 w-44 shrink-0 items-center gap-2 overflow-hidden rounded-xl border border-black/10 bg-white p-1.5 shadow-xs transition hover:border-[#c6a46c]/60 hover:shadow-sm"
+                      >
+                        {/* Image Thumbnail */}
+                        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-black/10">
+                          <Image
+                            src={cover}
+                            alt={name}
+                            fill
+                            sizes="44px"
+                            unoptimized
+                            className="object-cover"
+                          />
+                        </div>
+
+                        {/* Property name */}
+                        <div className="min-w-0 flex-1 pr-4">
+                          <p className="truncate text-xs font-semibold text-[#171717]">
+                            {name}
+                          </p>
+                          <p className="text-[10px] text-[#7a7469]">
+                            Selected
+                          </p>
+                        </div>
+
+                        {/* Remove button */}
+                        <button
+                          type="button"
+                          onClick={() => toggleCompareId(id)}
+                          aria-label={`Remove ${name} from comparison`}
+                          className="absolute top-1.5 right-1.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-black/5 text-[#7a7469] transition hover:bg-red-50 hover:text-red-600 active:scale-95"
+                        >
+                          <CloseIcon className="h-2.5 w-2.5 stroke-[2.5]" />
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  {/* Empty slot placeholders up to 5 */}
+                  {Array.from({ length: Math.max(0, 5 - compareSelectedIds.length) }).map((_, idx) => (
+                    <div
+                      key={`empty-slot-${idx}`}
+                      className="flex h-14 w-32 shrink-0 items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-black/15 bg-black/[0.02] px-2 text-[11px] text-[#8a8275]"
+                    >
+                      <svg className="h-3.5 w-3.5 text-[#c6a46c]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      <span>Slot {compareSelectedIds.length + idx + 1}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Lower Row: Count, Compare Button & Close Button */}
+                <div className="flex items-center justify-between gap-3 border-t border-black/10 pt-2">
+                  <div className="flex items-center gap-1.5 text-xs text-[#5c5348]">
+                    <span className="flex h-2 w-2 rounded-full bg-[#c6a46c]" />
+                    <strong className="text-[#171717]">{compareSelectedIds.length} of 5</strong>
+                    <span>properties selected</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={compareSelectedIds.length < 2}
+                      onClick={() => setCompareModalOpen(true)}
+                      className={`flex items-center justify-center gap-1.5 rounded-xl px-5 py-2 text-xs font-bold tracking-wider uppercase transition shadow-md whitespace-nowrap ${
+                        compareSelectedIds.length >= 2
+                          ? "bg-gradient-to-r from-[#c6a46c] to-[#b38e52] text-[#171717] hover:brightness-105 active:scale-[0.99]"
+                          : "cursor-not-allowed bg-black/10 text-black/40"
+                      }`}
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      <span>Compare</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCompareSelectingMode(false);
+                        setCompareSelectedIds([]);
+                      }}
+                      aria-label="Close compare mode"
+                      title="Close compare mode"
+                      className="flex h-8.5 w-8.5 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-500 shadow-xs transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 active:scale-95"
+                    >
+                      <CloseIcon className="h-4 w-4 stroke-[2.5]" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* CompareProperties Modal Popup Table */}
+        {compareModalOpen && (
+          <CompareProperties
+            initialSelectedIds={compareSelectedIds}
+            isModalOpen={compareModalOpen}
+            onCloseModal={() => {
+              setCompareModalOpen(false);
+              setCompareSelectingMode(false);
+              setCompareSelectedIds([]);
+            }}
+            modalOnly
+          />
+        )}
+
+        {/* EMI Calculator / EmiAppreciation Popup Modal Overlay */}
+        {emiOpen ? (
+          <div
+            className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop"
+            onClick={() => setEmiOpen(false)}
+          >
+            <div
+              className="relative flex w-full sm:max-w-4xl max-h-[92vh] flex-col rounded-t-3xl sm:rounded-2xl border-t border-x-0 sm:border border-white/15 bg-[#17191d] text-[#f2f0ea] shadow-2xl overflow-hidden ila-modal-content"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 sm:px-6">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#c6a46c]">
+                    <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="4" y="2" width="16" height="20" rx="3" />
+                      <line x1="8" y1="6" x2="16" y2="6" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h3 className="text-base font-bold text-white">
+                      EMI &amp; Appreciation: {emiSelectedProperty?.name || activeProject?.name || activePropertyDetail?.name || "Selected Property"}
+                    </h3>
+                    <p className="text-xs text-[#9a9388]">
+                      {emiSelectedProperty?.location || activePropertyDetail?.locality || activePropertyDetail?.city || "Hyderabad"} · {formatPrice(emiSelectedProperty?.price || activePropertyDetail?.price || 5000000)}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close EMI calculator"
+                  onClick={() => setEmiOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20 hover:text-white"
+                >
+                  <CloseIcon className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <PriceEmiFuture
+                  property={{
+                    name: emiSelectedProperty?.name || activeProject?.name || activePropertyDetail?.name || "Selected Property",
+                    price: emiSelectedProperty?.price || activePropertyDetail?.price || 5000000,
+                  }}
+                  showAmortizationSchedule={true}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* map zoom + fullscreen controls - hidden during compare mode */}
+        {!compareSelectingMode ? (
+          <div
+            className={`pointer-events-none absolute right-3 z-20 flex flex-col gap-1.5 sm:right-4 ${
+              mapFullscreen
+                ? "bottom-6"
+                : activeProject
+                  ? "bottom-14"
+                  : "bottom-4"
+            }`}
+          >
           {!mapFullscreen ? (
             <button
               type="button"
               aria-label="Open map fullscreen"
-              title="Maximize map to interact freely"
-              onClick={() => {
-                setMapFullscreen(true);
-              }}
-              className="pointer-events-auto ila-fullscreen-hint flex h-10 w-10 items-center justify-center rounded-lg border border-black/15 bg-[#d9d2c7] text-[#171717] shadow-[0_8px_20px_rgba(15,23,42,0.14)] transition hover:bg-[#cfc3a8]"
+              title="Maximize map to full screen"
+              onClick={toggleNativeFullscreen}
+              className="pointer-events-auto ila-fullscreen-hint hidden md:flex h-10 w-10 items-center justify-center rounded-lg border border-black/15 bg-[#d9d2c7] text-[#171717] shadow-[0_8px_20px_rgba(15,23,42,0.14)] transition hover:bg-[#cfc3a8]"
             >
               <ExpandIcon className="h-4 w-4" />
             </button>
@@ -3362,11 +3288,11 @@ export default function MapSection({
             type="button"
             aria-label="Reset map view"
             onClick={resetView}
-            className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-lg border border-black/15 bg-[#d9d2c7] text-sm font-semibold text-[#171717] shadow-[0_8px_20px_rgba(15,23,42,0.14)] transition hover:bg-[#cfc3a8]"
+            className="pointer-events-auto hidden md:flex h-10 w-10 items-center justify-center rounded-lg border border-black/15 bg-[#d9d2c7] text-sm font-semibold text-[#171717] shadow-[0_8px_20px_rgba(15,23,42,0.14)] transition hover:bg-[#cfc3a8]"
           >
             ⌖
           </button>
-          <div className="pointer-events-auto overflow-hidden rounded-lg border border-black/15 bg-[#d9d2c7] shadow-[0_8px_20px_rgba(15,23,42,0.14)]">
+          <div className="pointer-events-auto hidden md:block overflow-hidden rounded-lg border border-black/15 bg-[#d9d2c7] shadow-[0_8px_20px_rgba(15,23,42,0.14)]">
             <button
               type="button"
               aria-label="Zoom in"
@@ -3385,6 +3311,7 @@ export default function MapSection({
             </button>
           </div>
         </div>
+        ) : null}
       </div>
     </section>
   );

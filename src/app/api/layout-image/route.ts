@@ -22,8 +22,8 @@
 const ALLOWED_HOST =
   /^(?:(?:[a-z0-9][a-z0-9.-]*\.)?(?:s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com|cloudfront\.net|digitaloceanspaces\.com)|realestate\.sperow\.in)$/i;
 
-/** Master plans are scans or previews of them; anything larger is not one. */
-const MAX_BYTES = 60 * 1024 * 1024;
+/** Master plans are scans or previews of them (can reach ~100MB for 8000px multi-band TIFFs). */
+const MAX_BYTES = 120 * 1024 * 1024;
 
 export const dynamic = "force-dynamic";
 

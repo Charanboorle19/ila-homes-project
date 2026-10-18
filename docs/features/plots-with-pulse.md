@@ -2,19 +2,21 @@
 
 ## 1. Feature purpose
 
-The homepage `PlotsWithPulse` section presents property cards with activity-style signals, guide pricing, and comparison scores. Its visible message is “See what others are looking at right now.” The section header presents a live demand signal badge while clearly noting that activity figures are provisional demo estimates.
+The `PlotsWithPulse` section presents property cards with activity-style signals, guide pricing, and comparison scores. Its visible message is “See what others are looking at right now.” The section header presents a live demand signal badge while clearly noting that activity figures are provisional demo estimates.
 
 ## 2. Where it appears
 
-It appears on the homepage render tree in `src/app/page.tsx`, rendered after `FindYourPlot` and before `WhoWeAre`.
+**`PlotsWithPulse` is not currently mounted anywhere.** It was a homepage section, previously rendered in `src/app/page.tsx` after `FindYourPlot` and before `WhoWeAre`; `/` now renders `MapSection` alone. The component and its behaviour are unchanged — only the homepage integration was removed.
 
 ## 3. Homepage position
 
-The current homepage sequence around the feature is:
+There is no current position. The homepage sequence around the feature used to be:
 
 ```text
 MapSection → GrowthCorridors → FindYourPlot → PlotsWithPulse → WhoWeAre
 ```
+
+Only `MapSection` remains mounted on `/`.
 
 The section uses `data-section="compare_plots"`, `id="plots-pulse"`, and is styled with an inviting, premium light yellow gradient palette (`bg-gradient-to-b from-[#fbf7eb] via-[#fefaf0] to-[#f6f0db]`, subtle gold grid texture, crisp card surfaces, and rich `#8A6A1F` gold accents).
 
@@ -23,7 +25,7 @@ The section uses `data-section="compare_plots"`, `id="plots-pulse"`, and is styl
 - `src/components/PlotsWithPulse.tsx` — component, API fetching, activity seeds, derived records, carousel scroll management, and markup.
 - `src/components/PlotsWithPulse.css` — feature-specific scrollbar and reduced-motion rules.
 - `src/services/propertiesService.ts` — `fetchProperties`, `formatPrice`, and property typing.
-- `src/app/page.tsx` — homepage import and render position.
+- `src/app/page.tsx` — previously the homepage import and render position; the import and render were removed.
 - `src/app/assets/plots-pulse/kokapet.jpg` — Kokapet fallback image.
 - `src/app/assets/plots-pulse/nallagandla.jpg` — Nallagandla fallback image.
 - `src/app/assets/plots-pulse/mansanpally.jpg` — Mansanpally fallback image.

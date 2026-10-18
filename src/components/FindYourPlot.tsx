@@ -1367,12 +1367,12 @@ export default function FindYourPlot() {
                             tag_id: feature.key,
                             selected: !isOn,
                           })}
-                          className={`group relative flex min-h-[5.25rem] rounded-2xl border text-left backdrop-blur-md transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c6a46c] p-3.5 sm:min-h-[5.75rem] sm:p-4 ${
+                          className={`group relative flex min-h-[5.25rem] rounded-2xl border text-left backdrop-blur-md transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c6a46c] p-3.5 sm:min-h-[5.75rem] sm:p-4 select-none ${
                             bento.spanClass
                           } ${
                             isOn
-                              ? "border-[#c6a46c] bg-[#c6a46c]/15 text-[#f2f0ea] shadow-[0_4px_22px_rgba(198,164,108,0.22)]"
-                              : "border-[rgba(242,240,234,0.13)] bg-[rgba(242,240,234,0.06)] text-[#f2f0ea] hover:-translate-y-0.5 hover:border-[rgba(242,240,234,0.3)] hover:bg-[rgba(242,240,234,0.11)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.25)]"
+                              ? "border-[#c6a46c] bg-[#c6a46c]/20 text-[#f2f0ea] shadow-[0_4px_20px_rgba(198,164,108,0.22)] ring-1 ring-[#c6a46c]/40"
+                              : "border-white/10 bg-white/[0.05] text-[#f2f0ea] hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.08] hover:shadow-[0_6px_20px_rgba(0,0,0,0.3)]"
                           }`}
                         >
                           {bento.type === "wide-both" ? (
@@ -1382,15 +1382,17 @@ export default function FindYourPlot() {
                                 <span
                                   className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors sm:h-11 sm:w-11 ${
                                     isOn
-                                      ? "bg-[#c6a46c]/25 text-[#f2f0ea] ring-1 ring-[#c6a46c]/50"
-                                      : "bg-[rgba(242,240,234,0.08)] text-[#c6a46c] ring-1 ring-[rgba(242,240,234,0.14)] group-hover:bg-[#c6a46c]/20"
+                                      ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm"
+                                      : "bg-white/10 text-[#c6a46c] ring-1 ring-white/10 group-hover:bg-[#c6a46c]/20"
                                   }`}
                                 >
                                   {featureIcon(feature.key, "h-5 w-5") ?? (
                                     <CheckIcon className="h-4.5 w-4.5" />
                                   )}
                                 </span>
-                                <span className="text-[15px] font-bold tracking-tight text-[#f2f0ea] sm:text-lg">
+                                <span className={`text-[15px] font-bold tracking-tight sm:text-lg transition-colors ${
+                                  isOn ? "text-white" : "text-[#f2f0ea]"
+                                }`}>
                                   {feature.name}
                                 </span>
                               </div>
@@ -1398,8 +1400,8 @@ export default function FindYourPlot() {
                                 aria-hidden
                                 className={`flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full transition-all sm:h-6 sm:w-6 ${
                                   isOn
-                                    ? "bg-[#c6a46c] text-[#1c1f24] shadow-xs scale-105"
-                                    : "border border-[rgba(242,240,234,0.3)] group-hover:border-[rgba(242,240,234,0.5)]"
+                                    ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm scale-105"
+                                    : "border border-white/25 text-transparent group-hover:border-white/45"
                                 }`}
                               >
                                 {isOn ? (
@@ -1416,8 +1418,8 @@ export default function FindYourPlot() {
                                   <span
                                     className={`flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-xl transition-colors ${
                                       isOn
-                                        ? "bg-[#c6a46c]/25 text-[#f2f0ea] ring-1 ring-[#c6a46c]/50"
-                                        : "bg-[rgba(242,240,234,0.08)] text-[#c6a46c] ring-1 ring-[rgba(242,240,234,0.14)] group-hover:bg-[#c6a46c]/20"
+                                        ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm"
+                                        : "bg-white/10 text-[#c6a46c] ring-1 ring-white/10 group-hover:bg-[#c6a46c]/20"
                                     }`}
                                   >
                                     {featureIcon(feature.key, "h-4.5 w-4.5") ?? (
@@ -1428,14 +1430,16 @@ export default function FindYourPlot() {
                                     aria-hidden
                                     className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all ${
                                       isOn
-                                        ? "bg-[#c6a46c] text-[#1c1f24] shadow-xs scale-105"
-                                        : "border border-[rgba(242,240,234,0.3)] group-hover:border-[rgba(242,240,234,0.5)]"
+                                        ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm scale-105"
+                                        : "border border-white/25 text-transparent group-hover:border-white/45"
                                     }`}
                                   >
                                     {isOn ? <CheckIcon className="h-3 w-3 stroke-[2.8]" /> : null}
                                   </span>
                                 </div>
-                                <span className="text-[14px] font-semibold leading-snug tracking-tight text-[#f2f0ea] line-clamp-2">
+                                <span className={`text-[14px] font-semibold leading-snug tracking-tight line-clamp-2 transition-colors ${
+                                  isOn ? "text-white font-bold" : "text-[#f2f0ea]"
+                                }`}>
                                   {feature.name}
                                 </span>
                               </div>
@@ -1446,15 +1450,17 @@ export default function FindYourPlot() {
                                   <span
                                     className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors ${
                                       isOn
-                                        ? "bg-[#c6a46c]/25 text-[#f2f0ea] ring-1 ring-[#c6a46c]/50"
-                                        : "bg-[rgba(242,240,234,0.08)] text-[#c6a46c] ring-1 ring-[rgba(242,240,234,0.14)] group-hover:bg-[#c6a46c]/20"
+                                        ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm"
+                                        : "bg-white/10 text-[#c6a46c] ring-1 ring-white/10 group-hover:bg-[#c6a46c]/20"
                                     }`}
                                   >
                                     {featureIcon(feature.key, "h-5 w-5") ?? (
                                       <CheckIcon className="h-4.5 w-4.5" />
                                     )}
                                   </span>
-                                  <span className="text-lg font-bold tracking-tight text-[#f2f0ea]">
+                                  <span className={`text-lg font-bold tracking-tight transition-colors ${
+                                    isOn ? "text-white" : "text-[#f2f0ea]"
+                                  }`}>
                                     {feature.name}
                                   </span>
                                 </div>
@@ -1462,8 +1468,8 @@ export default function FindYourPlot() {
                                   aria-hidden
                                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-all ${
                                     isOn
-                                      ? "bg-[#c6a46c] text-[#1c1f24] shadow-xs scale-105"
-                                      : "border border-[rgba(242,240,234,0.3)] group-hover:border-[rgba(242,240,234,0.5)]"
+                                      ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm scale-105"
+                                      : "border border-white/25 text-transparent group-hover:border-white/45"
                                   }`}
                                 >
                                   {isOn ? <CheckIcon className="h-3.5 w-3.5 stroke-[2.8]" /> : null}
@@ -1479,15 +1485,17 @@ export default function FindYourPlot() {
                                   <span
                                     className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
                                       isOn
-                                        ? "bg-[#c6a46c]/25 text-[#f2f0ea] ring-1 ring-[#c6a46c]/50"
-                                        : "bg-[rgba(242,240,234,0.08)] text-[#c6a46c] ring-1 ring-[rgba(242,240,234,0.14)] group-hover:bg-[#c6a46c]/20"
+                                        ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm"
+                                        : "bg-white/10 text-[#c6a46c] ring-1 ring-white/10 group-hover:bg-[#c6a46c]/20"
                                     }`}
                                   >
                                     {featureIcon(feature.key, "h-5 w-5") ?? (
                                       <CheckIcon className="h-4.5 w-4.5" />
                                     )}
                                   </span>
-                                  <span className="text-[15px] font-bold tracking-tight text-[#f2f0ea]">
+                                  <span className={`text-[15px] font-bold tracking-tight transition-colors ${
+                                    isOn ? "text-white" : "text-[#f2f0ea]"
+                                  }`}>
                                     {feature.name}
                                   </span>
                                 </div>
@@ -1495,8 +1503,8 @@ export default function FindYourPlot() {
                                   aria-hidden
                                   className={`flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full transition-all ${
                                     isOn
-                                      ? "bg-[#c6a46c] text-[#1c1f24] shadow-xs scale-105"
-                                      : "border border-[rgba(242,240,234,0.3)] group-hover:border-[rgba(242,240,234,0.5)]"
+                                      ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm scale-105"
+                                      : "border border-white/25 text-transparent group-hover:border-white/45"
                                   }`}
                                 >
                                   {isOn ? <CheckIcon className="h-3 w-3 stroke-[2.8]" /> : null}
@@ -1509,8 +1517,8 @@ export default function FindYourPlot() {
                                   <span
                                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors ${
                                       isOn
-                                        ? "bg-[#c6a46c]/25 text-[#f2f0ea] ring-1 ring-[#c6a46c]/50"
-                                        : "bg-[rgba(242,240,234,0.08)] text-[#c6a46c] ring-1 ring-[rgba(242,240,234,0.14)] group-hover:bg-[#c6a46c]/20"
+                                        ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm"
+                                        : "bg-white/10 text-[#c6a46c] ring-1 ring-white/10 group-hover:bg-[#c6a46c]/20"
                                     }`}
                                   >
                                     {featureIcon(feature.key, "h-4.5 w-4.5") ?? (
@@ -1521,14 +1529,16 @@ export default function FindYourPlot() {
                                     aria-hidden
                                     className={`flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-full transition-all ${
                                       isOn
-                                        ? "bg-[#c6a46c] text-[#1c1f24] shadow-xs scale-105"
-                                        : "border border-[rgba(242,240,234,0.3)] group-hover:border-[rgba(242,240,234,0.5)]"
+                                        ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm scale-105"
+                                        : "border border-white/25 text-transparent group-hover:border-white/45"
                                     }`}
                                   >
                                     {isOn ? <CheckIcon className="h-3 w-3 stroke-[2.8]" /> : null}
                                   </span>
                                 </div>
-                                <span className="text-[15px] font-semibold leading-snug tracking-tight text-[#f2f0ea] line-clamp-2">
+                                <span className={`text-[15px] font-semibold leading-snug tracking-tight line-clamp-2 transition-colors ${
+                                  isOn ? "text-white font-bold" : "text-[#f2f0ea]"
+                                }`}>
                                   {feature.name}
                                 </span>
                               </div>
@@ -1540,8 +1550,8 @@ export default function FindYourPlot() {
                                 <span
                                   className={`flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-xl transition-colors sm:h-9 sm:w-9 ${
                                     isOn
-                                      ? "bg-[#c6a46c]/25 text-[#f2f0ea] ring-1 ring-[#c6a46c]/50"
-                                      : "bg-[rgba(242,240,234,0.08)] text-[#c6a46c] ring-1 ring-[rgba(242,240,234,0.14)] group-hover:bg-[#c6a46c]/20"
+                                      ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm"
+                                      : "bg-white/10 text-[#c6a46c] ring-1 ring-white/10 group-hover:bg-[#c6a46c]/20"
                                   }`}
                                 >
                                   {featureIcon(feature.key, "h-4.5 w-4.5") ?? (
@@ -1552,14 +1562,16 @@ export default function FindYourPlot() {
                                   aria-hidden
                                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all sm:h-5.5 sm:w-5.5 ${
                                     isOn
-                                      ? "bg-[#c6a46c] text-[#1c1f24] shadow-xs scale-105"
-                                      : "border border-[rgba(242,240,234,0.3)] group-hover:border-[rgba(242,240,234,0.5)]"
+                                      ? "bg-[#c6a46c] text-[#1c1f24] shadow-sm scale-105"
+                                      : "border border-white/25 text-transparent group-hover:border-white/45"
                                   }`}
                                 >
                                   {isOn ? <CheckIcon className="h-3 w-3 stroke-[2.8]" /> : null}
                                 </span>
                               </div>
-                              <span className="text-[14px] font-semibold leading-snug tracking-tight text-[#f2f0ea] sm:text-[15px] line-clamp-2">
+                              <span className={`text-[14px] font-semibold leading-snug tracking-tight sm:text-[15px] line-clamp-2 transition-colors ${
+                                isOn ? "text-white font-bold" : "text-[#f2f0ea]"
+                              }`}>
                                 {feature.name}
                               </span>
                             </div>

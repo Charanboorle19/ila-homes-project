@@ -4,7 +4,7 @@ This document describes only integrations confirmed in the current source under 
 
 ## 1. Integration architecture overview
 
-The Next.js App Router frontend uses client-side service modules to call a tenant-aware external ILA API. MapLibre renders maps and consumes normalized API/static geometry. Browser facilities provide anonymous identity, session state, local flags, sharing, navigation, and engagement tracking. A single server Route Handler proxies presigned S3 layout images because the bucket is not browser-readable. Static property/layout data and explanatory homepage content remain local and are not external integrations.
+The Next.js App Router frontend uses client-side service modules to call a tenant-aware external ILA API. MapLibre renders maps and consumes normalized API/static geometry. Browser facilities provide anonymous identity, session state, local flags, sharing, navigation, and engagement tracking. A single server Route Handler proxies presigned S3 layout images because the bucket is not browser-readable. Static property/layout data and explanatory page content remain local and are not external integrations.
 
 ## 2. Backend/API integration
 
@@ -54,7 +54,7 @@ Events require a visitor code, use `X-Visitor-Code`, common tenant headers, opti
 
 ## 12. WhatsApp integration
 
-**Service:** direct WhatsApp web links plus tracked property-share creation. **Where:** `PropertyHero`, `PropertyFinalCta`, `StickyBottomCta`, `WhatsAppBudgetModal`, `ShortlistShare`, `shareService.ts`, and `propertyUtils.ts`. The final WhatsApp URL is `https://wa.me/?text=${encodeURIComponent(text)}`. Enquiry, site-visit, and calculator messages are generated locally; `ShortlistShare` first calls `POST /api/shares` once per selected API property UUID, adds the resulting `/property/{tracking_token}/view` links to the message, and then opens WhatsApp. No SDK, token, login, booking, or reservation exists. Links may open a new tab and applicable actions emit analytics. Popup blocking or unavailable WhatsApp behavior is UNKNOWN — needs verification. Client-side orchestration with API-backed tracked shares.
+**Service:** direct WhatsApp web links plus tracked property-share creation. **Where:** `PropertyHero`, `PropertyFinalCta`, `StickyBottomCta`, `WhatsAppBudgetModal`, `ShortlistShare` (currently unmounted), `shareService.ts`, and `propertyUtils.ts`. The final WhatsApp URL is `https://wa.me/?text=${encodeURIComponent(text)}`. Enquiry, site-visit, and calculator messages are generated locally; `ShortlistShare` first calls `POST /api/shares` once per selected API property UUID, adds the resulting `/property/{tracking_token}/view` links to the message, and then opens WhatsApp. No SDK, token, login, booking, or reservation exists. Links may open a new tab and applicable actions emit analytics. Popup blocking or unavailable WhatsApp behavior is UNKNOWN — needs verification. Client-side orchestration with API-backed tracked shares.
 
 ## 13. Email integration
 
@@ -62,7 +62,7 @@ Events require a visitor code, use `X-Visitor-Code`, common tenant headers, opti
 
 ## 14. LocalStorage/session/browser integrations
 
-`visitor_code` is a one-year `SameSite=Lax` cookie, `Secure` in production, created/read by `src/lib/visitor.ts`, and used for anonymous API identity. `localStorage["token"]` is optionally read by `apiFetch` for a bearer token; storage errors are ignored. Property Details writes `ila-wishlist-{id}` and `ila-interested-{id}` as `"1"`/`"0"`. `sessionStorage["visitor_session_id"]` stores the active session id. The homepage shortlist is in-memory only.
+`visitor_code` is a one-year `SameSite=Lax` cookie, `Secure` in production, created/read by `src/lib/visitor.ts`, and used for anonymous API identity. `localStorage["token"]` is optionally read by `apiFetch` for a bearer token; storage errors are ignored. Property Details writes `ila-wishlist-{id}` and `ila-interested-{id}` as `"1"`/`"0"`. `sessionStorage["visitor_session_id"]` stores the active session id. The `ShortlistShare` shortlist is in-memory only, and that component is currently unmounted.
 
 `navigator.share` and `navigator.clipboard` are used by Property Details sharing, with WhatsApp as the share fallback. `window.open` is used for WhatsApp shortlist sharing. IntersectionObserver controls the sticky CTA and engagement, MutationObserver rescans tracked sections, and visibility/activity/timer/scroll APIs drive dwell and active-session behavior. Storage, popup, clipboard, and share failures have limited or no user-visible handling; exact behavior is UNKNOWN — needs verification. These are client-side integrations.
 
@@ -148,7 +148,7 @@ The integration architecture depends on `NEXT_PUBLIC_API_URL`, tenant hostname r
 
 - Route all ILA API requests through `apiFetch` to preserve base URL, tenant header, common headers, token behavior, JSON parsing, abort signals, and error conversion.
 - Preserve URL-encoded API UUID ids, current endpoint paths/query names, response envelope handling, and `[longitude, latitude]` coordinate order.
-- Keep visitor cookie identity, optional bearer authentication, tenant identity, session storage, API favourites, Property Details localStorage flags, and homepage in-memory shortlist state distinct.
+- Keep visitor cookie identity, optional bearer authentication, tenant identity, session storage, API favourites, Property Details localStorage flags, and `ShortlistShare` in-memory shortlist state distinct.
 - Preserve `/api/layout-image` S3-only HTTPS validation, omitted upstream cookies, 60 MB limit, and private no-store response.
 - Keep MapLibre’s worker at `/maplibre/maplibre-gl-worker.mjs`; preserve OpenFreeMap Liberty and the configured/default satellite tile behavior.
 - Keep documents, Buyer Fit, nearby places, layout images, and property detail requests independently cancellable and partially failure-tolerant.

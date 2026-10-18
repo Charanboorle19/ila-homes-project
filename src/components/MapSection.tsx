@@ -4,9 +4,22 @@ import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import PropertyBlock from "@/components/property-block";
 import Wishlist from "@/components/wishlist";
-import CompareProperties from "@/components/CompareProperties";
+import FeatureTutorial from "@/components/FeatureTutorial";
+
+const CompareProperties = dynamic(() => import("@/components/CompareProperties"), {
+  ssr: false,
+  loading: () => (
+    <div
+      className="fixed inset-0 z-300 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      aria-label="Loading comparison"
+    >
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-[#c9a84c]" />
+    </div>
+  ),
+});
 import {
   LngLatBounds,
   Map as MapLibreMap,
@@ -50,8 +63,17 @@ import {
   type PropertyFeature,
 } from "@/services/featuresService";
 
-import PriceEmiFuture from "@/components/PropertyDetail/PriceEmiFuture";
-import EmiAppreciation from "@/components/EmiAppreciation";
+const PriceEmiFuture = dynamic(
+  () => import("@/components/PropertyDetail/PriceEmiFuture"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-64 w-full items-center justify-center" aria-label="Loading calculator">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-[#c9a84c]" />
+      </div>
+    ),
+  },
+);
 import { trackEvent } from "@/services/analytics/tracker";
 import { formatInr } from "@/lib/propertyUtils";
 import { loadLayoutPreviewRaster } from "@/lib/layoutPreview";
@@ -465,6 +487,78 @@ function fitBounds(
 }
 
 /**
+ * Applies visual state (compare, highlighting, dimming, EMI pulse, compare badge)
+ * to an existing pin button DOM element without recreating it.
+ */
+function applyPinState(
+  el: HTMLElement,
+  state: {
+    isHighlighted?: boolean;
+    isDimmed?: boolean;
+    compareSelected?: boolean;
+    isCompareMode?: boolean;
+    compareIndex?: number;
+    emiPulse?: boolean;
+    hidden?: boolean;
+  },
+) {
+  if (state.hidden) {
+    el.style.display = "none";
+    return;
+  }
+  el.style.display = "";
+
+  el.classList.toggle("ila-project-pin--compare-selected", Boolean(state.compareSelected));
+  el.classList.toggle(
+    "ila-project-pin--compare-mode",
+    Boolean(state.isCompareMode && !state.compareSelected),
+  );
+  el.classList.toggle("ila-project-pin--highlighted", Boolean(state.isHighlighted));
+  el.classList.toggle("ila-project-pin--dimmed", Boolean(state.isDimmed));
+  el.classList.toggle("ila-project-pin--pulse", Boolean(state.emiPulse));
+
+  let badge = el.querySelector<HTMLElement>(".ila-project-pin__badge");
+  if (state.compareSelected && typeof state.compareIndex === "number") {
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "ila-project-pin__badge";
+      el.prepend(badge);
+    }
+    badge.textContent = String(state.compareIndex);
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
+/**
+ * Updates the text/price labels in an existing pin button element when the project data changes.
+ */
+function updatePinContent(el: HTMLElement, project: MapPin) {
+  el.setAttribute(
+    "aria-label",
+    project.location ? `${project.name}, ${project.location}` : project.name,
+  );
+
+  const tagTextEl = el.querySelector<HTMLElement>(".ila-pin-tag__text");
+  if (tagTextEl) {
+    const tagText =
+      project.formattedPrice ||
+      (project.price ? `From ${formatPrice(project.price)}` : "Price on request");
+    tagTextEl.textContent = tagText;
+  }
+
+  const tooltipNameEl = el.querySelector<HTMLElement>(".ila-pin-tooltip__name");
+  if (tooltipNameEl) {
+    tooltipNameEl.textContent = project.name;
+  }
+
+  const tooltipPriceEl = el.querySelector<HTMLElement>(".ila-pin-tooltip__price");
+  if (tooltipPriceEl && project.formattedPrice) {
+    tooltipPriceEl.textContent = project.formattedPrice;
+  }
+}
+
+/**
  * A pin is the marker only — the name is carried by the accessible label and
  * the native tooltip, not rendered as a tag on the map. With no visible tags,
  * pins are placed at their exact coordinates instead of being nudged apart to
@@ -484,17 +578,7 @@ function createProjectPin(
   const el = document.createElement("button");
   el.type = "button";
   const placementClass = `ila-project-pin--tag-${options?.tagPlacement || "right"}`;
-  let classes = `ila-project-pin group ${placementClass}`;
-  if (options?.compareSelected) {
-    classes += " ila-project-pin--compare-selected";
-  } else if (options?.isCompareMode) {
-    classes += " ila-project-pin--compare-mode";
-  } else if (options?.isHighlighted) {
-    classes += " ila-project-pin--highlighted";
-  } else if (options?.isDimmed) {
-    classes += " ila-project-pin--dimmed";
-  }
-  el.className = classes;
+  el.className = `ila-project-pin group ${placementClass}`;
   el.setAttribute(
     "aria-label",
     project.location ? `${project.name}, ${project.location}` : project.name,
@@ -507,18 +591,12 @@ function createProjectPin(
     ? `<span class="ila-pin-tooltip__loc">${project.location}</span>`
     : "";
 
-  const badgeHtml =
-    typeof options?.compareIndex === "number"
-      ? `<span class="ila-project-pin__badge">${options.compareIndex}</span>`
-      : "";
-
   // Tag should consistently show price / starting from
   const tagText =
     project.formattedPrice ||
     (project.price ? `From ${formatPrice(project.price)}` : "Price on request");
 
   el.innerHTML = `
-    ${badgeHtml}
     <div class="ila-project-pin__anchor">
       <div class="ila-project-pin__halo" aria-hidden="true"></div>
       <div class="ila-project-pin__core">
@@ -542,6 +620,15 @@ function createProjectPin(
       <span class="ila-pin-tooltip__arrow"></span>
     </div>
   `;
+
+  applyPinState(el, {
+    isHighlighted: options?.isHighlighted,
+    isDimmed: options?.isDimmed,
+    compareSelected: options?.compareSelected,
+    isCompareMode: options?.isCompareMode,
+    compareIndex: options?.compareIndex,
+  });
+
   return el;
 }
 
@@ -567,6 +654,23 @@ export default function MapSection({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const projectMarkersRef = useRef<Marker[]>([]);
+  const markersByIdRef = useRef<Map<string, { marker: Marker; element: HTMLElement; tagPlacement: "top" | "right" | "left" | "bottom" }>>(new Map());
+  const pinsByIdRef = useRef<Map<string, MapPin>>(new Map());
+  const markerHandlersRef = useRef<{
+    selectProperty: (id: string, options: { openSheet?: boolean; openDesktopCard?: boolean; openLayout?: boolean }) => void;
+    toggleCompareId: (id: string) => void;
+    setEmiSelectedProperty: (prop: { id: string; name: string; price: number; location?: string } | null) => void;
+    setEmiSelectingProperty: (val: boolean) => void;
+    setEmiOpen: (val: boolean) => void;
+    propertyList: PropertyListItem[];
+  }>({
+    selectProperty: () => {},
+    toggleCompareId: () => {},
+    setEmiSelectedProperty: () => {},
+    setEmiSelectingProperty: () => {},
+    setEmiOpen: () => {},
+    propertyList: [],
+  });
   const mapReadyRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState(false);
@@ -593,6 +697,9 @@ export default function MapSection({
   const fittedPinsRef = useRef("");
   /** Coalesces the auto-fit while pins stream in, so the camera moves once. */
   const fitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomRegionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingAnchorsRef = useRef<Record<string, PropertyAnchor>>({});
+  const anchorRafRef = useRef<number | null>(null);
   const selectAbortRef = useRef<AbortController | null>(null);
   /** A camera request for a property with no plot geometry to frame. The nonce
    *  makes repeated clicks on the same property distinct. */
@@ -605,6 +712,7 @@ export default function MapSection({
   const [remoteStatus, setRemoteStatus] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
+  const [propertiesRetryCount, setPropertiesRetryCount] = useState(0);
   // The phone property sheet is portalled to <body> so it overlays the whole
   // page instead of being clipped by the map section's `overflow-hidden`.
   // A portal needs a real DOM, so hold off until after the client mount —
@@ -1125,12 +1233,32 @@ export default function MapSection({
     [attachLayoutImage],
   );
 
+  // Synchronize interaction handlers into ref so marker click events never require recreating markers
+  useEffect(() => {
+    markerHandlersRef.current = {
+      selectProperty,
+      toggleCompareId,
+      setEmiSelectedProperty,
+      setEmiSelectingProperty,
+      setEmiOpen,
+      propertyList,
+    };
+  }, [
+    selectProperty,
+    toggleCompareId,
+    setEmiSelectedProperty,
+    setEmiSelectingProperty,
+    setEmiOpen,
+    propertyList,
+  ]);
+
   // Step 1: list every property.
   useEffect(() => {
     const controller = new AbortController();
 
     // The searchable catalogue. Only failures were logged before, so a
     // successful-but-wrong payload was indistinguishable from a silent one.
+    setRemoteStatus("loading");
     console.log(
       `[ILA API] GET ${ILA_API_BASE_URL}/api/properties?status=ALL&page=1&per_page=100`,
     );
@@ -1138,6 +1266,7 @@ export default function MapSection({
     fetchProperties({ status: "ALL", page: 1, perPage: 100, signal: controller.signal })
       .then((result) => {
         if (controller.signal.aborted) return;
+        setRemoteStatus("ready");
 
         console.log("[ILA API] properties list — response", {
           returned: result.items.length,
@@ -1160,20 +1289,33 @@ export default function MapSection({
 
         // Resolve the rest, publishing each anchor as it arrives instead of
         // waiting for the slowest detail call in the batch. Pins appear
-        // progressively rather than all at once at the end.
+        // progressively rather than all at once at the end. Batching into
+        // animation frames avoids 12-20 component re-renders in quick succession.
+        const flushPendingAnchors = () => {
+          anchorRafRef.current = null;
+          const batch = pendingAnchorsRef.current;
+          if (Object.keys(batch).length === 0) return;
+          pendingAnchorsRef.current = {};
+          setPropertyAnchors((previous) => ({ ...previous, ...batch }));
+        };
+
         fetchPropertyAnchors(result.items, {
           signal: controller.signal,
           concurrency: 4,
           onAnchor: (propertyId, anchor) => {
             if (controller.signal.aborted) return;
-            setPropertyAnchors((previous) =>
-              previous[propertyId]
-                ? previous
-                : { ...previous, [propertyId]: anchor },
-            );
+            pendingAnchorsRef.current[propertyId] = anchor;
+            if (anchorRafRef.current === null) {
+              anchorRafRef.current = window.requestAnimationFrame(flushPendingAnchors);
+            }
           },
         }).then((anchors) => {
           if (controller.signal.aborted) return;
+          if (anchorRafRef.current !== null) {
+            window.cancelAnimationFrame(anchorRafRef.current);
+            anchorRafRef.current = null;
+          }
+          pendingAnchorsRef.current = {};
           setPropertyAnchors((previous) => ({ ...previous, ...anchors }));
         });
 
@@ -1181,13 +1323,6 @@ export default function MapSection({
         // immediately open that property's layout.
         if (singlePropertyId) {
           void selectProperty(singlePropertyId, { openLayout: true, openSheet: false });
-        } else {
-          // Open the first property that actually has plots, so the map is
-          // not empty on first paint. Most listings have no geometry yet.
-          // Silent: this is a convenience warm-up, not a visitor request, so it
-          // runs behind the pins rather than dimming the map with a spinner.
-          const first = result.items[0];
-          if (first) selectProperty(first.id, { silent: true });
         }
       })
       .catch((error: unknown) => {
@@ -1201,9 +1336,16 @@ export default function MapSection({
         console.warn("[ILA API] properties list failed", error);
       });
 
-    return () => controller.abort();
-    // Runs once: the map is populated from the API on mount.
-  }, [selectProperty, singlePropertyId]);
+    return () => {
+      controller.abort();
+      if (anchorRafRef.current !== null) {
+        window.cancelAnimationFrame(anchorRafRef.current);
+        anchorRafRef.current = null;
+      }
+      pendingAnchorsRef.current = {};
+    };
+    // Runs on mount or when retry is requested
+  }, [selectProperty, singlePropertyId, propertiesRetryCount]);
 
   /**
    * One pin per listed property, so the whole portfolio is on the map before
@@ -1307,6 +1449,11 @@ export default function MapSection({
     }
     return filteredPins;
   }, [propertyAnchors, propertyList, projects, singlePropertyId]);
+
+  // Keep pinsByIdRef in sync with latest pins data for click handlers and label updates
+  useEffect(() => {
+    pinsByIdRef.current = new Map(pins.map((p) => [p.id, p]));
+  }, [pins]);
 
   /** Frames every pin, so "reset view" shows the whole portfolio. */
   const pinsBounds = useMemo<Bounds>(() => {
@@ -1808,7 +1955,8 @@ export default function MapSection({
       map.on("zoom", updateZoomClass);
 
       // MAP_ZOOM_REGION: report the viewport the visitor settled on, so we can
-      // tell which part of the layout they are exploring.
+      // tell which part of the layout they are exploring. Debounced by 800ms
+      // so active pan/zoom gestures do not flood the analytics queue.
       let lastZoomRegion = "";
       map.on("moveend", () => {
         updateZoomClass();
@@ -1819,16 +1967,20 @@ export default function MapSection({
         if (region === lastZoomRegion) return;
         lastZoomRegion = region;
 
-        trackEvent({
-          event_type: "MAP_ZOOM_REGION",
-          property_id: activePropertyId ?? undefined,
-          metadata: {
-            center_lat: Number(center.lat.toFixed(5)),
-            center_lng: Number(center.lng.toFixed(5)),
-            zoom: Number(map.getZoom().toFixed(2)),
-            section_type: "hero_map",
-          },
-        });
+        if (zoomRegionTimerRef.current) clearTimeout(zoomRegionTimerRef.current);
+        zoomRegionTimerRef.current = setTimeout(() => {
+          zoomRegionTimerRef.current = null;
+          trackEvent({
+            event_type: "MAP_ZOOM_REGION",
+            property_id: activePropertyId ?? undefined,
+            metadata: {
+              center_lat: Number(center.lat.toFixed(5)),
+              center_lng: Number(center.lng.toFixed(5)),
+              zoom: Number(map.getZoom().toFixed(2)),
+              section_type: "hero_map",
+            },
+          });
+        }, 800);
       });
 
       map.addSource("estate-site-pad", { type: "geojson", data: EMPTY_FC });
@@ -1897,6 +2049,10 @@ export default function MapSection({
     });
 
     return () => {
+      if (zoomRegionTimerRef.current) {
+        clearTimeout(zoomRegionTimerRef.current);
+        zoomRegionTimerRef.current = null;
+      }
       mobileQuery.removeEventListener("change", applyMobileInteractions);
       clearMobileTouchListeners();
       resizeObserver?.disconnect();
@@ -1904,127 +2060,116 @@ export default function MapSection({
       window.removeEventListener("resize", resizeMap);
       projectMarkersRef.current.forEach((m) => m.remove());
       projectMarkersRef.current = [];
+      markersByIdRef.current.clear();
       map.remove();
       mapRef.current = null;
       mapReadyRef.current = false;
+      setMapReady(false);
     };
   }, []);
 
-  // Keep every property pinned on the map; hide only the active project's pin
-  // while its layout is open.
+  // Create/remove markers ONLY when pins change or map becomes ready.
+  // Never destroy and recreate all DOM markers on selection, compare, or EMI state changes.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    projectMarkersRef.current.forEach((m) => m.remove());
-    projectMarkersRef.current = [];
+    const currentPinsMap = new Map(pins.map((p) => [p.id, p]));
+    const markersMap = markersByIdRef.current;
 
-    const visiblePins = activeProjectId
-      ? pins.filter((pin) => pin.id !== activeProjectId)
-      : pins;
-
-    const hasFeatureFilter = selectedFeatureKeys.length > 0;
-    const isComparing = compareSelectingMode;
-
-    visiblePins.forEach((project, index) => {
-      // Compare mode takes priority for pin appearance
-      const compareIndex = isComparing
-        ? compareSelectedIds.indexOf(project.id)
-        : -1;
-      const compareSelected = compareIndex >= 0;
-      const isCompareDimmed = isComparing && !compareSelected;
-
-      // Determine if pin matches active FindYourPlot selected features
-      const isMatch = hasFeatureFilter && featureMatchedPropertyIds.includes(project.id);
-      const isDimmed = isCompareDimmed || (!isComparing && hasFeatureFilter && !isMatch);
-      const isHighlighted = !isComparing && hasFeatureFilter && isMatch;
-
-      const placements: Array<"right" | "top" | "bottom" | "left"> = [
-        "right",
-        "top",
-        "bottom",
-        "left",
-      ];
-      const tagPlacement = placements[index % placements.length];
-
-      const el = createProjectPin(project, {
-        isHighlighted,
-        isDimmed,
-        compareSelected,
-        isCompareMode: isComparing,
-        compareIndex: compareSelected ? compareIndex + 1 : undefined,
-        tagPlacement,
-      });
-
-      if (emiSelectingProperty) {
-        el.classList.add("ila-project-pin--pulse");
+    // 1. Remove markers that are no longer in pins
+    for (const [id, record] of markersMap.entries()) {
+      if (!currentPinsMap.has(id)) {
+        record.marker.remove();
+        markersMap.delete(id);
       }
-      el.addEventListener("click", (event) => {
-        event.stopPropagation();
+    }
 
-        const isMobile = window.matchMedia("(max-width: 767px)").matches;
-        trackEvent({
-          event_type: "MAP_MARKER_CLICK",
-          property_id: project.id,
-          metadata: { source: "map_pin", section_type: "hero_map" },
-        });
+    // 2. Add markers for new pins (preserve existing markers)
+    pins.forEach((project, index) => {
+      let record = markersMap.get(project.id);
+      if (!record) {
+        const placements: Array<"right" | "top" | "bottom" | "left"> = [
+          "right",
+          "top",
+          "bottom",
+          "left",
+        ];
+        const tagPlacement = placements[index % placements.length];
 
-        // If user is currently in Compare Selection mode:
-        if (compareSelectingModeRef.current) {
-          toggleCompareId(project.id);
-          return;
-        }
+        const el = createProjectPin(project, { tagPlacement });
 
-        // If user is selecting a property specifically for EMI calculation:
-        // Do not zoom in or load the estate layout; only set the selection and open the popup.
-        if (emiSelectingPropertyRef.current) {
-          const matchedItem = propertyList.find((p) => p.id === project.id);
-          const effectivePrice =
-            project.price ??
-            matchedItem?.price ??
-            5000000;
-          setEmiSelectedProperty({
-            id: project.id,
-            name: project.name,
-            price: effectivePrice,
-            location: project.location || [matchedItem?.locality, matchedItem?.city].filter(Boolean).join(", ") || undefined,
+        el.addEventListener("click", (event) => {
+          event.stopPropagation();
+
+          const currentPin = pinsByIdRef.current.get(project.id) ?? project;
+
+          const isMobile = window.matchMedia("(max-width: 767px)").matches;
+          trackEvent({
+            event_type: "MAP_MARKER_CLICK",
+            property_id: currentPin.id,
+            metadata: { source: "map_pin", section_type: "hero_map" },
           });
-          setEmiSelectingProperty(false);
-          setEmiOpen(true);
-          return;
-        }
 
-        // Normal mode: Pins are shown for every property, so a tap has to load that
-        // property. Desktop gets a floating property block on left center;
-        // mobile gets the minimized popup bottom sheet.
-        void selectProperty(project.id, {
-          openSheet: true,
-          openDesktopCard: !isMobile,
-          openLayout: true,
+          const handlers = markerHandlersRef.current;
+
+          // If user is currently in Compare Selection mode:
+          if (compareSelectingModeRef.current) {
+            handlers.toggleCompareId(currentPin.id);
+            return;
+          }
+
+          // If user is selecting a property specifically for EMI calculation:
+          if (emiSelectingPropertyRef.current) {
+            const matchedItem = handlers.propertyList.find((p) => p.id === currentPin.id);
+            const effectivePrice =
+              currentPin.price ??
+              matchedItem?.price ??
+              5000000;
+            handlers.setEmiSelectedProperty({
+              id: currentPin.id,
+              name: currentPin.name,
+              price: effectivePrice,
+              location: currentPin.location || [matchedItem?.locality, matchedItem?.city].filter(Boolean).join(", ") || undefined,
+            });
+            handlers.setEmiSelectingProperty(false);
+            handlers.setEmiOpen(true);
+            return;
+          }
+
+          // Normal mode: Load property and open layout/sheet
+          void handlers.selectProperty(currentPin.id, {
+            openSheet: true,
+            openDesktopCard: !isMobile,
+            openLayout: true,
+          });
         });
-      });
-      const marker = new Marker({
-        element: el,
-        anchor: "bottom",
-      })
-        .setLngLat(project.center)
-        .addTo(map);
-      projectMarkersRef.current.push(marker);
+
+        const marker = new Marker({
+          element: el,
+          anchor: "bottom",
+        })
+          .setLngLat(project.center)
+          .addTo(map);
+
+        record = { marker, element: el, tagPlacement };
+        markersMap.set(project.id, record);
+      } else {
+        // In case coordinates or content changed (name, price)
+        record.marker.setLngLat(project.center);
+        updatePinContent(record.element, project);
+      }
     });
 
+    projectMarkersRef.current = Array.from(markersMap.values()).map((r) => r.marker);
+
     if (!activeProjectId) {
-      // Only re-frame when the pins themselves moved (or the sidebar resized
-      // the usable area). Selecting a property must not yank the camera back
-      // out to the portfolio view — `focusRequest` handles that instead.
       const signature = `${panelOpen}|${pins
         .map((pin) => `${pin.id}:${pin.center[0]},${pin.center[1]}`)
         .join("|")}`;
 
       if (signature !== fittedPinsRef.current) {
         fittedPinsRef.current = signature;
-        // Pins now stream in one at a time as their coordinates resolve, so an
-        // immediate fit would restart a 900ms camera move on every arrival.
-        // Coalescing lets the burst settle into a single framing pass.
         if (fitTimerRef.current) clearTimeout(fitTimerRef.current);
         fitTimerRef.current = setTimeout(() => {
           fitTimerRef.current = null;
@@ -2037,19 +2182,55 @@ export default function MapSection({
       onMapLoaded?.();
     }
   }, [
+    mapReady,
+    pins,
+    pinsBounds,
+    panelOpen,
+    activeProjectId,
+    onMapLoaded,
+  ]);
+
+  // Update marker DOM classes / styles in place without recreating markers.
+  // Depends on pins and mapReady so newly created markers get compare/dim/highlight/hidden state immediately.
+  useEffect(() => {
+    const markersMap = markersByIdRef.current;
+    if (markersMap.size === 0) return;
+
+    const hasFeatureFilter = selectedFeatureKeys.length > 0;
+    const isComparing = compareSelectingMode;
+
+    for (const [id, record] of markersMap.entries()) {
+      const el = record.element;
+
+      // Compare mode takes priority for pin appearance
+      const compareIndex = isComparing ? compareSelectedIds.indexOf(id) : -1;
+      const compareSelected = compareIndex >= 0;
+      const isCompareDimmed = isComparing && !compareSelected;
+
+      // FindYourPlot features match
+      const isMatch = hasFeatureFilter && featureMatchedPropertyIds.includes(id);
+      const isDimmed = isCompareDimmed || (!isComparing && hasFeatureFilter && !isMatch);
+      const isHighlighted = !isComparing && hasFeatureFilter && isMatch;
+
+      applyPinState(el, {
+        hidden: Boolean(activeProjectId && id === activeProjectId),
+        isHighlighted,
+        isDimmed,
+        compareSelected,
+        isCompareMode: isComparing,
+        compareIndex: compareSelected ? compareIndex + 1 : undefined,
+        emiPulse: emiSelectingProperty,
+      });
+    }
+  }, [
+    mapReady,
+    pins,
     activeProjectId,
     compareSelectedIds,
     compareSelectingMode,
     emiSelectingProperty,
     featureMatchedPropertyIds,
-    mapReady,
-    onMapLoaded,
-    panelOpen,
-    pins,
-    pinsBounds,
-    selectProperty,
     selectedFeatureKeys,
-    toggleCompareId,
   ]);
 
   // A property with no plot geometry still gets the camera, just without a layout.
@@ -2485,20 +2666,29 @@ export default function MapSection({
               {activeProject ? null : (
                 <div className="ila-scroll min-h-0 flex-1 space-y-0 overflow-y-auto">
                   {filteredProperties.length === 0 ? (
-                    <p className="px-3 py-8 text-center text-sm font-medium text-[#3f3a34]">
+                    <div className="px-3 py-8 text-center text-sm font-medium text-[#3f3a34]">
                       {remoteStatus === "loading" ? (
-                      <span className="inline-flex items-center justify-center gap-2">
-                        <span className="ila-loader ila-loader--sm" aria-hidden />
-                        Loading developments…
-                      </span>
-                    ) : remoteStatus === "error" ? (
-                      "Developments could not be loaded. Try again shortly."
-                    ) : query.trim() ? (
-                      "No developments match your search."
-                    ) : (
-                      "No developments published yet."
-                    )}
-                    </p>
+                        <span className="inline-flex items-center justify-center gap-2">
+                          <span className="ila-loader ila-loader--sm" aria-hidden />
+                          Loading developments…
+                        </span>
+                      ) : remoteStatus === "error" ? (
+                        <div className="flex flex-col items-center gap-3">
+                          <p>Developments could not be loaded. Try again shortly.</p>
+                          <button
+                            type="button"
+                            onClick={() => setPropertiesRetryCount((c) => c + 1)}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-[#171717] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#333333] active:scale-95"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      ) : query.trim() ? (
+                        <p>No developments match your search.</p>
+                      ) : (
+                        <p>No developments published yet.</p>
+                      )}
+                    </div>
                   ) : (
                     filteredProperties.map((item) => (
                       <PropertyCard
@@ -2754,6 +2944,7 @@ export default function MapSection({
 
             {/* Scrollable cards strip */}
             <div
+              id="tutorial-target-find-your-plot"
               ref={tagsScrollRef}
               className="pointer-events-auto flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-1 scroll-smooth scrollbar-none [&::-webkit-scrollbar]:hidden"
             >
@@ -2876,6 +3067,7 @@ export default function MapSection({
 
             {/* EMI Calculator Button */}
             <button
+              id="tutorial-target-emi"
               type="button"
               aria-label="Open EMI loan calculator"
               onClick={() => {
@@ -2931,6 +3123,7 @@ export default function MapSection({
             {/* Compare Properties Button - hidden when selecting property for EMI */}
             {!emiSelectingProperty ? (
               <button
+                id="tutorial-target-compare"
                 type="button"
                 aria-label="Compare properties on map"
                 onClick={() => {
@@ -3311,6 +3504,11 @@ export default function MapSection({
             </button>
           </div>
         </div>
+        ) : null}
+
+        {/* Feature onboarding tutorial for first-time visitors */}
+        {!singlePropertyId ? (
+          <FeatureTutorial mapReady={mapReady} />
         ) : null}
       </div>
     </section>

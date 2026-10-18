@@ -406,6 +406,14 @@ function parseLayoutCords(
   return cords;
 }
 
+type UnitsCacheEntry = {
+  result: PropertyUnitsResult;
+  timestamp: number;
+};
+
+const UNITS_CACHE_TTL_MS = 5 * 60 * 1000;
+const unitsCache = new Map<string, UnitsCacheEntry>();
+
 export async function fetchPropertyUnits(
   propertyId: string,
   signal?: AbortSignal,
@@ -418,6 +426,11 @@ export async function fetchPropertyUnits(
       tifUrl: null,
       layoutCords: null,
     };
+  }
+
+  const cached = unitsCache.get(propertyId);
+  if (cached && Date.now() - cached.timestamp < UNITS_CACHE_TTL_MS) {
+    return cached.result;
   }
 
   const units: PropertyUnit[] = [];
@@ -507,7 +520,19 @@ export async function fetchPropertyUnits(
     },
   );
 
-  return { units, total, layoutPreviewUrl, tifUrl, layoutCords };
+  const result: PropertyUnitsResult = {
+    units,
+    total,
+    layoutPreviewUrl,
+    tifUrl,
+    layoutCords,
+  };
+
+  if (!signal?.aborted) {
+    unitsCache.set(propertyId, { result, timestamp: Date.now() });
+  }
+
+  return result;
 }
 
 /**

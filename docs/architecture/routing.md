@@ -23,6 +23,9 @@ The relevant structure is:
 ```text
 src/app/
 ├── layout.tsx
+├── loading.tsx
+├── error.tsx
+├── not-found.tsx
 ├── page.tsx
 ├── properties/
 │   ├── page.tsx
@@ -37,9 +40,12 @@ src/app/
         └── route.ts
 ```
 
-`src/app/layout.tsx` is the only application layout found. It wraps every page with the document shell, global CSS, font, visitor/session/analytics initializers, `Navbar`, a `<main>` element, and `Footer`.
+`src/app/layout.tsx` is the root application layout. It wraps every page with the document shell, global CSS, font, visitor/session/analytics initializers, `Navbar`, a `<main>` element, and `Footer`.
 
-No nested route layout, template, loading file, error file, not-found file, or middleware file was found in the application source.
+Application-wide route boundaries:
+- `src/app/loading.tsx` renders a centered shared `ila-loader` (`ila-loader--light`) while server/route chunks load.
+- `src/app/error.tsx` catches runtime page errors and provides a retry button and navigation back to `/`.
+- `src/app/not-found.tsx` provides a branded 404 message and navigation back to `/`.
 
 ## 3. Root route
 

@@ -599,6 +599,7 @@ export default function Wishlist({
     <>
       {/* Floating Wishlist Trigger Button */}
       <button
+        id="tutorial-target-wishlist"
         type="button"
         aria-label="Saved properties wishlist"
         onClick={onOpen}

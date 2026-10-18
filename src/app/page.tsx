@@ -1,8 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import MapSection from "@/components/MapSection";
+import dynamic from "next/dynamic";
 import IlaIntroLoader from "@/components/IlaIntroLoader";
+
+const MapSection = dynamic(() => import("@/components/MapSection"), {
+  ssr: false,
+  loading: () => (
+    <div
+      className="h-full w-full bg-[#f8f6f0] animate-pulse flex items-center justify-center"
+      aria-label="Loading map"
+    />
+  ),
+});
 
 /**
  * Homepage composition.

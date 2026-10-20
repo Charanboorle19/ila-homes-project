@@ -673,6 +673,7 @@ export default function MapSection({
   });
   const mapReadyRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const [mapError, setMapError] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<ProjectId | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -774,20 +775,29 @@ export default function MapSection({
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
-  // Fetch active features for the bottom chips
+  // Fetch active features for the bottom chips after the map is ready so
+  // /api/features does not compete with first paint / tile decode.
   useEffect(() => {
+    if (!mapReady) return;
+
     const controller = new AbortController();
-    fetchActiveFeatures(controller.signal)
-      .then((data) => {
-        if (controller.signal.aborted) return;
-        setFeatures(data);
-      })
-      .catch((err) => {
-        if (controller.signal.aborted) return;
-        console.warn("[MapSection] could not load features", err);
-      });
-    return () => controller.abort();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchActiveFeatures(controller.signal)
+        .then((data) => {
+          if (controller.signal.aborted) return;
+          setFeatures(data);
+        })
+        .catch((err) => {
+          if (controller.signal.aborted) return;
+          console.warn("[MapSection] could not load features", err);
+        });
+    }, 800);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [mapReady]);
 
   const checkTagsScroll = useCallback(() => {
     const el = tagsScrollRef.current;
@@ -2068,14 +2078,32 @@ export default function MapSection({
     };
   }, []);
 
+  // Defer FeatureTutorial mount so logo/map register as LCP before the walkthrough card.
+  useEffect(() => {
+    if (!mapReady) return;
+
+    const timer = setTimeout(() => {
+      setShowTutorial(true);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [mapReady]);
+
   // Create/remove markers ONLY when pins change or map becomes ready.
   // Never destroy and recreate all DOM markers on selection, compare, or EMI state changes.
+  // New HTML markers are attached in rAF chunks so ~100 DOM inserts do not block one long task.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
     const currentPinsMap = new Map(pins.map((p) => [p.id, p]));
     const markersMap = markersByIdRef.current;
+    const placements: Array<"right" | "top" | "bottom" | "left"> = [
+      "right",
+      "top",
+      "bottom",
+      "left",
+    ];
 
     // 1. Remove markers that are no longer in pins
     for (const [id, record] of markersMap.entries()) {
@@ -2085,83 +2113,24 @@ export default function MapSection({
       }
     }
 
-    // 2. Add markers for new pins (preserve existing markers)
+    // 2. Update existing markers immediately; queue new pins for chunked creation
+    const pinsToCreate: Array<{ project: MapPin; index: number }> = [];
+
     pins.forEach((project, index) => {
-      let record = markersMap.get(project.id);
+      const record = markersMap.get(project.id);
       if (!record) {
-        const placements: Array<"right" | "top" | "bottom" | "left"> = [
-          "right",
-          "top",
-          "bottom",
-          "left",
-        ];
-        const tagPlacement = placements[index % placements.length];
-
-        const el = createProjectPin(project, { tagPlacement });
-
-        el.addEventListener("click", (event) => {
-          event.stopPropagation();
-
-          const currentPin = pinsByIdRef.current.get(project.id) ?? project;
-
-          const isMobile = window.matchMedia("(max-width: 767px)").matches;
-          trackEvent({
-            event_type: "MAP_MARKER_CLICK",
-            property_id: currentPin.id,
-            metadata: { source: "map_pin", section_type: "hero_map" },
-          });
-
-          const handlers = markerHandlersRef.current;
-
-          // If user is currently in Compare Selection mode:
-          if (compareSelectingModeRef.current) {
-            handlers.toggleCompareId(currentPin.id);
-            return;
-          }
-
-          // If user is selecting a property specifically for EMI calculation:
-          if (emiSelectingPropertyRef.current) {
-            const matchedItem = handlers.propertyList.find((p) => p.id === currentPin.id);
-            const effectivePrice =
-              currentPin.price ??
-              matchedItem?.price ??
-              5000000;
-            handlers.setEmiSelectedProperty({
-              id: currentPin.id,
-              name: currentPin.name,
-              price: effectivePrice,
-              location: currentPin.location || [matchedItem?.locality, matchedItem?.city].filter(Boolean).join(", ") || undefined,
-            });
-            handlers.setEmiSelectingProperty(false);
-            handlers.setEmiOpen(true);
-            return;
-          }
-
-          // Normal mode: Load property and open layout/sheet
-          void handlers.selectProperty(currentPin.id, {
-            openSheet: true,
-            openDesktopCard: !isMobile,
-            openLayout: true,
-          });
-        });
-
-        const marker = new Marker({
-          element: el,
-          anchor: "bottom",
-        })
-          .setLngLat(project.center)
-          .addTo(map);
-
-        record = { marker, element: el, tagPlacement };
-        markersMap.set(project.id, record);
-      } else {
-        // In case coordinates or content changed (name, price)
-        record.marker.setLngLat(project.center);
-        updatePinContent(record.element, project);
+        pinsToCreate.push({ project, index });
+        return;
       }
+      // In case coordinates or content changed (name, price)
+      record.marker.setLngLat(project.center);
+      updatePinContent(record.element, project);
     });
 
-    projectMarkersRef.current = Array.from(markersMap.values()).map((r) => r.marker);
+    const syncProjectMarkersRef = () => {
+      projectMarkersRef.current = Array.from(markersMap.values()).map((r) => r.marker);
+    };
+    syncProjectMarkersRef();
 
     if (!activeProjectId) {
       const signature = `${panelOpen}|${pins
@@ -2173,7 +2142,8 @@ export default function MapSection({
         if (fitTimerRef.current) clearTimeout(fitTimerRef.current);
         fitTimerRef.current = setTimeout(() => {
           fitTimerRef.current = null;
-          fitBounds(map, pinsBounds, 50, 13.2, panelOpen);
+          const liveMap = mapRef.current;
+          if (liveMap) fitBounds(liveMap, pinsBounds, 50, 13.2, panelOpen);
         }, 120);
       }
     }
@@ -2181,6 +2151,103 @@ export default function MapSection({
     if (mapReady && pins.length > 0) {
       onMapLoaded?.();
     }
+
+    if (pinsToCreate.length === 0) return;
+
+    let isCancelled = false;
+    let currentIndex = 0;
+    let rafId = 0;
+    const CHUNK_SIZE = 15;
+
+    const createMarkerForPin = (project: MapPin, index: number) => {
+      const liveMap = mapRef.current;
+      if (!liveMap || markersMap.has(project.id) || !currentPinsMap.has(project.id)) {
+        return;
+      }
+
+      const tagPlacement = placements[index % placements.length];
+      const el = createProjectPin(project, { tagPlacement });
+
+      el.addEventListener("click", (event) => {
+        event.stopPropagation();
+
+        const currentPin = pinsByIdRef.current.get(project.id) ?? project;
+
+        const isMobile = window.matchMedia("(max-width: 767px)").matches;
+        trackEvent({
+          event_type: "MAP_MARKER_CLICK",
+          property_id: currentPin.id,
+          metadata: { source: "map_pin", section_type: "hero_map" },
+        });
+
+        const handlers = markerHandlersRef.current;
+
+        // If user is currently in Compare Selection mode:
+        if (compareSelectingModeRef.current) {
+          handlers.toggleCompareId(currentPin.id);
+          return;
+        }
+
+        // If user is selecting a property specifically for EMI calculation:
+        if (emiSelectingPropertyRef.current) {
+          const matchedItem = handlers.propertyList.find((p) => p.id === currentPin.id);
+          const effectivePrice =
+            currentPin.price ??
+            matchedItem?.price ??
+            5000000;
+          handlers.setEmiSelectedProperty({
+            id: currentPin.id,
+            name: currentPin.name,
+            price: effectivePrice,
+            location: currentPin.location || [matchedItem?.locality, matchedItem?.city].filter(Boolean).join(", ") || undefined,
+          });
+          handlers.setEmiSelectingProperty(false);
+          handlers.setEmiOpen(true);
+          return;
+        }
+
+        // Normal mode: Load property and open layout/sheet
+        void handlers.selectProperty(currentPin.id, {
+          openSheet: true,
+          openDesktopCard: !isMobile,
+          openLayout: true,
+        });
+      });
+
+      const marker = new Marker({
+        element: el,
+        anchor: "bottom",
+      })
+        .setLngLat(project.center)
+        .addTo(liveMap);
+
+      markersMap.set(project.id, { marker, element: el, tagPlacement });
+    };
+
+    const renderNextMarkerChunk = () => {
+      if (isCancelled || !mapRef.current) return;
+
+      const end = Math.min(currentIndex + CHUNK_SIZE, pinsToCreate.length);
+      for (let i = currentIndex; i < end; i++) {
+        const entry = pinsToCreate[i];
+        if (!entry) continue;
+        createMarkerForPin(entry.project, entry.index);
+      }
+
+      currentIndex = end;
+      syncProjectMarkersRef();
+
+      if (currentIndex < pinsToCreate.length) {
+        rafId = requestAnimationFrame(renderNextMarkerChunk);
+      }
+    };
+
+    rafId = requestAnimationFrame(renderNextMarkerChunk);
+
+    return () => {
+      isCancelled = true;
+      cancelAnimationFrame(rafId);
+    };
   }, [
     mapReady,
     pins,
@@ -3509,9 +3576,7 @@ export default function MapSection({
         ) : null}
 
         {/* Feature onboarding tutorial for first-time visitors */}
-        {!singlePropertyId ? (
-          <FeatureTutorial mapReady={mapReady} />
-        ) : null}
+        {showTutorial && !singlePropertyId ? <FeatureTutorial /> : null}
       </div>
     </section>
   );

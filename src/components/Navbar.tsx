@@ -86,8 +86,9 @@ export default function Navbar() {
           <Image
             src="/ila-homes-logo.png"
             alt="ILA Homes"
-            width={1086}
-            height={362}
+            width={240}
+            height={80}
+            sizes="(max-width: 640px) 160px, (max-width: 1024px) 200px, 240px"
             priority
             className="h-11 w-auto object-contain sm:h-14 lg:h-16"
           />
@@ -122,11 +123,11 @@ export default function Navbar() {
           <Link
             href={pathname === "/why-us" ? "/" : "/why-us"}
             aria-current={pathname === "/why-us" ? "page" : undefined}
-            className="group relative inline-flex items-center justify-center overflow-hidden rounded-full p-[1px] transition-transform duration-300 active:scale-95"
+            className="group relative inline-flex items-center justify-center overflow-hidden rounded-full p-px transition-transform duration-300 active:scale-95"
           >
             {/* Subtle rotating gradient beam along the stroke */}
             <span
-              className="absolute inset-[-100%] animate-[spin_4.5s_linear_infinite] [background:conic-gradient(from_90deg_at_50%_50%,transparent_0%,transparent_75%,rgba(234,179,8,0.7)_88%,transparent_100%)]"
+              className="absolute -inset-full animate-[spin_4.5s_linear_infinite] [background:conic-gradient(from_90deg_at_50%_50%,transparent_0%,transparent_75%,rgba(234,179,8,0.7)_88%,transparent_100%)]"
               aria-hidden
             />
             {/* Button body */}
@@ -144,12 +145,12 @@ export default function Navbar() {
           <Link
             href={pathname === "/why-us" ? "/" : "/why-us"}
             aria-current={pathname === "/why-us" ? "page" : undefined}
-            className="group relative inline-flex items-center justify-center overflow-hidden rounded-full p-[1px] transition-transform duration-300 active:scale-95"
+            className="group relative inline-flex items-center justify-center overflow-hidden rounded-full p-px transition-transform duration-300 active:scale-95"
             onClick={() => setOpen(false)}
           >
             {/* Subtle rotating gradient beam along the stroke */}
             <span
-              className="absolute inset-[-100%] animate-[spin_4.5s_linear_infinite] [background:conic-gradient(from_90deg_at_50%_50%,transparent_0%,transparent_75%,rgba(234,179,8,0.7)_88%,transparent_100%)]"
+              className="absolute -inset-full animate-[spin_4.5s_linear_infinite] [background:conic-gradient(from_90deg_at_50%_50%,transparent_0%,transparent_75%,rgba(234,179,8,0.7)_88%,transparent_100%)]"
               aria-hidden
             />
             {/* Button body */}

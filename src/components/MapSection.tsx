@@ -78,6 +78,10 @@ const PriceEmiFuture = dynamic(
 import { allowAnalyticsFlush, trackEvent } from "@/services/analytics/tracker";
 import { formatInr } from "@/lib/propertyUtils";
 import { loadLayoutPreviewRaster } from "@/lib/layoutPreview";
+import {
+  setLayoutSvgOverlayContent,
+  syncLayoutSvgOverlayPosition,
+} from "@/lib/layoutSvgHtmlOverlay";
 import { loadLayoutRaster } from "@/lib/layoutTiff";
 import {
   SATELLITE_ATTRIBUTION,
@@ -825,6 +829,7 @@ export default function MapSection({
 }: MapSectionProps = {}) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const layoutSvgBoxRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const pinsByIdRef = useRef<Map<string, MapPin>>(new Map());
   const pinHandlersRef = useRef<{
@@ -1118,10 +1123,11 @@ export default function MapSection({
   /**
    * Attaches the master plan to the open estate.
    *
-   * The units payload carries two images: `layout_preview_url`, a PNG of the
-   * plan already rendered at screen resolution, and `tif_url`, the survey scan
-   * itself. The preview is preferred — it needs no decode and is far smaller —
-   * and the TIFF is decoded only for properties that have no preview.
+   * Layout images are SVG (served on `layout_preview_url`, or occasionally on
+   * `tif_url` when that field carries an `.svg`). They are fetched through the
+   * same-origin proxy and kept as native SVG markup for an HTML overlay
+   * georeferenced with `property_layout_cords`. A true `.tif`/`.tiff` URL is
+   * only decoded as a last resort when no SVG/preview is available.
    *
    * Both are presigned S3 links that die an hour after they are minted, so a
    * cached units payload can hand back a URL that is already expired (S3
@@ -1139,19 +1145,34 @@ export default function MapSection({
     }) => {
       let { layoutPreviewUrl, tifUrl, cords } = input;
 
-      // Prefer the TIFF supplied by the API. It is the authoritative layout
-      // image and is decoded locally before being handed to MapLibre. The
-      // preview is a fallback for properties without TIFF or where TIFF decode fails.
-      // If layoutPreviewUrl itself points to a .tif/.tiff, treat it as a TIFF scan.
-      const previewIsTiff = Boolean(
-        layoutPreviewUrl &&
-          /\.tiff?(?:$|\?)/i.test(layoutPreviewUrl),
-      );
-      const effectiveTifUrl = tifUrl ?? (previewIsTiff ? layoutPreviewUrl : null);
-      const effectivePreviewUrl = previewIsTiff ? null : layoutPreviewUrl;
+      const resolveLayoutUrls = (preview: string | null, tiffField: string | null) => {
+        const previewIsTiff = Boolean(preview && /\.tiff?(?:$|\?)/i.test(preview));
+        const previewIsSvg = Boolean(preview && /\.svg(?:$|\?)/i.test(preview));
+        const fieldIsTiff = Boolean(tiffField && /\.tiff?(?:$|\?)/i.test(tiffField));
+        const fieldIsSvg = Boolean(tiffField && /\.svg(?:$|\?)/i.test(tiffField));
 
-      let imageUrl: string | null = effectiveTifUrl ?? effectivePreviewUrl;
-      let useTiff = Boolean(effectiveTifUrl);
+        // Screen-ready layout (SVG / PNG / non-TIFF preview). Prefer SVG when
+        // the API still parks it on the legacy `tif_url` field.
+        const effectivePreviewUrl =
+          (preview && !previewIsTiff ? preview : null) ??
+          (fieldIsSvg ? tiffField : null);
+
+        const effectiveTifUrl =
+          (fieldIsTiff ? tiffField : null) ??
+          (previewIsTiff ? preview : null);
+
+        // SVG/preview first; geotiff only when that is all we have.
+        const imageUrl = effectivePreviewUrl ?? effectiveTifUrl;
+        const useTiff = Boolean(
+          effectiveTifUrl && imageUrl === effectiveTifUrl,
+        );
+        return { effectivePreviewUrl, effectiveTifUrl, imageUrl, useTiff, previewIsSvg };
+      };
+
+      let { imageUrl, useTiff, effectivePreviewUrl } = resolveLayoutUrls(
+        layoutPreviewUrl,
+        tifUrl,
+      );
       if (!imageUrl) return;
 
       for (let attempt = 1; attempt <= 2; attempt += 1) {
@@ -1171,15 +1192,21 @@ export default function MapSection({
               signal: input.signal,
             });
 
-        // If TIFF decoding failed on the first attempt but layoutPreviewUrl is available,
-        // immediately fall back to the PNG layout preview.
-        if (!raster && useTiff && layoutPreviewUrl && layoutPreviewUrl !== currentImageUrl) {
-          console.warn("[ILA map] layout TIFF decode failed, falling back to layoutPreviewUrl");
+        // If the rare TIFF path fails but an SVG/preview URL exists, use that.
+        if (
+          !raster &&
+          useTiff &&
+          effectivePreviewUrl &&
+          effectivePreviewUrl !== currentImageUrl
+        ) {
+          console.warn(
+            "[ILA map] layout TIFF decode failed, falling back to layout preview/SVG",
+          );
           useTiff = false;
-          imageUrl = layoutPreviewUrl;
+          imageUrl = effectivePreviewUrl;
           raster = await loadLayoutPreviewRaster({
             propertyId: input.propertyId,
-            previewUrl: layoutPreviewUrl,
+            previewUrl: effectivePreviewUrl,
             cords,
             signal: input.signal,
           });
@@ -1212,13 +1239,10 @@ export default function MapSection({
         layoutPreviewUrl = refreshed.layoutPreviewUrl ?? layoutPreviewUrl;
         tifUrl = refreshed.tifUrl ?? tifUrl;
         if (refreshed.layoutCords) cords = refreshed.layoutCords;
-        // If TIFF failed previously, prefer previewUrl in the retry
-        if (!useTiff && layoutPreviewUrl) {
-          imageUrl = layoutPreviewUrl;
-        } else {
-          imageUrl = tifUrl ?? layoutPreviewUrl;
-          useTiff = Boolean(tifUrl);
-        }
+        ({ imageUrl, useTiff, effectivePreviewUrl } = resolveLayoutUrls(
+          layoutPreviewUrl,
+          tifUrl,
+        ));
       }
     },
     [],
@@ -2539,6 +2563,15 @@ export default function MapSection({
     }
 
     syncLayoutRaster(map, activeProject?.layoutRaster, Boolean(activeProject));
+    setLayoutSvgOverlayContent(
+      layoutSvgBoxRef.current,
+      activeProject ? activeProject.layoutRaster : undefined,
+    );
+    syncLayoutSvgOverlayPosition(
+      map,
+      layoutSvgBoxRef.current,
+      activeProject ? activeProject.layoutRaster : undefined,
+    );
 
     if (activeProject) {
       // Zoom to the estate the units API just returned. Estate plots span a
@@ -2547,6 +2580,29 @@ export default function MapSection({
       fitBounds(map, activeProject.bounds, 60, LAYOUT_MAX_ZOOM, panelOpen);
     }
   }, [activeProject, mapReady, panelOpen]);
+
+  /**
+   * Keep the HTML SVG layout locked to property_layout_cords while the map
+   * pans/zooms. pointer-events: none lets GeoJSON plot hits reach the canvas.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    const box = layoutSvgBoxRef.current;
+    if (!map || !mapReady || !box) return;
+
+    const raster = activeProject?.layoutRaster;
+    const sync = () => syncLayoutSvgOverlayPosition(map, box, raster);
+
+    sync();
+    map.on("move", sync);
+    map.on("zoom", sync);
+    map.on("resize", sync);
+    return () => {
+      map.off("move", sync);
+      map.off("zoom", sync);
+      map.off("resize", sync);
+    };
+  }, [activeProject?.layoutRaster, activeProject?.id, mapReady]);
 
   /**
    * Switches to satellite imagery if either the user explicitly toggled
@@ -2773,6 +2829,12 @@ export default function MapSection({
         }
       >
         <div ref={mapContainerRef} className="absolute inset-0 h-full w-full min-h-full" />
+
+        {/* Native SVG master plan — georeferenced HTML overlay under UI chrome.
+            pointer-events: none so plot GeoJSON stays clickable on the canvas. */}
+        <div className="ila-layout-html-root pointer-events-none absolute inset-0" aria-hidden>
+          <div ref={layoutSvgBoxRef} className="ila-layout-svg-box" hidden />
+        </div>
 
         {mapError ? (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#ebe6de]/95 px-6 text-center">

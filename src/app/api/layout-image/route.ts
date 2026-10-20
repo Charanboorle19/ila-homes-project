@@ -2,11 +2,11 @@
  * Same-origin proxy for the estate master-plan image.
  *
  * The units API returns presigned S3 URLs for the layout (`layout_preview_url`,
- * a PNG preview, and `tif_url`, the raw survey scan). That bucket serves no
- * `Access-Control-Allow-Origin` header, so a browser cannot read either of them
- * directly — the request fails before any bytes arrive — and MapLibre cannot
- * put them on the map. They therefore have to come through the app's own
- * origin, where CORS does not apply.
+ * typically an SVG master plan, and optionally `tif_url` for a legacy TIFF
+ * scan). That bucket serves no `Access-Control-Allow-Origin` header, so a
+ * browser cannot read either of them directly — the request fails before any
+ * bytes arrive — and MapLibre cannot put them on the map. They therefore have
+ * to come through the app's own origin, where CORS does not apply.
  *
  *   GET /api/layout-image?url=<presigned s3 url>
  *
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
 
   try {
     const upstream = await fetch(parsed, {
-      headers: { Accept: "image/png,image/tiff,image/*" },
+      headers: { Accept: "image/svg+xml,image/png,image/tiff,image/*" },
       // Presigned URLs carry their own auth; never forward browser cookies.
       credentials: "omit",
     });

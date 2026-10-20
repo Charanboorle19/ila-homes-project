@@ -295,9 +295,9 @@ No direct `POST /api/events` call was found in the current source; the tracker c
 - **Path parameters:** none.
 - **Query parameters:** required `url`, containing a presigned URL. The handler accepts only HTTPS S3 hosts matching its Amazon S3 hostname pattern.
 - **Request body:** none.
-- **Required headers:** the browser request has no feature-specific required header. The server-side upstream fetch sends `Accept: image/png,image/tiff,image/*` and `credentials: omit`.
+- **Required headers:** the browser request has no feature-specific required header. The server-side upstream fetch sends `Accept: image/svg+xml,image/png,image/tiff,image/*` and `credentials: omit`.
 - **Response:** successful requests return the upstream image bytes with `Content-Type`, `Content-Length`, and `Cache-Control: private, no-store`.
-- **Transformation:** the route validates/parses the URL, fetches the S3 object server-side, buffers it, and returns it. `layoutPreview.ts` may decode the response as an image; `layoutTiff.ts` may decode it into a PNG data URL.
+- **Transformation:** the route validates/parses the URL, fetches the S3 object server-side, buffers it, and returns it. `layoutPreview.ts` rasterizes SVG (or decodes raster previews) for MapLibre; `layoutTiff.ts` may decode a legacy TIFF into a canvas.
 - **Consumers:** `loadLayoutPreviewRaster` and `decodeTiffToPngDataUrl`, used by `MapSection` layout imagery.
 - **Errors:** missing/invalid/non-HTTPS/non-S3 URLs return 400; upstream 403/404 are passed as 403/404 with an error JSON body, other upstream failures return 502; content over 60 MB returns 413; fetch failures return 502. Expired presigned URLs are identified in the error message where possible.
 

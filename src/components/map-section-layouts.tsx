@@ -314,7 +314,9 @@ export function setLayoutData(map: MapLibreMap, project: EstateProject | null) {
 }
 
 /**
- * Synchronizes the raster master-plan image overlay when a layout is open.
+ * Synchronizes the MapLibre raster master-plan image when a layout is open.
+ * Native SVG layouts use the HTML overlay instead (`svgMarkup`) and keep this
+ * WebGL raster layer hidden so plots stay sharp and clickable above it.
  */
 export function syncLayoutRaster(
   map: MapLibreMap,
@@ -326,9 +328,10 @@ export function syncLayoutRaster(
     return;
   }
 
-  const showRaster = Boolean(layoutVisible && raster);
+  const useHtmlSvg = Boolean(raster?.svgMarkup);
+  const showRaster = Boolean(layoutVisible && raster && !useHtmlSvg);
 
-  if (raster) {
+  if (raster && !useHtmlSvg) {
     if (raster.image) {
       source.updateImage({
         image: raster.image,

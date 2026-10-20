@@ -15,8 +15,8 @@ import type { PropertyLayoutCords } from "@/services/propertiesService";
  * units API returns (`property_layout_cords`) rather than GeoTIFF tags, which
  * keeps this independent of how the survey was exported.
  *
- * The API's `layout_preview_url` remains a separate PNG fallback — see
- * @/lib/layoutPreview.
+ * The API's `layout_preview_url` (SVG) is preferred — see @/lib/layoutPreview.
+ * This module is only used when a URL is actually a `.tif`/`.tiff`.
  */
 
 /**

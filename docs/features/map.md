@@ -53,7 +53,9 @@ The project has two MapLibre-based map components:
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\data\projects\fromApi.ts` — units-response-to-estate conversion.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\data\plots.ts` — `Plot` and `PlotStatus` types plus legacy/sample plot data.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\satelliteTiles.ts` — satellite source configuration.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\layoutPreview.ts` and `src\lib\layoutTiff.ts` — layout image loading.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\layoutPreview.ts` — layout preview loading. SVGs stay as native markup for the HTML overlay; PNG/JPEG decode to MapLibre image bitmaps. Georeference corners from `property_layout_cords` (NW→NE→SE→SW).
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\layoutSvgHtmlOverlay.ts` — HTML SVG overlay content + `map.project` position sync.
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\layoutTiff.ts` — legacy TIFF layout decode (last resort).
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\loading.css` — shared loading animation used by both components.
 
 ## 5. Data sources used by the map
@@ -125,7 +127,7 @@ List responses are expected as:
 }
 ```
 
-The units response is unwrapped by `fetchPropertyUnits` and supports a payload containing an array, `units`, `plots`, or `items`, or a GeoJSON `FeatureCollection`. Unit features are normalized with fields such as `plot_no`, `status`, `facing`, `sq_yards`, `sq_ft`, `price`, `per_sq_yard_price`, `per_sq_ft_price`, and optional centroid coordinates. When `layout_preview_url` carries a `.tif` or `.tiff` URL (or `tif_url` is provided), client-side TIFF parsing is automatically utilized; if `property_layout_cords` is empty or missing, layout bounds are derived directly from unit polygon coordinates (`estate.bounds`). Exact backend response variants beyond this normalization are UNKNOWN — needs verification.
+The units response is unwrapped by `fetchPropertyUnits` and supports a payload containing an array, `units`, `plots`, or `items`, or a GeoJSON `FeatureCollection`. Unit features are normalized with fields such as `plot_no`, `status`, `facing`, `sq_yards`, `sq_ft`, `price`, `per_sq_yard_price`, `per_sq_ft_price`, and optional centroid coordinates. Layout imagery prefers SVG on `layout_preview_url` (also accepted when an `.svg` is supplied on the legacy `tif_url` field): `loadLayoutPreviewRaster` proxies the SVG and returns native markup for the HTML overlay, georeferenced with `property_layout_cords` (NW→NE→SE→SW via `map.project`). True `.tif`/`.tiff` URLs still use client-side TIFF decoding into the MapLibre image source. If `property_layout_cords` is empty or missing, layout bounds are derived directly from unit polygon coordinates (`estate.bounds`). Exact backend response variants beyond this normalization are UNKNOWN — needs verification.
 
 ## 9. Functions and hooks used
 
@@ -170,7 +172,9 @@ The source does not expose a separate documented compass, geolocation, or drawin
 
 The plot fill palette is: available `#1F8A68`, sold `#8A8178`, selected `#D4A84B`, white plot edges, green open areas, beige site pad, and black/white road styling. Plot labels use the normalized `label` field (for example, `Plot 24`).
 
-The optional layout image uses source id `estate-layout-image` and layer id `estate-layout-raster`. Satellite imagery uses source id `satellite-imagery` and layer id `satellite-imagery-layer`.
+**Layout SVG (preferred):** `layout_preview_url` SVG is fetched via `/api/layout-image`, kept as native markup (`LayoutRaster.svgMarkup`), and drawn in an HTML overlay (`.ila-layout-html-root` / `.ila-layout-svg-box`) georeferenced from `property_layout_cords` with `map.project` on every move/zoom/resize. The overlay uses `pointer-events: none` so GeoJSON plot layers stay clickable. Helpers live in `src/lib/layoutSvgHtmlOverlay.ts` and `src/lib/layoutPreview.ts`.
+
+**Layout raster (legacy TIFF / PNG):** MapLibre image source id `estate-layout-image` and layer id `estate-layout-raster` (hidden when an HTML SVG overlay is active). Satellite imagery uses source id `satellite-imagery` and layer id `satellite-imagery-layer`.
 
 `GrowthCorridors` uses one `Marker` for the active location and does not render polygons or estate layers.
 

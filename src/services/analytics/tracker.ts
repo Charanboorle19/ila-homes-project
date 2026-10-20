@@ -42,10 +42,17 @@ export type EventCreateResult = {
 const FLUSH_INTERVAL_MS = 10_000;
 const MAX_QUEUE = 100;
 const MAX_BATCH = 50;
+/** First batch after map idle / gate open — keep clear of tile streaming. */
+const INITIAL_FLUSH_DELAY_MS = 4_000;
+/** Fallback so non-map routes still flush if no map ever signals idle. */
+const FLUSH_GATE_FALLBACK_MS = 8_000;
 
 let queue: EventPayload[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 let started = false;
+/** When false, timed batch POSTs wait so map tiles can claim bandwidth first. */
+let flushAllowed = false;
+let flushGateTimer: ReturnType<typeof setTimeout> | null = null;
 
 function makeClientEventId(eventType: string): string {
   const rand =
@@ -172,6 +179,16 @@ function buildPayload(event: {
 }
 
 function scheduleFlush() {
+  // Hold the auto-flush timer until the map (or fallback) releases the gate.
+  if (!flushAllowed) {
+    if (process.env.NODE_ENV !== "production") {
+      console.info(
+        `[analytics] queued ${pendingEventCount()} event(s); flush gated until map idle (or ${FLUSH_GATE_FALLBACK_MS / 1000}s fallback).`,
+      );
+    }
+    return;
+  }
+
   if (timer) return;
   timer = setTimeout(() => {
     timer = null;
@@ -183,6 +200,28 @@ function scheduleFlush() {
       `[analytics] queued ${pendingEventCount()} event(s); auto-flush in ${FLUSH_INTERVAL_MS / 1000}s. ` +
         "Force with __ilaAnalytics.flush()",
     );
+  }
+}
+
+/**
+ * Allows timed `/api/events/batch` flushes. Called when MapSection's first
+ * `idle` fires (tiles rendered). Other routes rely on the startAnalytics fallback.
+ */
+export function allowAnalyticsFlush(): void {
+  if (flushAllowed) return;
+  flushAllowed = true;
+
+  if (flushGateTimer) {
+    clearTimeout(flushGateTimer);
+    flushGateTimer = null;
+  }
+
+  if (queue.length > 0 && !timer) {
+    // Hold the first POST /api/events/batch until tiles have had time to finish.
+    timer = setTimeout(() => {
+      timer = null;
+      void flush();
+    }, INITIAL_FLUSH_DELAY_MS);
   }
 }
 
@@ -241,7 +280,7 @@ function postBatch(events: EventPayload[]): Promise<unknown> {
 }
 
 export async function flush(): Promise<void> {
-  if (queue.length === 0) return;
+  if (!flushAllowed || queue.length === 0) return;
 
   const batches: EventPayload[][] = [];
   const events = queue;
@@ -297,9 +336,16 @@ function flushOnPageHide() {
 export function startAnalytics(): void {
   if (started || typeof window === "undefined") return;
   started = true;
+  flushAllowed = false;
 
   // pagehide is the reliable close signal; beforeunload is not.
   window.addEventListener("pagehide", flushOnPageHide);
+
+  // Non-map routes never call allowAnalyticsFlush — open the gate after a delay.
+  flushGateTimer = setTimeout(() => {
+    flushGateTimer = null;
+    allowAnalyticsFlush();
+  }, FLUSH_GATE_FALLBACK_MS);
 
   if (process.env.NODE_ENV !== "production") {
     // Console handle so the queue can be inspected without waiting for a timer.
@@ -308,6 +354,7 @@ export function startAnalytics(): void {
       flush,
       queue: () => queue.slice(),
       ready: () => started,
+      flushAllowed: () => flushAllowed,
     };
   }
 
@@ -321,6 +368,11 @@ export function stopAnalytics(): void {
     clearTimeout(timer);
     timer = null;
   }
+  if (flushGateTimer) {
+    clearTimeout(flushGateTimer);
+    flushGateTimer = null;
+  }
+  flushAllowed = false;
   started = false;
 }
 

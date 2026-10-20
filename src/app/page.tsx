@@ -8,7 +8,7 @@ const MapSection = dynamic(() => import("@/components/MapSection"), {
   ssr: false,
   loading: () => (
     <div
-      className="h-full w-full bg-[#f8f6f0] animate-pulse flex items-center justify-center"
+      className="h-full w-full bg-[#090a0c]"
       aria-label="Loading map"
     />
   ),
@@ -17,11 +17,11 @@ const MapSection = dynamic(() => import("@/components/MapSection"), {
 /**
  * Homepage composition.
  *
- * Map fills the viewport directly below the sticky Navbar with zero page scrollbars.
- * An architectural reveal intro loader from into-ila-homes.html plays initially
- * while the map and pins are loading.
+ * Brand intro paints first. MapLibre / WebGL mounts only after a short delay so
+ * shader compile and tile decode do not contend with the architectural reveal.
  */
 export default function Home() {
+  const [shouldMountMap, setShouldMountMap] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [loaderVisible, setLoaderVisible] = useState(true);
 
@@ -33,6 +33,14 @@ export default function Home() {
       document.documentElement.classList.remove("no-scroll");
       document.body.classList.remove("no-scroll");
     };
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShouldMountMap(true);
+    }, 1200);
+
+    return () => clearTimeout(timer);
   }, []);
 
   const handleMapLoaded = () => {
@@ -56,11 +64,15 @@ export default function Home() {
           }
         />
       )}
-      <MapSection
-        className="h-full w-full"
-        hideDetails={true}
-        onMapLoaded={handleMapLoaded}
-      />
+      {shouldMountMap ? (
+        <MapSection
+          className="h-full w-full"
+          hideDetails={true}
+          onMapLoaded={handleMapLoaded}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-[#090a0c]" aria-hidden="true" />
+      )}
     </div>
   );
 }

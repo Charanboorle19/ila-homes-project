@@ -8,8 +8,12 @@ import "./globals.css";
 import "./loading.css";
 
 const montserrat = Montserrat({
-  variable: "--font-montserrat",
   subsets: ["latin"],
+  display: "swap",
+  variable: "--font-montserrat",
+  preload: true,
+  fallback: ["system-ui", "-apple-system", "sans-serif"],
+  adjustFontFallback: true,
   weight: ["400", "500", "600", "700"],
 });
 

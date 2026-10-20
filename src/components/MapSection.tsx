@@ -1320,45 +1320,14 @@ export default function MapSection({
 
         // Seed pins from the rows that already carry coordinates. This is
         // synchronous, so those pins render on the very next frame with no
-        // detail call involved at all.
+        // detail call involved at all. Missing anchors are backfilled only
+        // after the map's first idle (see effect below).
         const seeded: Record<string, PropertyAnchor> = {};
         for (const item of result.items) {
           const anchor = propertyAnchor(item);
           if (anchor) seeded[item.id] = anchor;
         }
         if (Object.keys(seeded).length > 0) setPropertyAnchors(seeded);
-
-        // Resolve the rest, publishing each anchor as it arrives instead of
-        // waiting for the slowest detail call in the batch. Pins appear
-        // progressively rather than all at once at the end. Batching into
-        // animation frames avoids 12-20 component re-renders in quick succession.
-        const flushPendingAnchors = () => {
-          anchorRafRef.current = null;
-          const batch = pendingAnchorsRef.current;
-          if (Object.keys(batch).length === 0) return;
-          pendingAnchorsRef.current = {};
-          setPropertyAnchors((previous) => ({ ...previous, ...batch }));
-        };
-
-        fetchPropertyAnchors(result.items, {
-          signal: controller.signal,
-          concurrency: 4,
-          onAnchor: (propertyId, anchor) => {
-            if (ignore || controller.signal.aborted) return;
-            pendingAnchorsRef.current[propertyId] = anchor;
-            if (anchorRafRef.current === null) {
-              anchorRafRef.current = window.requestAnimationFrame(flushPendingAnchors);
-            }
-          },
-        }).then((anchors) => {
-          if (ignore || controller.signal.aborted) return;
-          if (anchorRafRef.current !== null) {
-            window.cancelAnimationFrame(anchorRafRef.current);
-            anchorRafRef.current = null;
-          }
-          pendingAnchorsRef.current = {};
-          setPropertyAnchors((previous) => ({ ...previous, ...anchors }));
-        });
 
         // When a single property is requested (e.g. on /properties/{id}),
         // immediately open that property's layout.
@@ -1387,13 +1356,77 @@ export default function MapSection({
       // Ignore results from this effect instance. Do not abort the shared
       // controller here — StrictMode remounts reuse the same in-flight request.
       ignore = true;
+    };
+  }, [singlePropertyId, propertiesRetryCount]);
+
+  // Latest anchors for missing-item filtering without re-running this effect
+  // on every progressive pin update (which would abort the in-flight backfill).
+  const propertyAnchorsRef = useRef(propertyAnchors);
+  propertyAnchorsRef.current = propertyAnchors;
+
+  // Backfill missing property coordinates only after the basemap has settled,
+  // so detail GETs do not compete with OpenFreeMap style/tile/sprite downloads.
+  useEffect(() => {
+    if (!mapReady || propertyList.length === 0) return;
+    const map = mapRef.current;
+    if (!map) return;
+
+    const missingItems = propertyList.filter(
+      (item) => !propertyAnchor(item) && !propertyAnchorsRef.current[item.id],
+    );
+    if (missingItems.length === 0) return;
+
+    let cancelled = false;
+    let started = false;
+    const controller = new AbortController();
+
+    const flushPendingAnchors = () => {
+      anchorRafRef.current = null;
+      const batch = pendingAnchorsRef.current;
+      if (Object.keys(batch).length === 0) return;
+      pendingAnchorsRef.current = {};
+      setPropertyAnchors((previous) => ({ ...previous, ...batch }));
+    };
+
+    const startAnchorBackfill = () => {
+      if (cancelled || started) return;
+      started = true;
+
+      fetchPropertyAnchors(missingItems, {
+        signal: controller.signal,
+        concurrency: 2,
+        onAnchor: (propertyId, anchor) => {
+          if (cancelled || controller.signal.aborted) return;
+          pendingAnchorsRef.current[propertyId] = anchor;
+          if (anchorRafRef.current === null) {
+            anchorRafRef.current = window.requestAnimationFrame(flushPendingAnchors);
+          }
+        },
+      }).then((anchors) => {
+        if (cancelled || controller.signal.aborted) return;
+        if (anchorRafRef.current !== null) {
+          window.cancelAnimationFrame(anchorRafRef.current);
+          anchorRafRef.current = null;
+        }
+        pendingAnchorsRef.current = {};
+        setPropertyAnchors((previous) => ({ ...previous, ...anchors }));
+      });
+    };
+
+    // Wait until the camera settles and basemap vector tiles are painted.
+    map.once("idle", startAnchorBackfill);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      map.off("idle", startAnchorBackfill);
       if (anchorRafRef.current !== null) {
         window.cancelAnimationFrame(anchorRafRef.current);
         anchorRafRef.current = null;
       }
       pendingAnchorsRef.current = {};
     };
-  }, [singlePropertyId, propertiesRetryCount]);
+  }, [mapReady, propertyList]);
 
   /**
    * One pin per listed property, so the whole portfolio is on the map before

@@ -4,25 +4,40 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import IlaIntroLoader from "@/components/IlaIntroLoader";
 
+/** Hard cap for the brand splash — never wait on MapLibre tiles / onMapLoaded. */
+const INTRO_MAX_MS = 1400;
+const INTRO_FADE_MS = 300;
+/** Mount WebGL after first paint of the intro; still before splash is fully gone. */
+const MAP_MOUNT_MS = 1200;
+
+function MapSkeleton() {
+  return (
+    <div
+      className="absolute inset-0 bg-[#090a0c]"
+      aria-label="Loading map"
+      role="status"
+    >
+      <div className="absolute inset-0 animate-pulse bg-[#12141a]" />
+      <div className="absolute inset-x-0 bottom-0 h-1/3 bg-linear-to-t from-black/50 to-transparent" />
+    </div>
+  );
+}
+
 const MapSection = dynamic(() => import("@/components/MapSection"), {
   ssr: false,
-  loading: () => (
-    <div
-      className="h-full w-full bg-[#090a0c]"
-      aria-label="Loading map"
-    />
-  ),
+  loading: () => <MapSkeleton />,
 });
 
 /**
  * Homepage composition.
  *
- * Brand intro paints first. MapLibre / WebGL mounts only after a short delay so
- * shader compile and tile decode do not contend with the architectural reveal.
+ * Brand intro runs on a fixed timer and fades out regardless of map readiness,
+ * so LCP can register on the splash/placeholder instead of waiting for tiles.
+ * MapLibre mounts independently after a short delay.
  */
 export default function Home() {
   const [shouldMountMap, setShouldMountMap] = useState(false);
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const [introOpaque, setIntroOpaque] = useState(true);
   const [loaderVisible, setLoaderVisible] = useState(true);
 
   useEffect(() => {
@@ -36,43 +51,43 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const mountTimer = setTimeout(() => {
       setShouldMountMap(true);
-    }, 1200);
+    }, MAP_MOUNT_MS);
 
-    return () => clearTimeout(timer);
+    const fadeTimer = setTimeout(() => {
+      setIntroOpaque(false);
+    }, INTRO_MAX_MS - INTRO_FADE_MS);
+
+    const hideTimer = setTimeout(() => {
+      setLoaderVisible(false);
+    }, INTRO_MAX_MS);
+
+    return () => {
+      clearTimeout(mountTimer);
+      clearTimeout(fadeTimer);
+      clearTimeout(hideTimer);
+    };
   }, []);
-
-  const handleMapLoaded = () => {
-    if (!mapLoaded) {
-      setMapLoaded(true);
-      // Allow animation to complete its reveal gracefully before fading out
-      setTimeout(() => {
-        setLoaderVisible(false);
-      }, 700);
-    }
-  };
 
   return (
     <div className="relative flex-1 w-full h-[calc(100vh-var(--nav-h))] max-h-[calc(100vh-var(--nav-h))] overflow-hidden">
-      {loaderVisible && (
+      {/* Lightweight shell under the splash — LCP-friendly before WebGL mounts */}
+      {!shouldMountMap ? <MapSkeleton /> : null}
+
+      {shouldMountMap ? (
+        <MapSection className="h-full w-full" hideDetails={true} />
+      ) : null}
+
+      {loaderVisible ? (
         <IlaIntroLoader
           className={
-            mapLoaded
-              ? "opacity-0 pointer-events-none transition-opacity duration-700"
-              : "opacity-100"
+            introOpaque
+              ? "opacity-100"
+              : "opacity-0 pointer-events-none transition-opacity duration-300"
           }
         />
-      )}
-      {shouldMountMap ? (
-        <MapSection
-          className="h-full w-full"
-          hideDetails={true}
-          onMapLoaded={handleMapLoaded}
-        />
-      ) : (
-        <div className="absolute inset-0 bg-[#090a0c]" aria-hidden="true" />
-      )}
+      ) : null}
     </div>
   );
 }

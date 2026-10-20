@@ -23,11 +23,11 @@ const CompareProperties = dynamic(() => import("@/components/CompareProperties")
 import {
   LngLatBounds,
   Map as MapLibreMap,
-  Marker,
   setWorkerUrl,
   type FilterSpecification,
   type GeoJSONSource,
   type ImageSource,
+  type MapLayerMouseEvent,
   type MapMouseEvent,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -84,6 +84,7 @@ import {
   SATELLITE_SOURCE_ID,
   SATELLITE_TILES_URL,
 } from "@/lib/satelliteTiles";
+import { loadPrunedLibertyStyle } from "@/lib/pruneLibertyStyle";
 import { ILA_API_BASE_URL } from "@/lib/ilaApiConfig";
 import MapVersion, { type MapViewMode } from "@/components/map-version";
 import {
@@ -101,6 +102,12 @@ type SheetTab = "about" | "plots" | "features" | "location";
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+
+/** WebGL property pins — GeoJSON source + circle/symbol layers (no HTML Markers). */
+const PROPERTY_PINS_SOURCE_ID = "property-pins";
+const PROPERTY_PINS_HALO_LAYER_ID = "property-pins-halo";
+const PROPERTY_PINS_CIRCLE_LAYER_ID = "property-pins-circle";
+const PROPERTY_PINS_LABEL_LAYER_ID = "property-pins-label";
 
 /**
  * Shared catalogue fetch so React StrictMode remounts (and unstable callback
@@ -498,152 +505,173 @@ function fitBounds(
   });
 }
 
-/**
- * Applies visual state (compare, highlighting, dimming, EMI pulse, compare badge)
- * to an existing pin button DOM element without recreating it.
- */
-function applyPinState(
-  el: HTMLElement,
-  state: {
-    isHighlighted?: boolean;
-    isDimmed?: boolean;
-    compareSelected?: boolean;
-    isCompareMode?: boolean;
-    compareIndex?: number;
-    emiPulse?: boolean;
-    hidden?: boolean;
-  },
-) {
-  if (state.hidden) {
-    el.style.display = "none";
-    return;
-  }
-  el.style.display = "";
+type PinVisualState = {
+  activeProjectId: string | null;
+  compareSelectingMode: boolean;
+  compareSelectedIds: string[];
+  emiSelectingProperty: boolean;
+  selectedFeatureKeys: string[];
+  featureMatchedPropertyIds: string[];
+};
 
-  el.classList.toggle("ila-project-pin--compare-selected", Boolean(state.compareSelected));
-  el.classList.toggle(
-    "ila-project-pin--compare-mode",
-    Boolean(state.isCompareMode && !state.compareSelected),
-  );
-  el.classList.toggle("ila-project-pin--highlighted", Boolean(state.isHighlighted));
-  el.classList.toggle("ila-project-pin--dimmed", Boolean(state.isDimmed));
-  el.classList.toggle("ila-project-pin--pulse", Boolean(state.emiPulse));
+/** Builds a GeoJSON FeatureCollection for GPU circle/symbol pin layers. */
+function pinsToGeoJSON(
+  pins: MapPin[],
+  state: PinVisualState,
+): GeoJSON.FeatureCollection {
+  const hasFeatureFilter = state.selectedFeatureKeys.length > 0;
+  const isComparing = state.compareSelectingMode;
 
-  let badge = el.querySelector<HTMLElement>(".ila-project-pin__badge");
-  if (state.compareSelected && typeof state.compareIndex === "number") {
-    if (!badge) {
-      badge = document.createElement("span");
-      badge.className = "ila-project-pin__badge";
-      el.prepend(badge);
-    }
-    badge.textContent = String(state.compareIndex);
-  } else if (badge) {
-    badge.remove();
-  }
+  return {
+    type: "FeatureCollection",
+    features: pins.map((pin) => {
+      const compareIndex = isComparing
+        ? state.compareSelectedIds.indexOf(pin.id)
+        : -1;
+      const compareSelected = compareIndex >= 0;
+      const isCompareDimmed = isComparing && !compareSelected;
+      const isMatch =
+        hasFeatureFilter && state.featureMatchedPropertyIds.includes(pin.id);
+      const isDimmed =
+        isCompareDimmed || (!isComparing && hasFeatureFilter && !isMatch);
+      const isHighlighted = !isComparing && hasFeatureFilter && isMatch;
+      const hidden = Boolean(
+        state.activeProjectId && pin.id === state.activeProjectId,
+      );
+      const priceLabel =
+        pin.formattedPrice ||
+        (pin.price ? `From ${formatPrice(pin.price)}` : "Price on request");
+
+      return {
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: pin.center,
+        },
+        properties: {
+          id: pin.id,
+          name: pin.name,
+          priceLabel,
+          hidden: hidden ? 1 : 0,
+          dimmed: isDimmed ? 1 : 0,
+          highlighted: isHighlighted ? 1 : 0,
+          compareSelected: compareSelected ? 1 : 0,
+          compareIndex: compareSelected ? compareIndex + 1 : 0,
+          emiPulse: state.emiSelectingProperty ? 1 : 0,
+        },
+      };
+    }),
+  };
 }
 
-/**
- * Updates the text/price labels in an existing pin button element when the project data changes.
- */
-function updatePinContent(el: HTMLElement, project: MapPin) {
-  el.setAttribute(
-    "aria-label",
-    project.location ? `${project.name}, ${project.location}` : project.name,
-  );
+function ensurePropertyPinLayers(map: MapLibreMap) {
+  if (map.getSource(PROPERTY_PINS_SOURCE_ID)) return;
 
-  const tagTextEl = el.querySelector<HTMLElement>(".ila-pin-tag__text");
-  if (tagTextEl) {
-    const tagText =
-      project.formattedPrice ||
-      (project.price ? `From ${formatPrice(project.price)}` : "Price on request");
-    tagTextEl.textContent = tagText;
-  }
-
-  const tooltipNameEl = el.querySelector<HTMLElement>(".ila-pin-tooltip__name");
-  if (tooltipNameEl) {
-    tooltipNameEl.textContent = project.name;
-  }
-
-  const tooltipPriceEl = el.querySelector<HTMLElement>(".ila-pin-tooltip__price");
-  if (tooltipPriceEl && project.formattedPrice) {
-    tooltipPriceEl.textContent = project.formattedPrice;
-  }
-}
-
-/**
- * A pin is the marker only — the name is carried by the accessible label and
- * the native tooltip, not rendered as a tag on the map. With no visible tags,
- * pins are placed at their exact coordinates instead of being nudged apart to
- * stop labels colliding.
- */
-function createProjectPin(
-  project: MapPin,
-  options?: {
-    isHighlighted?: boolean;
-    isDimmed?: boolean;
-    compareSelected?: boolean;
-    isCompareMode?: boolean;
-    compareIndex?: number;
-    tagPlacement?: "top" | "right" | "left" | "bottom";
-  },
-) {
-  const el = document.createElement("button");
-  el.type = "button";
-  const placementClass = `ila-project-pin--tag-${options?.tagPlacement || "right"}`;
-  el.className = `ila-project-pin group ${placementClass}`;
-  el.setAttribute(
-    "aria-label",
-    project.location ? `${project.name}, ${project.location}` : project.name,
-  );
-
-  const priceHtml = project.formattedPrice
-    ? `<span class="ila-pin-tooltip__price">${project.formattedPrice}</span>`
-    : "";
-  const locationHtml = project.location
-    ? `<span class="ila-pin-tooltip__loc">${project.location}</span>`
-    : "";
-
-  // Tag should consistently show price / starting from
-  const tagText =
-    project.formattedPrice ||
-    (project.price ? `From ${formatPrice(project.price)}` : "Price on request");
-
-  el.innerHTML = `
-    <div class="ila-project-pin__anchor">
-      <div class="ila-project-pin__halo" aria-hidden="true"></div>
-      <div class="ila-project-pin__core">
-        <svg viewBox="300 205 180 135" class="ila-project-pin__icon" aria-hidden="true" fill="currentColor">
-          <rect x="311" y="216" width="19" height="112" />
-          <path d="M 339 216 H 358 V 300 H 405 V 328 H 361 Q 339 328 339 306 Z" />
-          <path fill-rule="evenodd" d="M 378 296 L 414 216 H 434 L 470 296 H 449 L 441 278 H 406 L 398 296 Z M 412 262 H 435 L 424 236 Z" />
-        </svg>
-      </div>
-      <div class="ila-project-pin__needle" aria-hidden="true"></div>
-      <div class="ila-project-pin__point" aria-hidden="true"></div>
-    </div>
-    <div class="ila-pin-tag" aria-hidden="true">
-      <span class="ila-pin-tag__text">${tagText}</span>
-    </div>
-    <div class="ila-pin-tooltip" aria-hidden="true">
-      <span class="ila-pin-tooltip__eyebrow">Development</span>
-      <strong class="ila-pin-tooltip__name">${project.name}</strong>
-      ${locationHtml}
-      ${priceHtml}
-      <span class="ila-pin-tooltip__arrow"></span>
-    </div>
-  `;
-
-  applyPinState(el, {
-    isHighlighted: options?.isHighlighted,
-    isDimmed: options?.isDimmed,
-    compareSelected: options?.compareSelected,
-    isCompareMode: options?.isCompareMode,
-    compareIndex: options?.compareIndex,
+  map.addSource(PROPERTY_PINS_SOURCE_ID, {
+    type: "geojson",
+    data: EMPTY_FC,
   });
 
-  return el;
-}
+  const visibleFilter: FilterSpecification = ["!=", ["get", "hidden"], 1];
 
+  map.addLayer({
+    id: PROPERTY_PINS_HALO_LAYER_ID,
+    type: "circle",
+    source: PROPERTY_PINS_SOURCE_ID,
+    filter: visibleFilter,
+    paint: {
+      "circle-radius": [
+        "case",
+        ["==", ["get", "emiPulse"], 1],
+        16,
+        ["==", ["get", "highlighted"], 1],
+        14,
+        12,
+      ],
+      "circle-color": "#c6a46c",
+      "circle-opacity": [
+        "case",
+        ["==", ["get", "dimmed"], 1],
+        0.08,
+        0.28,
+      ],
+      "circle-blur": 0.35,
+    },
+  });
+
+  map.addLayer({
+    id: PROPERTY_PINS_CIRCLE_LAYER_ID,
+    type: "circle",
+    source: PROPERTY_PINS_SOURCE_ID,
+    filter: visibleFilter,
+    paint: {
+      "circle-radius": [
+        "case",
+        ["==", ["get", "compareSelected"], 1],
+        9,
+        ["==", ["get", "emiPulse"], 1],
+        8.5,
+        ["==", ["get", "highlighted"], 1],
+        8,
+        7,
+      ],
+      "circle-color": [
+        "case",
+        ["==", ["get", "compareSelected"], 1],
+        "#e0c58e",
+        ["==", ["get", "highlighted"], 1],
+        "#d4b57e",
+        "#c6a46c",
+      ],
+      "circle-opacity": [
+        "case",
+        ["==", ["get", "dimmed"], 1],
+        0.28,
+        0.95,
+      ],
+      "circle-stroke-width": 2,
+      "circle-stroke-color": "#171717",
+    },
+  });
+
+  map.addLayer({
+    id: PROPERTY_PINS_LABEL_LAYER_ID,
+    type: "symbol",
+    source: PROPERTY_PINS_SOURCE_ID,
+    filter: visibleFilter,
+    layout: {
+      "text-field": [
+        "case",
+        [">", ["get", "compareIndex"], 0],
+        ["to-string", ["get", "compareIndex"]],
+        ["get", "priceLabel"],
+      ],
+      "text-size": [
+        "case",
+        [">", ["get", "compareIndex"], 0],
+        12,
+        10,
+      ],
+      "text-offset": [0, 1.35],
+      "text-anchor": "top",
+      "text-optional": true,
+      "text-allow-overlap": false,
+      "text-ignore-placement": false,
+      "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+    },
+    paint: {
+      "text-color": "#f2f0ea",
+      "text-halo-color": "#0a0b0e",
+      "text-halo-width": 1.4,
+      "text-opacity": [
+        "case",
+        ["==", ["get", "dimmed"], 1],
+        0.35,
+        1,
+      ],
+    },
+  });
+}
 
 export type MapSectionProps = {
   propertyId?: string;
@@ -665,10 +693,8 @@ export default function MapSection({
   const sectionRef = useRef<HTMLElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  const projectMarkersRef = useRef<Marker[]>([]);
-  const markersByIdRef = useRef<Map<string, { marker: Marker; element: HTMLElement; tagPlacement: "top" | "right" | "left" | "bottom" }>>(new Map());
   const pinsByIdRef = useRef<Map<string, MapPin>>(new Map());
-  const markerHandlersRef = useRef<{
+  const pinHandlersRef = useRef<{
     selectProperty: (id: string, options: { openSheet?: boolean; openDesktopCard?: boolean; openLayout?: boolean }) => void;
     toggleCompareId: (id: string) => void;
     setEmiSelectedProperty: (prop: { id: string; name: string; price: number; location?: string } | null) => void;
@@ -1255,9 +1281,9 @@ export default function MapSection({
     [attachLayoutImage],
   );
 
-  // Synchronize interaction handlers into ref so marker click events never require recreating markers
+  // Keep pin click handlers in a ref so WebGL layer listeners stay stable across renders.
   useEffect(() => {
-    markerHandlersRef.current = {
+    pinHandlersRef.current = {
       selectProperty,
       toggleCompareId,
       setEmiSelectedProperty,
@@ -1848,52 +1874,88 @@ export default function MapSection({
     ).toString();
     setWorkerUrl(workerUrl);
 
-    let map: MapLibreMap;
-    try {
-      const isMobileScreen =
-        typeof window !== "undefined" &&
-        !window.matchMedia("(min-width: 768px)").matches;
-      const enableCooperativeGestures = Boolean(singlePropertyId) && isMobileScreen;
-      map = new MapLibreMap({
-        container: mapContainerRef.current,
-        style: MAP_STYLE,
-        center: [78.42, 17.17],
-        zoom: 11.4,
-        pitch: 0,
-        maxZoom: 18.5,
-        // Cap offscreen tile retention and skip wrapped world copies so OpenFreeMap
-        // sprites/glyphs compete less with the first viewport's tile decode.
-        maxTileCacheSize: 15,
-        renderWorldCopies: false,
-        fadeDuration: 0,
-        attributionControl: { compact: true },
-        dragRotate: true,
-        pitchWithRotate: true,
-        touchPitch: true,
-        cooperativeGestures: enableCooperativeGestures,
-      });
-    } catch (error) {
-      console.error("Unable to initialize the developments map", error);
-      setMapError(true);
-      return;
-    }
+    let cancelled = false;
+    let map: MapLibreMap | undefined;
+    let mobileQuery: MediaQueryList | undefined;
+    let resizeObserver: ResizeObserver | null = null;
+    let clearMobileTouchListeners = () => {};
+    let applyMobileInteractions = () => {};
+    let onWheel: (() => void) | undefined;
+    let canvas: HTMLElement | undefined;
+    let resizeMap = () => {};
+    let onOrientationChange = () => {};
 
-    mapRef.current = map;
-    map.on("error", (event) => {
-      console.error("Developments map error", event.error);
-      if (!mapReadyRef.current) setMapError(true);
-    });
+    const isMobileScreen =
+      typeof window !== "undefined" &&
+      !window.matchMedia("(min-width: 768px)").matches;
+    const enableCooperativeGestures = Boolean(singlePropertyId) && isMobileScreen;
+
+    void (async () => {
+      let prunedStyle;
+      try {
+        prunedStyle = await loadPrunedLibertyStyle(MAP_STYLE);
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Unable to load the pruned OpenFreeMap style", error);
+        setMapError(true);
+        return;
+      }
+      if (cancelled || !mapContainerRef.current) return;
+
+      try {
+        map = new MapLibreMap({
+          container: mapContainerRef.current,
+          // Pruned Liberty JSON (rail / 3D buildings / footpaths / shields / airport POIs removed)
+          // so MapLibre never requests unused glyphs or builds buckets for those layers.
+          style: prunedStyle,
+          center: [78.42, 17.17],
+          zoom: 11.4,
+          pitch: 0,
+          maxZoom: 18.5,
+          // Cap offscreen tile retention and skip wrapped world copies so OpenFreeMap
+          // sprites/glyphs compete less with the first viewport's tile decode.
+          maxTileCacheSize: 15,
+          renderWorldCopies: false,
+          fadeDuration: 0,
+          attributionControl: { compact: true },
+          dragRotate: true,
+          pitchWithRotate: true,
+          touchPitch: true,
+          cooperativeGestures: enableCooperativeGestures,
+        });
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Unable to initialize the developments map", error);
+        setMapError(true);
+        return;
+      }
+
+      if (!map || cancelled) {
+        map?.remove();
+        return;
+      }
+
+      // Const captures so nested handlers see a definite MapLibre instance.
+      const liveMap = map;
+      mobileQuery = window.matchMedia("(max-width: 767px)");
+      const liveMq = mobileQuery;
+
+      mapRef.current = liveMap;
+      liveMap.on("error", (event) => {
+        console.error("Developments map error", event.error);
+        if (!mapReadyRef.current) setMapError(true);
+      });
 
     // Mobile: native vertical page scroll + horizontal map pan + pinch zoom
-    const mobileQuery = window.matchMedia("(max-width: 767px)");
     let lastTouchX: number | null = null;
     let lastTouchY: number | null = null;
     let gestureAxis: "pending" | "horizontal" | "vertical" | "pinch" =
       "pending";
-    const canvas = map.getCanvasContainer();
-    const glCanvas = map.getCanvas();
+    canvas = liveMap.getCanvasContainer();
+    const glCanvas = liveMap.getCanvas();
 
     const setMobileTouchAction = (enabled: boolean) => {
+      if (!canvas) return;
       const value = enabled ? "pan-y" : "";
       canvas.style.touchAction = value;
       glCanvas.style.touchAction = value;
@@ -1914,7 +1976,7 @@ export default function MapSection({
     };
 
     const onTouchMove = (event: TouchEvent) => {
-      if (!mobileQuery.matches || mapFullscreenRef.current) return;
+      if (!liveMq.matches || mapFullscreenRef.current) return;
 
       if (event.touches.length !== 1) {
         gestureAxis = "pinch";
@@ -1942,7 +2004,7 @@ export default function MapSection({
       lastTouchX = touch.clientX;
       lastTouchY = touch.clientY;
       event.preventDefault();
-      map.panBy([-dx, 0], { animate: false });
+      liveMap.panBy([-dx, 0], { animate: false });
     };
 
     const onTouchEnd = () => {
@@ -1951,41 +2013,41 @@ export default function MapSection({
       gestureAxis = "pending";
     };
 
-    const clearMobileTouchListeners = () => {
-      canvas.removeEventListener("touchstart", onTouchStart);
-      canvas.removeEventListener("touchmove", onTouchMove);
-      canvas.removeEventListener("touchend", onTouchEnd);
-      canvas.removeEventListener("touchcancel", onTouchEnd);
+    clearMobileTouchListeners = () => {
+      canvas?.removeEventListener("touchstart", onTouchStart);
+      canvas?.removeEventListener("touchmove", onTouchMove);
+      canvas?.removeEventListener("touchend", onTouchEnd);
+      canvas?.removeEventListener("touchcancel", onTouchEnd);
     };
 
-    const applyMobileInteractions = () => {
+    applyMobileInteractions = () => {
       clearMobileTouchListeners();
-      const isMobile = mobileQuery.matches;
+      const isMobile = liveMq.matches;
       const isPropertyPage = Boolean(singlePropertyId);
 
       if (isPropertyPage && isMobile && !mapFullscreenRef.current) {
         // Enforce restriction to use two fingers on property pages:
-        map.cooperativeGestures?.enable();
-        map.scrollZoom.disable();
-        map.dragPan.enable();
-        map.touchZoomRotate.enable();
-        map.touchZoomRotate.enableRotation();
-        map.dragRotate.enable();
+        liveMap.cooperativeGestures?.enable();
+        liveMap.scrollZoom.disable();
+        liveMap.dragPan.enable();
+        liveMap.touchZoomRotate.enable();
+        liveMap.touchZoomRotate.enableRotation();
+        liveMap.dragRotate.enable();
         setMobileTouchAction(true);
       } else {
         // Unrestricted full interaction on desktop or homepage:
-        map.cooperativeGestures?.disable();
-        map.scrollZoom.enable();
-        map.dragPan.enable();
-        map.touchZoomRotate.enable();
-        map.touchZoomRotate.enableRotation();
-        map.dragRotate.enable();
+        liveMap.cooperativeGestures?.disable();
+        liveMap.scrollZoom.enable();
+        liveMap.dragPan.enable();
+        liveMap.touchZoomRotate.enable();
+        liveMap.touchZoomRotate.enableRotation();
+        liveMap.dragRotate.enable();
         setMobileTouchAction(false);
       }
     };
 
-    const onWheel = () => {
-      if (mapFullscreenRef.current || mobileQuery.matches) return;
+    onWheel = () => {
+      if (mapFullscreenRef.current || liveMq.matches) return;
       setDesktopScrollHint(true);
       if (desktopScrollHintTimerRef.current) clearTimeout(desktopScrollHintTimerRef.current);
       desktopScrollHintTimerRef.current = setTimeout(() => {
@@ -1997,31 +2059,31 @@ export default function MapSection({
 
     applyInteractionsRef.current = applyMobileInteractions;
     applyMobileInteractions();
-    mobileQuery.addEventListener("change", applyMobileInteractions);
+    liveMq.addEventListener("change", applyMobileInteractions);
 
-    const resizeMap = () => {
-      map.resize();
+    resizeMap = () => {
+      liveMap.resize();
     };
-    const resizeObserver =
+    resizeObserver =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => {
-            map.resize();
+            liveMap.resize();
           })
         : null;
-    const onOrientationChange = () => map.resize();
+    onOrientationChange = () => liveMap.resize();
     resizeObserver?.observe(mapContainerRef.current);
     window.addEventListener("orientationchange", onOrientationChange);
     window.addEventListener("resize", resizeMap);
-    window.requestAnimationFrame(() => map.resize());
+    window.requestAnimationFrame(() => liveMap.resize());
 
-    map.on("load", () => {
-      map.resize();
-      window.requestAnimationFrame(() => map.resize());
-      if (mobileQuery.matches) setMobileTouchAction(true);
+    liveMap.on("load", () => {
+      liveMap.resize();
+      window.requestAnimationFrame(() => liveMap.resize());
+      if (liveMq.matches) setMobileTouchAction(true);
 
       const updateZoomClass = () => {
         if (!mapContainerRef.current) return;
-        const currentZoom = map.getZoom();
+        const currentZoom = liveMap.getZoom();
         if (currentZoom >= 12.5) {
           mapContainerRef.current.classList.add("map--zoomed-in");
         } else {
@@ -2038,16 +2100,16 @@ export default function MapSection({
         }
       };
       updateZoomClass();
-      map.on("zoom", updateZoomClass);
+      liveMap.on("zoom", updateZoomClass);
 
       // MAP_ZOOM_REGION: report the viewport the visitor settled on, so we can
       // tell which part of the layout they are exploring. Debounced by 800ms
       // so active pan/zoom gestures do not flood the analytics queue.
       let lastZoomRegion = "";
-      map.on("moveend", () => {
+      liveMap.on("moveend", () => {
         updateZoomClass();
-        const center = map.getCenter();
-        const region = `${center.lat.toFixed(2)},${center.lng.toFixed(2)}@${map
+        const center = liveMap.getCenter();
+        const region = `${center.lat.toFixed(2)},${center.lng.toFixed(2)}@${liveMap
           .getZoom()
           .toFixed(1)}`;
         if (region === lastZoomRegion) return;
@@ -2062,27 +2124,27 @@ export default function MapSection({
             metadata: {
               center_lat: Number(center.lat.toFixed(5)),
               center_lng: Number(center.lng.toFixed(5)),
-              zoom: Number(map.getZoom().toFixed(2)),
+              zoom: Number(liveMap.getZoom().toFixed(2)),
               section_type: "hero_map",
             },
           });
         }, 800);
       });
 
-      map.addSource("estate-site-pad", { type: "geojson", data: EMPTY_FC });
-      map.addSource("estate-open-areas", { type: "geojson", data: EMPTY_FC });
-      map.addSource("estate-plots", { type: "geojson", data: EMPTY_FC });
-      map.addSource("estate-roads", { type: "geojson", data: EMPTY_FC });
-      map.addSource("estate-road-centers", { type: "geojson", data: EMPTY_FC });
+      liveMap.addSource("estate-site-pad", { type: "geojson", data: EMPTY_FC });
+      liveMap.addSource("estate-open-areas", { type: "geojson", data: EMPTY_FC });
+      liveMap.addSource("estate-plots", { type: "geojson", data: EMPTY_FC });
+      liveMap.addSource("estate-roads", { type: "geojson", data: EMPTY_FC });
+      liveMap.addSource("estate-road-centers", { type: "geojson", data: EMPTY_FC });
 
-      map.addSource(SATELLITE_SOURCE_ID, {
+      liveMap.addSource(SATELLITE_SOURCE_ID, {
         type: "raster",
         tiles: [SATELLITE_TILES_URL],
         tileSize: 256,
         maxzoom: 19,
         attribution: SATELLITE_ATTRIBUTION,
       });
-      map.addLayer({
+      liveMap.addLayer({
         id: SATELLITE_LAYER_ID,
         type: "raster",
         source: SATELLITE_SOURCE_ID,
@@ -2090,12 +2152,70 @@ export default function MapSection({
         paint: { "raster-fade-duration": 0 },
       });
 
+      // Property pins as WebGL GeoJSON (under estate layers so plots stay clickable on top).
+      ensurePropertyPinLayers(liveMap);
+
       // Master Plan Layout sources, raster image layer, and vector plot/road layers
       // configured cleanly in map-section-layouts.tsx
-      initLayoutLayers(map);
+      initLayoutLayers(liveMap);
+
+      const selectPropertyPin = (event: MapLayerMouseEvent) => {
+        const feature = event.features?.[0];
+        const pinId = feature?.properties?.id as string | undefined;
+        if (!pinId) return;
+
+        const currentPin = pinsByIdRef.current.get(pinId);
+        if (!currentPin) return;
+
+        const isMobile = window.matchMedia("(max-width: 767px)").matches;
+        trackEvent({
+          event_type: "MAP_MARKER_CLICK",
+          property_id: currentPin.id,
+          metadata: { source: "map_pin", section_type: "hero_map" },
+        });
+
+        const handlers = pinHandlersRef.current;
+
+        if (compareSelectingModeRef.current) {
+          handlers.toggleCompareId(currentPin.id);
+          return;
+        }
+
+        if (emiSelectingPropertyRef.current) {
+          const matchedItem = handlers.propertyList.find((p) => p.id === currentPin.id);
+          const effectivePrice =
+            currentPin.price ?? matchedItem?.price ?? 5000000;
+          handlers.setEmiSelectedProperty({
+            id: currentPin.id,
+            name: currentPin.name,
+            price: effectivePrice,
+            location:
+              currentPin.location ||
+              [matchedItem?.locality, matchedItem?.city].filter(Boolean).join(", ") ||
+              undefined,
+          });
+          handlers.setEmiSelectingProperty(false);
+          handlers.setEmiOpen(true);
+          return;
+        }
+
+        void handlers.selectProperty(currentPin.id, {
+          openSheet: true,
+          openDesktopCard: !isMobile,
+          openLayout: true,
+        });
+      };
+
+      liveMap.on("click", PROPERTY_PINS_CIRCLE_LAYER_ID, selectPropertyPin);
+      liveMap.on("mouseenter", PROPERTY_PINS_CIRCLE_LAYER_ID, () => {
+        liveMap.getCanvas().style.cursor = "pointer";
+      });
+      liveMap.on("mouseleave", PROPERTY_PINS_CIRCLE_LAYER_ID, () => {
+        liveMap.getCanvas().style.cursor = "";
+      });
 
       const selectRenderedPlot = (event: MapMouseEvent) => {
-        const feature = map.queryRenderedFeatures(event.point, {
+        const feature = liveMap.queryRenderedFeatures(event.point, {
           layers: ["estate-plots-fill"],
         })[0];
         const id = feature?.properties?.id as string | undefined;
@@ -2118,42 +2238,46 @@ export default function MapSection({
           },
         });
       };
-      map.on("click", selectRenderedPlot);
-      map.on("mouseenter", "estate-plots-fill", () => {
-        map.getCanvas().style.cursor = "pointer";
+      liveMap.on("click", selectRenderedPlot);
+      liveMap.on("mouseenter", "estate-plots-fill", () => {
+        liveMap.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", "estate-plots-fill", () => {
-        map.getCanvas().style.cursor = "";
+      liveMap.on("mouseleave", "estate-plots-fill", () => {
+        liveMap.getCanvas().style.cursor = "";
       });
 
       // panelOpen starts true, and the effect below re-fits whenever the
       // panel is toggled, so the first framing already reserves the sidebar.
-      fitBounds(map, projectsBounds, 50, 13.2, true);
+      fitBounds(liveMap, projectsBounds, 50, 13.2, true);
       mapReadyRef.current = true;
       setMapReady(true);
       setMapError(false);
 
       // Release analytics batch flush only after the first idle (tiles painted),
       // so POST /api/events/batch does not contend with OpenFreeMap downloads.
-      map.once("idle", () => {
+      liveMap.once("idle", () => {
         allowAnalyticsFlush();
       });
     });
+    })();
 
     return () => {
+      cancelled = true;
       if (zoomRegionTimerRef.current) {
         clearTimeout(zoomRegionTimerRef.current);
         zoomRegionTimerRef.current = null;
       }
-      mobileQuery.removeEventListener("change", applyMobileInteractions);
+      mobileQuery?.removeEventListener("change", applyMobileInteractions);
       clearMobileTouchListeners();
+      if (canvas && onWheel) {
+        canvas.removeEventListener("wheel", onWheel);
+      }
       resizeObserver?.disconnect();
       window.removeEventListener("orientationchange", onOrientationChange);
       window.removeEventListener("resize", resizeMap);
-      projectMarkersRef.current.forEach((m) => m.remove());
-      projectMarkersRef.current = [];
-      markersByIdRef.current.clear();
-      map.remove();
+      if (map) {
+        map.remove();
+      }
       mapRef.current = null;
       mapReadyRef.current = false;
       setMapReady(false);
@@ -2171,48 +2295,25 @@ export default function MapSection({
     return () => clearTimeout(timer);
   }, [mapReady]);
 
-  // Create/remove markers ONLY when pins change or map becomes ready.
-  // Never destroy and recreate all DOM markers on selection, compare, or EMI state changes.
-  // New HTML markers are attached in rAF chunks so ~100 DOM inserts do not block one long task.
+  // Sync property pins into the WebGL GeoJSON source (GPU circle/symbol layers).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    const currentPinsMap = new Map(pins.map((p) => [p.id, p]));
-    const markersMap = markersByIdRef.current;
-    const placements: Array<"right" | "top" | "bottom" | "left"> = [
-      "right",
-      "top",
-      "bottom",
-      "left",
-    ];
+    ensurePropertyPinLayers(map);
+    const source = map.getSource(PROPERTY_PINS_SOURCE_ID) as GeoJSONSource | undefined;
+    if (!source) return;
 
-    // 1. Remove markers that are no longer in pins
-    for (const [id, record] of markersMap.entries()) {
-      if (!currentPinsMap.has(id)) {
-        record.marker.remove();
-        markersMap.delete(id);
-      }
-    }
-
-    // 2. Update existing markers immediately; queue new pins for chunked creation
-    const pinsToCreate: Array<{ project: MapPin; index: number }> = [];
-
-    pins.forEach((project, index) => {
-      const record = markersMap.get(project.id);
-      if (!record) {
-        pinsToCreate.push({ project, index });
-        return;
-      }
-      // In case coordinates or content changed (name, price)
-      record.marker.setLngLat(project.center);
-      updatePinContent(record.element, project);
-    });
-
-    const syncProjectMarkersRef = () => {
-      projectMarkersRef.current = Array.from(markersMap.values()).map((r) => r.marker);
-    };
-    syncProjectMarkersRef();
+    source.setData(
+      pinsToGeoJSON(pins, {
+        activeProjectId,
+        compareSelectingMode,
+        compareSelectedIds,
+        emiSelectingProperty,
+        selectedFeatureKeys,
+        featureMatchedPropertyIds,
+      }),
+    );
 
     if (!activeProjectId) {
       const signature = `${panelOpen}|${pins
@@ -2230,156 +2331,21 @@ export default function MapSection({
       }
     }
 
-    if (mapReady && pins.length > 0) {
+    if (pins.length > 0) {
       onMapLoaded?.();
     }
-
-    if (pinsToCreate.length === 0) return;
-
-    let isCancelled = false;
-    let currentIndex = 0;
-    let rafId = 0;
-    const CHUNK_SIZE = 15;
-
-    const createMarkerForPin = (project: MapPin, index: number) => {
-      const liveMap = mapRef.current;
-      if (!liveMap || markersMap.has(project.id) || !currentPinsMap.has(project.id)) {
-        return;
-      }
-
-      const tagPlacement = placements[index % placements.length];
-      const el = createProjectPin(project, { tagPlacement });
-
-      el.addEventListener("click", (event) => {
-        event.stopPropagation();
-
-        const currentPin = pinsByIdRef.current.get(project.id) ?? project;
-
-        const isMobile = window.matchMedia("(max-width: 767px)").matches;
-        trackEvent({
-          event_type: "MAP_MARKER_CLICK",
-          property_id: currentPin.id,
-          metadata: { source: "map_pin", section_type: "hero_map" },
-        });
-
-        const handlers = markerHandlersRef.current;
-
-        // If user is currently in Compare Selection mode:
-        if (compareSelectingModeRef.current) {
-          handlers.toggleCompareId(currentPin.id);
-          return;
-        }
-
-        // If user is selecting a property specifically for EMI calculation:
-        if (emiSelectingPropertyRef.current) {
-          const matchedItem = handlers.propertyList.find((p) => p.id === currentPin.id);
-          const effectivePrice =
-            currentPin.price ??
-            matchedItem?.price ??
-            5000000;
-          handlers.setEmiSelectedProperty({
-            id: currentPin.id,
-            name: currentPin.name,
-            price: effectivePrice,
-            location: currentPin.location || [matchedItem?.locality, matchedItem?.city].filter(Boolean).join(", ") || undefined,
-          });
-          handlers.setEmiSelectingProperty(false);
-          handlers.setEmiOpen(true);
-          return;
-        }
-
-        // Normal mode: Load property and open layout/sheet
-        void handlers.selectProperty(currentPin.id, {
-          openSheet: true,
-          openDesktopCard: !isMobile,
-          openLayout: true,
-        });
-      });
-
-      const marker = new Marker({
-        element: el,
-        anchor: "bottom",
-      })
-        .setLngLat(project.center)
-        .addTo(liveMap);
-
-      markersMap.set(project.id, { marker, element: el, tagPlacement });
-    };
-
-    const renderNextMarkerChunk = () => {
-      if (isCancelled || !mapRef.current) return;
-
-      const end = Math.min(currentIndex + CHUNK_SIZE, pinsToCreate.length);
-      for (let i = currentIndex; i < end; i++) {
-        const entry = pinsToCreate[i];
-        if (!entry) continue;
-        createMarkerForPin(entry.project, entry.index);
-      }
-
-      currentIndex = end;
-      syncProjectMarkersRef();
-
-      if (currentIndex < pinsToCreate.length) {
-        rafId = requestAnimationFrame(renderNextMarkerChunk);
-      }
-    };
-
-    rafId = requestAnimationFrame(renderNextMarkerChunk);
-
-    return () => {
-      isCancelled = true;
-      cancelAnimationFrame(rafId);
-    };
   }, [
     mapReady,
     pins,
     pinsBounds,
     panelOpen,
     activeProjectId,
-    onMapLoaded,
-  ]);
-
-  // Update marker DOM classes / styles in place without recreating markers.
-  // Depends on pins and mapReady so newly created markers get compare/dim/highlight/hidden state immediately.
-  useEffect(() => {
-    const markersMap = markersByIdRef.current;
-    if (markersMap.size === 0) return;
-
-    const hasFeatureFilter = selectedFeatureKeys.length > 0;
-    const isComparing = compareSelectingMode;
-
-    for (const [id, record] of markersMap.entries()) {
-      const el = record.element;
-
-      // Compare mode takes priority for pin appearance
-      const compareIndex = isComparing ? compareSelectedIds.indexOf(id) : -1;
-      const compareSelected = compareIndex >= 0;
-      const isCompareDimmed = isComparing && !compareSelected;
-
-      // FindYourPlot features match
-      const isMatch = hasFeatureFilter && featureMatchedPropertyIds.includes(id);
-      const isDimmed = isCompareDimmed || (!isComparing && hasFeatureFilter && !isMatch);
-      const isHighlighted = !isComparing && hasFeatureFilter && isMatch;
-
-      applyPinState(el, {
-        hidden: Boolean(activeProjectId && id === activeProjectId),
-        isHighlighted,
-        isDimmed,
-        compareSelected,
-        isCompareMode: isComparing,
-        compareIndex: compareSelected ? compareIndex + 1 : undefined,
-        emiPulse: emiSelectingProperty,
-      });
-    }
-  }, [
-    mapReady,
-    pins,
-    activeProjectId,
-    compareSelectedIds,
     compareSelectingMode,
+    compareSelectedIds,
     emiSelectingProperty,
-    featureMatchedPropertyIds,
     selectedFeatureKeys,
+    featureMatchedPropertyIds,
+    onMapLoaded,
   ]);
 
   // A property with no plot geometry still gets the camera, just without a layout.

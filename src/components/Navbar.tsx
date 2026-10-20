@@ -86,10 +86,11 @@ export default function Navbar() {
           <Image
             src="/ila-homes-logo.png"
             alt="ILA Homes"
-            width={240}
-            height={80}
-            sizes="(max-width: 640px) 160px, (max-width: 1024px) 200px, 240px"
-            priority
+            width={160}
+            height={53}
+            sizes="(max-width: 640px) 130px, 160px"
+            loading="eager"
+            decoding="async"
             className="h-11 w-auto object-contain sm:h-14 lg:h-16"
           />
         </Link>

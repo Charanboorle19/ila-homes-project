@@ -1,4 +1,8 @@
-@import "tailwindcss";
+/* Disable auto project-wide scanning; only emit utilities used under src. */
+@import "tailwindcss" source(none);
+
+@source "../app";
+@source "../components";
 
 :root {
   --background: #000000;

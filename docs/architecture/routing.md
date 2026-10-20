@@ -40,7 +40,7 @@ src/app/
         └── route.ts
 ```
 
-`src/app/layout.tsx` is the root application layout. It wraps every page with the document shell, global CSS, font, `TelemetryBootstrap` (which idle-defers visitor/session/analytics initializers), `Navbar`, a `<main>` element, and `Footer`. The document `<head>` includes `preconnect` hints for `https://tiles.openfreemap.org` and `https://realestate.sperow.in`.
+`src/app/layout.tsx` is the root application layout. It wraps every page with the document shell, global CSS, font, `TelemetryBootstrap` (which idle-defers visitor/session/analytics initializers), `Navbar`, a `<main>` element, and `Footer`. Montserrat is loaded via `next/font/google` with `display: "swap"`, `preload: true`, system fallbacks (`system-ui`, `-apple-system`, `sans-serif`), and `adjustFontFallback: true` so text paints immediately while the webfont loads. The document `<head>` includes `preconnect` hints for `https://tiles.openfreemap.org` and `https://realestate.sperow.in`.
 
 Application-wide route boundaries:
 - `src/app/loading.tsx` renders a centered shared `ila-loader` (`ila-loader--light`) while server/route chunks load.
@@ -177,7 +177,7 @@ Exact behavior when mail clients, popup windows, sharing, or clipboard APIs are 
 
 ## 12. Navigation components
 
-- `Navbar` is a client component mounted by the root layout. It links to `/properties` and to homepage fragments `#about`, `#projects`, `#services`, and `#contact`. Only `#projects` has a target on `/` now that the homepage renders just `MapSection`; the other three resolve nowhere. Its mobile menu is local state and closes after link selection. The header logo (`/ila-homes-logo.png`) uses `next/image` with `width={240}`, `height={80}`, `sizes="(max-width: 640px) 160px, (max-width: 1024px) 200px, 240px"`, and `priority`, so the optimizer does not request a 4K source for the small display size.
+- `Navbar` is a client component mounted by the root layout. It links to `/properties` and to homepage fragments `#about`, `#projects`, `#services`, and `#contact`. Only `#projects` has a target on `/` now that the homepage renders just `MapSection`; the other three resolve nowhere. Its mobile menu is local state and closes after link selection. The header logo (`/ila-homes-logo.png`) uses `next/image` with `width={160}`, `height={53}`, `sizes="(max-width: 640px) 130px, 160px"`, `loading="eager"`, and `decoding="async"`, so the optimizer requests a small width (e.g. `w=256`) rather than a 4K source.
 - `Footer` is mounted by the root layout. It uses `next/link` for `/properties` and plain anchors for `/#projects`, `/#faq`, `/#about`, and `/#contact`.
 - `PropertyHero` provides breadcrumbs to `/` and `/properties` and renders external WhatsApp/mailto actions.
 - `PropertiesList` renders property-detail `Link` elements and separate favourite buttons.

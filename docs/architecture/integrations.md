@@ -48,7 +48,7 @@ The Next.js App Router frontend uses client-side service modules to call a tenan
 
 ## 11. Analytics integration
 
-**Service:** ILA analytics batch API. **Purpose:** property/search/map/persona/shortlist/WhatsApp/EMI/conversion/session/revisit/time/dwell events. **Files:** `services/analytics/events.ts`, `tracker.ts`, `usePropertyView.ts`, `useClickTracking.ts`, `useSectionDwell.ts`, and instrumented components. **Endpoint:** `POST /api/events/batch` with `{ events }`; queue flushes every 10 seconds, max queue 100, max batch 50, and on `pagehide` using keepalive.
+**Service:** ILA analytics batch API. **Purpose:** property/search/map/persona/shortlist/WhatsApp/EMI/conversion/session/revisit/time/dwell events. **Files:** `services/analytics/events.ts`, `tracker.ts`, `usePropertyView.ts`, `useClickTracking.ts`, `useSectionDwell.ts`, and instrumented components. **Endpoint:** `POST /api/events/batch` with `{ events }`; flush is gated until MapSection's first `idle` (or an 8s startAnalytics fallback), then the first batch waits `INITIAL_FLUSH_DELAY_MS` (4s); later flushes every 10 seconds; max queue 100, max batch 50; `pagehide` uses keepalive (ungated).
 
 Events require a visitor code, use `X-Visitor-Code`, common tenant headers, optional property/session ids, metadata, and client event ids. Event vocabulary and batch-sendable allow-lists are enforced client-side. Delegated tracking reads `data-track` attributes; section dwell emits `SESSION_SECTION_SUMMARY`. Missing visitor codes make tracking inert; unsupported events are dropped with warnings; batch failures are warned and not shown in UI. Full backend response behavior is UNKNOWN — needs verification. Client-side only.
 

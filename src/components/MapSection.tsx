@@ -74,7 +74,7 @@ const PriceEmiFuture = dynamic(
     ),
   },
 );
-import { trackEvent } from "@/services/analytics/tracker";
+import { allowAnalyticsFlush, trackEvent } from "@/services/analytics/tracker";
 import { formatInr } from "@/lib/propertyUtils";
 import { loadLayoutPreviewRaster } from "@/lib/layoutPreview";
 import { loadLayoutRaster } from "@/lib/layoutTiff";
@@ -101,6 +101,18 @@ type SheetTab = "about" | "plots" | "features" | "location";
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+
+/**
+ * Shared catalogue fetch so React StrictMode remounts (and unstable callback
+ * deps) reuse one in-flight GET /api/properties instead of aborting a duplicate.
+ */
+type SharedPropertiesListFetch = {
+  key: string;
+  controller: AbortController;
+  promise: Promise<Awaited<ReturnType<typeof fetchProperties>>>;
+};
+
+let sharedPropertiesListFetch: SharedPropertiesListFetch | null = null;
 
 /**
  * Plot feature properties the layout search box matches against.
@@ -1262,20 +1274,39 @@ export default function MapSection({
     propertyList,
   ]);
 
-  // Step 1: list every property.
+  // Keep latest selectProperty for post-list open without re-fetching the catalogue.
+  const selectPropertyRef = useRef(selectProperty);
+  selectPropertyRef.current = selectProperty;
+
+  // Step 1: list every property — one shared controller/promise per fetch key.
   useEffect(() => {
-    const controller = new AbortController();
+    const fetchKey = `${singlePropertyId ?? ""}:${propertiesRetryCount}`;
+    let ignore = false;
 
-    // The searchable catalogue. Only failures were logged before, so a
-    // successful-but-wrong payload was indistinguishable from a silent one.
+    if (!sharedPropertiesListFetch || sharedPropertiesListFetch.key !== fetchKey) {
+      sharedPropertiesListFetch?.controller.abort();
+      const controller = new AbortController();
+      console.log(
+        `[ILA API] GET ${ILA_API_BASE_URL}/api/properties?status=ALL&page=1&per_page=100`,
+      );
+      sharedPropertiesListFetch = {
+        key: fetchKey,
+        controller,
+        promise: fetchProperties({
+          status: "ALL",
+          page: 1,
+          perPage: 100,
+          signal: controller.signal,
+        }),
+      };
+    }
+
+    const { controller, promise } = sharedPropertiesListFetch;
     setRemoteStatus("loading");
-    console.log(
-      `[ILA API] GET ${ILA_API_BASE_URL}/api/properties?status=ALL&page=1&per_page=100`,
-    );
 
-    fetchProperties({ status: "ALL", page: 1, perPage: 100, signal: controller.signal })
+    promise
       .then((result) => {
-        if (controller.signal.aborted) return;
+        if (ignore || controller.signal.aborted) return;
         setRemoteStatus("ready");
 
         console.log("[ILA API] properties list — response", {
@@ -1313,14 +1344,14 @@ export default function MapSection({
           signal: controller.signal,
           concurrency: 4,
           onAnchor: (propertyId, anchor) => {
-            if (controller.signal.aborted) return;
+            if (ignore || controller.signal.aborted) return;
             pendingAnchorsRef.current[propertyId] = anchor;
             if (anchorRafRef.current === null) {
               anchorRafRef.current = window.requestAnimationFrame(flushPendingAnchors);
             }
           },
         }).then((anchors) => {
-          if (controller.signal.aborted) return;
+          if (ignore || controller.signal.aborted) return;
           if (anchorRafRef.current !== null) {
             window.cancelAnimationFrame(anchorRafRef.current);
             anchorRafRef.current = null;
@@ -1332,14 +1363,20 @@ export default function MapSection({
         // When a single property is requested (e.g. on /properties/{id}),
         // immediately open that property's layout.
         if (singlePropertyId) {
-          void selectProperty(singlePropertyId, { openLayout: true, openSheet: false });
+          void selectPropertyRef.current(singlePropertyId, {
+            openLayout: true,
+            openSheet: false,
+          });
         }
       })
       .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
+        if (ignore || controller.signal.aborted) return;
         if (singlePropertyId) {
           // In single property mode, also try selecting directly via fetchPropertyById
-          void selectProperty(singlePropertyId, { openLayout: true, openSheet: false });
+          void selectPropertyRef.current(singlePropertyId, {
+            openLayout: true,
+            openSheet: false,
+          });
         } else {
           setRemoteStatus("error");
         }
@@ -1347,15 +1384,16 @@ export default function MapSection({
       });
 
     return () => {
-      controller.abort();
+      // Ignore results from this effect instance. Do not abort the shared
+      // controller here — StrictMode remounts reuse the same in-flight request.
+      ignore = true;
       if (anchorRafRef.current !== null) {
         window.cancelAnimationFrame(anchorRafRef.current);
         anchorRafRef.current = null;
       }
       pendingAnchorsRef.current = {};
     };
-    // Runs on mount or when retry is requested
-  }, [selectProperty, singlePropertyId, propertiesRetryCount]);
+  }, [singlePropertyId, propertiesRetryCount]);
 
   /**
    * One pin per listed property, so the whole portfolio is on the map before
@@ -1790,6 +1828,11 @@ export default function MapSection({
         zoom: 11.4,
         pitch: 0,
         maxZoom: 18.5,
+        // Cap offscreen tile retention and skip wrapped world copies so OpenFreeMap
+        // sprites/glyphs compete less with the first viewport's tile decode.
+        maxTileCacheSize: 15,
+        renderWorldCopies: false,
+        fadeDuration: 0,
         attributionControl: { compact: true },
         dragRotate: true,
         pitchWithRotate: true,
@@ -2056,6 +2099,12 @@ export default function MapSection({
       mapReadyRef.current = true;
       setMapReady(true);
       setMapError(false);
+
+      // Release analytics batch flush only after the first idle (tiles painted),
+      // so POST /api/events/batch does not contend with OpenFreeMap downloads.
+      map.once("idle", () => {
+        allowAnalyticsFlush();
+      });
     });
 
     return () => {
@@ -3131,6 +3180,7 @@ export default function MapSection({
                 isOpen={wishlistOpen}
                 onOpen={() => setWishlistOpen(true)}
                 onClose={() => setWishlistOpen(false)}
+                properties={propertyList}
               />
             ) : null}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { createPortal } from "react-dom";
@@ -9,10 +9,7 @@ import {
   removeFavorite,
   type FavoriteItem,
 } from "@/services/favoritesService";
-import {
-  fetchProperties,
-  type PropertyListItem,
-} from "@/services/propertiesService";
+import { type PropertyListItem } from "@/services/propertiesService";
 import { formatInr } from "@/lib/propertyUtils";
 import { getPropertyById } from "@/data/properties";
 import ShortlistPreviewModal from "@/components/ShortlistPreviewModal";
@@ -98,6 +95,8 @@ export type WishlistProps = {
   onOpen: () => void;
   onClose: () => void;
   className?: string;
+  /** Property catalogue from MapSection — avoids a duplicate GET /api/properties. */
+  properties?: PropertyListItem[];
 };
 
 /**
@@ -111,29 +110,35 @@ export default function Wishlist({
   onOpen,
   onClose,
   className = "",
+  properties = [],
 }: WishlistProps) {
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  const [propertyCatalog, setPropertyCatalog] = useState<Record<string, PropertyListItem>>({});
+  const propertyCatalog = useMemo(() => {
+    const catalogMap: Record<string, PropertyListItem> = {};
+    for (const p of properties) {
+      catalogMap[p.id] = p;
+    }
+    return catalogMap;
+  }, [properties]);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+
   const loadFavorites = useCallback(async () => {
+    // Never hit the favourites API while the drawer is closed.
+    if (!isOpenRef.current) return;
+
     setFavoritesLoading(true);
     try {
-      const [favItems, propsResult] = await Promise.all([
-        fetchFavorites(),
-        fetchProperties({ status: "ALL", page: 1, perPage: 100 }).catch(() => ({ items: [] })),
-      ]);
-      const catalogMap: Record<string, PropertyListItem> = {};
-      for (const p of propsResult.items) {
-        catalogMap[p.id] = p;
-      }
-      setPropertyCatalog(catalogMap);
+      const favItems = await fetchFavorites();
+      if (!isOpenRef.current) return;
       setFavorites(favItems || []);
     } catch (e) {
       console.warn("[Wishlist] could not load favorites", e);
@@ -142,21 +147,19 @@ export default function Wishlist({
     }
   }, []);
 
-  // Fetch count on initial mount & listen to real-time updates from PropertyBlock / PropertiesList
+  // Fetch favourites only when the drawer is open — not on homepage mount.
   useEffect(() => {
+    if (!isOpen) return;
+
     void loadFavorites();
-    const handleUpdate = () => void loadFavorites();
+    const handleUpdate = () => {
+      if (!isOpenRef.current) return;
+      void loadFavorites();
+    };
     window.addEventListener("favorites-updated", handleUpdate);
     return () => {
       window.removeEventListener("favorites-updated", handleUpdate);
     };
-  }, [loadFavorites]);
-
-  // Refresh whenever opened
-  useEffect(() => {
-    if (isOpen) {
-      void loadFavorites();
-    }
   }, [isOpen, loadFavorites]);
 
   // Bulk Share Selection state
@@ -291,7 +294,7 @@ export default function Wishlist({
 
   const drawerContent = (
     <div
-      className={`fixed inset-0 z-[400] transition-opacity duration-200 ${
+      className={`fixed inset-0 z-400 transition-opacity duration-200 ${
         isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
       }`}
       aria-hidden={!isOpen}
@@ -304,7 +307,7 @@ export default function Wishlist({
 
       {/* 50% height right-to-left floating panel */}
       <aside
-        className={`pointer-events-auto absolute right-0 top-1/2 -translate-y-1/2 flex h-[52vh] min-h-[380px] max-h-[540px] w-full max-w-[380px] sm:max-w-[400px] flex-col overflow-hidden rounded-l-2xl border-y border-l border-[#ded9cf] bg-[#fbf9f4] shadow-[-12px_0_36px_rgba(0,0,0,0.22)] transform-gpu will-change-transform transition-transform duration-250 ease-out sm:mr-0 ${
+        className={`pointer-events-auto absolute right-0 top-1/2 -translate-y-1/2 flex h-[52vh] min-h-95 max-h-135 w-full max-w-95 sm:max-w-100 flex-col overflow-hidden rounded-l-2xl border-y border-l border-[#ded9cf] bg-[#fbf9f4] shadow-[-12px_0_36px_rgba(0,0,0,0.22)] transform-gpu will-change-transform transition-transform duration-250 ease-out sm:mr-0 ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
         aria-label="Wishlist drawer"
@@ -409,7 +412,7 @@ export default function Wishlist({
               <h3 className="mt-2.5 text-sm font-bold tracking-tight text-[#1a1917]">
                 Your wishlist is empty
               </h3>
-              <p className="mt-1 max-w-[240px] text-[11px] text-[#7a7469]">
+              <p className="mt-1 max-w-60 text-[11px] text-[#7a7469]">
                 Save developments by tapping the heart icon to easily compare later.
               </p>
               <button
@@ -459,7 +462,7 @@ export default function Wishlist({
                               : "border-[#ded9cf] bg-white text-transparent"
                           }`}
                         >
-                          <CheckIcon className="h-3 w-3 stroke-[3]" />
+                          <CheckIcon className="h-3 w-3 stroke-3" />
                         </div>
                       )}
 
@@ -547,7 +550,7 @@ export default function Wishlist({
                   type="button"
                   onClick={handleBulkShare}
                   disabled={selectedShareIds.length === 0 || shareLoading}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-[11px] font-bold tracking-wider uppercase text-[#171717] shadow-sm transition hover:brightness-105 active:scale-[0.99] disabled:opacity-40"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-linear-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-[11px] font-bold tracking-wider uppercase text-[#171717] shadow-sm transition hover:brightness-105 active:scale-[0.99] disabled:opacity-40"
                 >
                   <ShareIcon className="h-3.5 w-3.5" />
                   <span>
@@ -572,7 +575,7 @@ export default function Wishlist({
                 <Link
                   href="#contact"
                   onClick={onClose}
-                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-[11px] font-bold tracking-wider uppercase text-[#171717] shadow-sm transition active:scale-[0.99] hover:brightness-105"
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-linear-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-[11px] font-bold tracking-wider uppercase text-[#171717] shadow-sm transition active:scale-[0.99] hover:brightness-105"
                 >
                   <span>Enquire</span>
                   <ArrowRightIcon className="h-3 w-3" />

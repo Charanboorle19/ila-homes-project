@@ -54,7 +54,7 @@ Application-wide route boundaries:
 **Main page:** `src/app/page.tsx`, default export `Home`
 **Layout:** Root layout from `src/app/layout.tsx`
 
-The page renders one section: `MapSection`. The components `Hero`, `WhoWeAre`, `GrowthCorridors`, `FindYourPlot`, `CompareProperties`, `BuyingJourney`, `ShortlistShare`, `EmiAppreciation`, `FromTheField`, `PlotsWithPulse`, `Faq`, and `HomeReadyToVisit` still exist under `src/components` but are no longer imported or rendered by this route.
+The page is a client component that paints `IlaIntroLoader` immediately, then mounts dynamically imported `MapSection` only after a 1,200 ms delay (`shouldMountMap`) so WebGL does not start during the brand reveal. The intro remains until the map reports loaded. The components `Hero`, `WhoWeAre`, `GrowthCorridors`, `FindYourPlot`, `CompareProperties`, `BuyingJourney`, `ShortlistShare`, `EmiAppreciation`, `FromTheField`, `PlotsWithPulse`, `Faq`, and `HomeReadyToVisit` still exist under `src/components` but are no longer imported or rendered by this route.
 
 - **Dynamic parameters:** None.
 - **Query parameters:** None are read or written by the page implementation.
@@ -224,8 +224,9 @@ For `/properties/[propertyId]`, a non-local id is treated as a possible API UUID
 
 ## 17. Client vs server components involved in routing
 
-- `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/properties/page.tsx`, and `src/app/properties/[propertyId]/page.tsx` do not declare `"use client"` and are server components by default.
-- `src/app/property/[trackingToken]/view/page.tsx` **does** declare `"use client"`. It is the only page route that is a client component, because its token request must run where tenant resolution uses the browser hostname, and because it unwraps `params` with React `use` before rendering the shared `ApiPropertyView`.
+- `src/app/layout.tsx`, `src/app/properties/page.tsx`, and `src/app/properties/[propertyId]/page.tsx` do not declare `"use client"` and are server components by default.
+- `src/app/page.tsx` **does** declare `"use client"` so it can gate `MapSection` mount behind the intro delay and map-loaded fade.
+- `src/app/property/[trackingToken]/view/page.tsx` **does** declare `"use client"` because its token request must run where tenant resolution uses the browser hostname, and because it unwraps `params` with React `use` before rendering the shared `ApiPropertyView`.
 - `Navbar`, `PropertiesList`, `ApiPropertyView`, `PropertyPageView`, and many interactive child components declare `"use client"`. `Hero` also declares it, though it is no longer mounted on `/`.
 - Server page components select the route and compose the tree; client components perform browser navigation, API requests requiring browser tenant context, scrolling, local state, and interactive error/loading presentation.
 - The Route Handler is server-side and runs the upstream image proxy logic.

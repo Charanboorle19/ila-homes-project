@@ -29,6 +29,7 @@ import {
   type ImageSource,
   type MapLayerMouseEvent,
   type MapMouseEvent,
+  type SymbolLayerSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { PlotStatus } from "@/data/plots";
@@ -778,16 +779,16 @@ async function ensurePropertyPinLayers(map: MapLibreMap) {
       type: "symbol",
       source: PROPERTY_PINS_SOURCE_ID,
       filter: visibleFilter,
-      layout: pinIconLayout,
-      paint: pinIconPaint,
+      layout: pinIconLayout as SymbolLayerSpecification["layout"],
+      paint: pinIconPaint as SymbolLayerSpecification["paint"],
     });
     map.addLayer({
       id: PROPERTY_PINS_LABEL_LAYER_ID,
       type: "symbol",
       source: PROPERTY_PINS_SOURCE_ID,
       filter: visibleFilter,
-      layout: labelLayout,
-      paint: labelPaint,
+      layout: labelLayout as SymbolLayerSpecification["layout"],
+      paint: labelPaint as SymbolLayerSpecification["paint"],
     });
   };
 

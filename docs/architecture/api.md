@@ -192,7 +192,7 @@ The detail endpoint is the `GET /api/properties/{id}` operation above. It is not
 - **Required headers:** common `apiFetch` headers.
 - **Response:** `{ data?: { visitor_code?: string; is_new?: boolean } }`.
 - **Transformation:** `VisitorInitializer` stores `visitor_code` in a one-year `visitor_code` cookie and marks visitor readiness.
-- **Consumer:** `VisitorInitializer` via `createVisitor`.
+- **Consumer:** `VisitorInitializer` via `createVisitor`, mounted only after idle deferral by `TelemetryBootstrap` in the root layout.
 - **Errors:** logged; visitor readiness is marked failed and dependent session/analytics work may be skipped.
 
 ### `POST /api/sessions`
@@ -202,7 +202,7 @@ The detail endpoint is the `GET /api/properties/{id}` operation above. It is not
 - **Required headers:** common headers plus `X-Visitor-Code`.
 - **Response:** `{ data?: { session_id?: string; started_at?: string; reused?: boolean } }`.
 - **Transformation:** `SessionInitializer` stores `session_id` in `sessionStorage`.
-- **Consumer:** `SessionInitializer` via `startVisitorSession`.
+- **Consumer:** `SessionInitializer` via `startVisitorSession`, mounted only after idle deferral by `TelemetryBootstrap` in the root layout.
 - **Errors:** logged; no session id is stored. Missing visitor code skips the request.
 
 ### `POST /api/events/batch`

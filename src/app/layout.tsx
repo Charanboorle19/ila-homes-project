@@ -2,9 +2,7 @@ import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import AnalyticsInitializer from "@/components/AnalyticsInitializer";
-import SessionInitializer from "@/components/SessionInitializer";
-import VisitorInitializer from "@/components/VisitorInitializer";
+import TelemetryBootstrap from "@/components/TelemetryBootstrap";
 import ScrollToTop from "@/components/ScrollToTop";
 import "./globals.css";
 import "./loading.css";
@@ -26,10 +24,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${montserrat.variable} h-full antialiased`}
     >
+      <head>
+        <link rel="preconnect" href="https://tiles.openfreemap.org" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://realestate.sperow.in" crossOrigin="anonymous" />
+      </head>
       <body className={`${montserrat.className} flex min-h-full flex-col overflow-x-hidden bg-black text-white`}>
-        <VisitorInitializer />
-        <SessionInitializer />
-        <AnalyticsInitializer />
+        <TelemetryBootstrap />
         {/* Keeps the window at the top of the document across route changes.
             Mounted here, above `<main>`, because the root layout is the only
             element that survives every navigation — see the component for why

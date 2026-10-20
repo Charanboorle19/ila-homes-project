@@ -16,7 +16,7 @@ The Next.js App Router frontend uses client-side service modules to call a tenan
 
 ## 3. Next.js frontend integration
 
-**Service/package:** Next.js `16.3.8`, React `19.2.8`, App Router. **Where:** `src/app`, `next/link`, `next/navigation`, `next/image`, and `src/app/api/layout-image/route.ts`. Next supplies routes, client/server boundaries, image handling, and the same-origin proxy. `next.config.ts` allows development origins `192.168.29.7`/`192.168.*.*` and HTTPS `**.amazonaws.com` remote images. No auth plugin is configured. Route-level loading/error/not-found files are absent; exact failed-image presentation is UNKNOWN — needs verification.
+**Service/package:** Next.js `16.3.8`, React `19.2.8`, App Router. **Where:** `src/app`, `next/link`, `next/navigation`, `next/image`, and `src/app/api/layout-image/route.ts`. Next supplies routes, client/server boundaries, image handling, and the same-origin proxy. `next.config.ts` allows development origins `192.168.29.7`/`192.168.*.*` and HTTPS `**.amazonaws.com` remote images; it has no custom Babel/SWC legacy target overrides. Browser support is declared in `.browserslistrc` with TypeScript `target` `ES2022` so modern ECMAScript methods are not polyfilled into the client bundle. No auth plugin is configured. Route-level loading/error/not-found files are absent; exact failed-image presentation is UNKNOWN — needs verification.
 
 ## 4. MapLibre integration
 
@@ -98,7 +98,7 @@ The confirmed server-side integration is `src/app/api/layout-image/route.ts`. It
 
 ## 21. Data flow between integrations
 
-1. The root client initializers create/obtain anonymous visitor identity, start/reuse a session, and start analytics.
+1. `TelemetryBootstrap` in the root layout mounts `VisitorInitializer`, `SessionInitializer`, and `AnalyticsInitializer` only after `requestIdleCallback` (timeout 2500 ms) or a 1500 ms `setTimeout` fallback, so visitor/session/analytics POSTs do not contend with first map paint. Those initializers then create/obtain anonymous visitor identity, start/reuse a session, and start analytics.
 2. Property/location components call `apiFetch`, which combines `NEXT_PUBLIC_API_URL`, tenant identity, common headers, optional token, and request path.
 3. API responses are normalized by service helpers and `propertyMapper` into component-facing records.
 4. MapLibre consumes coordinates, GeoJSON, units, nearby places, and raster sources. OpenFreeMap supplies the vector style; Esri supplies satellite tiles.

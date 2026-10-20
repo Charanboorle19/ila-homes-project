@@ -40,7 +40,7 @@ src/app/
         └── route.ts
 ```
 
-`src/app/layout.tsx` is the root application layout. It wraps every page with the document shell, global CSS, font, visitor/session/analytics initializers, `Navbar`, a `<main>` element, and `Footer`.
+`src/app/layout.tsx` is the root application layout. It wraps every page with the document shell, global CSS, font, `TelemetryBootstrap` (which idle-defers visitor/session/analytics initializers), `Navbar`, a `<main>` element, and `Footer`. The document `<head>` includes `preconnect` hints for `https://tiles.openfreemap.org` and `https://realestate.sperow.in`.
 
 Application-wide route boundaries:
 - `src/app/loading.tsx` renders a centered shared `ila-loader` (`ila-loader--light`) while server/route chunks load.
@@ -177,7 +177,7 @@ Exact behavior when mail clients, popup windows, sharing, or clipboard APIs are 
 
 ## 12. Navigation components
 
-- `Navbar` is a client component mounted by the root layout. It links to `/properties` and to homepage fragments `#about`, `#projects`, `#services`, and `#contact`. Only `#projects` has a target on `/` now that the homepage renders just `MapSection`; the other three resolve nowhere. Its mobile menu is local state and closes after link selection.
+- `Navbar` is a client component mounted by the root layout. It links to `/properties` and to homepage fragments `#about`, `#projects`, `#services`, and `#contact`. Only `#projects` has a target on `/` now that the homepage renders just `MapSection`; the other three resolve nowhere. Its mobile menu is local state and closes after link selection. The header logo (`/ila-homes-logo.png`) uses `next/image` with `width={240}`, `height={80}`, `sizes="(max-width: 640px) 160px, (max-width: 1024px) 200px, 240px"`, and `priority`, so the optimizer does not request a 4K source for the small display size.
 - `Footer` is mounted by the root layout. It uses `next/link` for `/properties` and plain anchors for `/#projects`, `/#faq`, `/#about`, and `/#contact`.
 - `PropertyHero` provides breadcrumbs to `/` and `/properties` and renders external WhatsApp/mailto actions.
 - `PropertiesList` renders property-detail `Link` elements and separate favourite buttons.
@@ -272,7 +272,8 @@ No environment variable changes the set of page routes. Environment/configuratio
 - `NEXT_PUBLIC_API_URL` controls the API base URL used by client data requests.
 - Tenant resolution uses the browser hostname and the API client's tenant-header behavior; server-side `SITE_DOMAIN` is also referenced by that configuration.
 - `NEXT_PUBLIC_SATELLITE_TILES_URL` affects map imagery, not page routing.
-- `next.config.ts` allows configured development origins and restricts remote image patterns to HTTPS `**.amazonaws.com` hosts.
+- `next.config.ts` allows configured development origins and restricts remote image patterns to HTTPS `**.amazonaws.com` hosts. It does not set custom Babel loaders or SWC legacy targets.
+- Client compile targets modern browsers via root `.browserslistrc` (`defaults`, `not IE 11`, `not dead`, last 2 Chrome/Safari/Firefox/Edge) and `tsconfig.json` `"target": "ES2022"`, so native APIs such as `Array.prototype.at` / `Object.hasOwn` are not shimmed into the main client chunk.
 
 The exact behavior when required environment values are absent or invalid is `UNKNOWN — needs verification`.
 

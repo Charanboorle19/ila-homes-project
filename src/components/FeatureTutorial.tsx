@@ -271,37 +271,42 @@ export default function FeatureTutorial({
   return (
     <>
       <style>{`
+        /* GPU-composited: transform + opacity only (no box-shadow / stroke / filter). */
         @keyframes ilaTutorialPulse {
           0% {
-            box-shadow: 0 0 0 0 rgba(198, 164, 108, 0.75), 0 0 35px rgba(198, 164, 108, 0.45);
+            transform: scale(0.96);
+            opacity: 0.9;
           }
-          70% {
-            box-shadow: 0 0 0 16px rgba(198, 164, 108, 0), 0 0 45px rgba(198, 164, 108, 0.55);
+          50% {
+            transform: scale(1.05);
+            opacity: 0.4;
           }
           100% {
-            box-shadow: 0 0 0 0 rgba(198, 164, 108, 0), 0 0 35px rgba(198, 164, 108, 0.45);
+            transform: scale(0.96);
+            opacity: 0.9;
           }
         }
         @keyframes ilaBeaconPing {
           0% {
             transform: scale(0.9);
-            opacity: 0.9;
-          }
-          50% {
-            transform: scale(1.4);
-            opacity: 0;
+            opacity: 0.85;
           }
           100% {
-            transform: scale(0.9);
+            transform: scale(1.6);
             opacity: 0;
           }
+        }
+        .ila-tutorial-pulse,
+        .ila-beacon-ping {
+          will-change: transform, opacity;
+          transform-origin: center center;
         }
       `}</style>
 
       {/* Dim overlay with live SVG transparent mask cutout */}
       {targetRect ? (
         <svg
-          className="fixed inset-0 z-[490] h-full w-full pointer-events-auto"
+          className="fixed inset-0 z-490 h-full w-full pointer-events-auto"
           onClick={handleComplete}
           aria-hidden="true"
         >
@@ -334,16 +339,16 @@ export default function FeatureTutorial({
         </svg>
       ) : (
         <div
-          className="fixed inset-0 z-[490] bg-[#0a0b0e]/65 pointer-events-auto"
+          className="fixed inset-0 z-490 bg-[#0a0b0e]/65 pointer-events-auto"
           onClick={handleComplete}
           aria-hidden="true"
         />
       )}
 
-      {/* High-visibility Gold Spotlight Ring with Pulsing Glow Animation */}
+      {/* High-visibility Gold Spotlight Ring — composited pulse (transform/opacity) */}
       {targetRect ? (
         <div
-          className="fixed pointer-events-none z-[495]"
+          className="ila-tutorial-pulse fixed pointer-events-none z-495"
           style={{
             top: `${spotlightY}px`,
             left: `${spotlightX}px`,
@@ -351,13 +356,16 @@ export default function FeatureTutorial({
             height: `${spotlightH}px`,
             borderRadius: `${spotlightRadius}px`,
             border: "2px solid #e0c58e",
+            boxShadow: "0 0 20px rgba(198, 164, 108, 0.35)",
             animation: "ilaTutorialPulse 2.2s infinite cubic-bezier(0.4, 0, 0.6, 1)",
-            transition: "all 380ms cubic-bezier(0.25, 1, 0.5, 1)",
+            // Do not transition transform/opacity — those are driven by the keyframes.
+            transition:
+              "top 380ms cubic-bezier(0.25, 1, 0.5, 1), left 380ms cubic-bezier(0.25, 1, 0.5, 1), width 380ms cubic-bezier(0.25, 1, 0.5, 1), height 380ms cubic-bezier(0.25, 1, 0.5, 1), border-radius 380ms ease",
           }}
         >
-          {/* Subtle Outer Beacon Radar Wave */}
+          {/* Outer beacon wave on an HTML container (not SVG stroke) */}
           <div
-            className="absolute inset-[-4px] rounded-[inherit] border border-[#c6a46c]/60 pointer-events-none"
+            className="ila-beacon-ping absolute -inset-1 rounded-[inherit] border border-[#c6a46c]/60 pointer-events-none"
             style={{ animation: "ilaBeaconPing 2.2s infinite cubic-bezier(0, 0, 0.2, 1)" }}
           />
         </div>
@@ -375,14 +383,14 @@ export default function FeatureTutorial({
             ? "scale(0.97)"
             : "scale(1)",
         }}
-        className="pointer-events-auto flex flex-col rounded-2xl border border-[#c6a46c]/50 bg-gradient-to-b from-[#1c1f26]/98 to-[#13151a]/98 p-5 text-[#f2f0ea] shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_20px_rgba(198,164,108,0.15)] backdrop-blur-2xl"
+        className="pointer-events-auto flex flex-col rounded-2xl border border-[#c6a46c]/50 bg-linear-to-b from-[#1c1f26]/98 to-[#13151a]/98 p-5 text-[#f2f0ea] shadow-[0_20px_50px_rgba(0,0,0,0.85),0_0_20px_rgba(198,164,108,0.15)] backdrop-blur-2xl"
         role="dialog"
         aria-label="Feature Guide"
       >
         {/* Header with Icon, Eyebrow (STEP X OF 4 · FEATURE), and Close */}
         <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#c6a46c]/30 to-[#c6a46c]/10 border border-[#c6a46c]/40 shadow-inner">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-[#c6a46c]/30 to-[#c6a46c]/10 border border-[#c6a46c]/40 shadow-inner">
               {currentStep.icon}
             </span>
             <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#c6a46c]">
@@ -463,7 +471,7 @@ export default function FeatureTutorial({
             <button
               type="button"
               onClick={handleNext}
-              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#e0c58e] via-[#c6a46c] to-[#b38e52] px-4 py-1.5 text-xs font-bold text-[#141519] shadow-[0_4px_16px_rgba(198,164,108,0.35)] transition-all hover:brightness-110 active:scale-95"
+              className="flex items-center gap-1.5 rounded-xl bg-linear-to-r from-[#e0c58e] via-[#c6a46c] to-[#b38e52] px-4 py-1.5 text-xs font-bold text-[#141519] shadow-[0_4px_16px_rgba(198,164,108,0.35)] transition-all hover:brightness-110 active:scale-95"
             >
               <span>{isLast ? "Got it" : "Next"}</span>
               <svg className="h-3.5 w-3.5 stroke-[2.8]" viewBox="0 0 24 24" fill="none" stroke="currentColor">

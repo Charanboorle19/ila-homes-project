@@ -7,7 +7,7 @@ The project has two MapLibre-based map components:
 - `MapSection` displays API-backed properties, property pins, and selectable estate/plot layouts.
 - `GrowthCorridors` displays API-backed locations/localities and lets the visitor inspect a location and its properties.
 
-**Only `MapSection` is rendered on the home page (`/`)**, and it is the only map section that route contains (`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx`). The homepage first paints `IlaIntroLoader` (architectural brand reveal). `MapSection` is loaded dynamically (`next/dynamic` with `ssr: false`) and is **not mounted until `shouldMountMap` flips true after 1,200 ms**, so MapLibre WebGL does not initialize during the intro's first paint window; a lightweight `#090a0c` placeholder sits under the overlay until then. The intro stays visible until `onMapLoaded`, then fades out. `GrowthCorridors` still exists in the source but is no longer imported by the homepage; everything documented about it below describes the component as it stands, not a live part of `/`.
+**Only `MapSection` is rendered on the home page (`/`)**, and it is the only map section that route contains (`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\page.tsx`). The homepage first paints `IlaIntroLoader` over a lightweight map skeleton. The splash is **uncoupled from MapLibre**: it fades out on a fixed timer (max **1,400 ms**) and never waits for `onMapLoaded` / tile completion, so LCP can register on the intro/placeholder. `MapSection` is loaded dynamically (`next/dynamic` with `ssr: false`) and mounts after **1,200 ms** (`shouldMountMap`) independently of the splash. `GrowthCorridors` still exists in the source but is no longer imported by the homepage; everything documented about it below describes the component as it stands, not a live part of `/`.
 
 ## 2. User interaction / flow
 
@@ -15,7 +15,7 @@ The project has two MapLibre-based map components:
 
 1. `MapSection` loads `GET /api/properties?status=ALL&page=1&per_page=100` through a single shared `fetchProperties` controller/promise (keyed by `singlePropertyId` + retry count) so StrictMode remounts reuse the in-flight request instead of aborting a duplicate. It owns the catalogue in `propertyList`. The Wishlist drawer receives `properties={propertyList}` and does not re-fetch the same list; favourites load only when the drawer is opened (`if (!isOpen) return`).
 2. Property coordinates are taken from the list where available (seeded into `propertyAnchors` as soon as the list resolves). Missing coordinates are backfilled through `fetchPropertyAnchors` only after MapLibre's first `idle` (basemap tiles painted), at concurrency `2`, so detail GETs do not contend with style/tile/sprite streaming. Progressive arrivals are buffered and flushed to state via `requestAnimationFrame`. Bottom Find-Your-Plot feature chips load via `fetchActiveFeatures` (`GET /api/features`) only after `mapReady` plus an 800 ms delay, so that request stays off the initial paint path.
-3. Properties with usable coordinates receive gold-and-charcoal map pins featuring the branded ILA monogram vector mark with property name/price tags. At default overview zoom, tags remain compact and single-line; when zoomed in or hovered, tags expand and wrap cleanly onto multiple lines without truncating. New HTML markers are created in `requestAnimationFrame` chunks of 15 (removals and content updates stay synchronous) so attaching up to ~100 DOM pins does not block one long main-thread task; effect cleanup cancels the rAF chain so fast pin list updates do not leave orphaned work. Selecting a property pin or a property row smoothly animates the property summary card / results popup into view and loads its units/layout. On initial mount, no silent property/units warm-up is issued; units load strictly on demand when a property is opened and are cached in-memory with a 5-minute TTL.
+3. Properties with usable coordinates receive WebGL property pins: a GeoJSON `FeatureCollection` source (`property-pins`) rendered with MapLibre `circle` / `symbol` layers (`property-pins-halo`, `property-pins-circle`, `property-pins-label`). Pin position and compare/EMI/feature-filter visual state update via `source.setData` on the GPU — no HTML `Marker` DOM nodes. The open estate's own pin is filtered out (`hidden`). Selecting a property pin or a property row smoothly animates the property summary card / results popup into view and loads its units/layout. On initial mount, no silent property/units warm-up is issued; units load strictly on demand when a property is opened and are cached in-memory with a 5-minute TTL.
 4. Opening a property layout loads the property detail and `GET /api/properties/{id}/units?limit=all`. Unit geometry is converted into plot polygons.
 5. A plot can be selected from the map or list. The plot selection shows its plot details and highlights the polygon. Map viewport exploration analytics (`MAP_ZOOM_REGION`) are debounced by 800 ms to avoid saturating the event queue during active gestures.
 6. **First-time visitor feature tutorial (`FeatureTutorial`):** A guided onboarding spotlight tutorial automatically guides first-time visitors through key platform capabilities: **Wishlist** (save & WhatsApp share), **Instant EMI Calculator**, **Compare Up to 5 Properties**, and **Find Your Plot** smart filters. `MapSection` mounts `FeatureTutorial` only after `mapReady` plus a 2,000 ms delay (`showTutorial`), so the logo and map can register as LCP before the walkthrough card paints. Once mounted, the tutorial checks the `ila_tutorial_seen` cookie (1-year duration); if absent, it launches with an interactive dark overlay, target element glow ring, card explanation, step dots, and "Next" / "Skip" buttons. Completing or skipping the tutorial sets the cookie so it is never shown redundantly on subsequent visits. Spotlight pulse keyframes (`ilaTutorialPulse`, `ilaBeaconPing`) animate only `transform` and `opacity` (with `will-change`) so the rings stay GPU-composited; they do not animate `box-shadow`, SVG `stroke`, or `filter`.
@@ -32,10 +32,11 @@ The project has two MapLibre-based map components:
 ## 3. Map library and configuration
 
 - Library: `maplibre-gl` `^6.12.0` (`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\package.json`).
-- Components import `Map as MapLibreMap`, `Marker`, and `setWorkerUrl` from `maplibre-gl`.
+- `MapSection` imports `Map as MapLibreMap`, `GeoJSONSource`, and `setWorkerUrl` from `maplibre-gl` (property pins are native GeoJSON layers, not HTML `Marker`s). `GrowthCorridors` still imports `Marker` for its active-location pin.
 - Both components call `setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")`.
 - The build/postinstall script copies MapLibre worker files from `node_modules/maplibre-gl/dist` to `public/maplibre/` (`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\scripts\copy-maplibre-worker.cjs`).
 - `MapSection` and `GrowthCorridors` use `https://tiles.openfreemap.org/styles/liberty` as `MAP_STYLE`.
+- `MapSection` fetches that style, prunes unused Liberty layers via `loadPrunedLibertyStyle` (`src/lib/pruneLibertyStyle.ts`), then passes the pruned JSON into `new Map()` — not the raw URL. Dropped categories: railways (`*rail*`), 3D building extrusion (`building-3d`), pedestrian paths (`*path_pedestrian*`, `highway-name-path`), highway shields (`*shield*`), and airport POIs (`airport`). Flat `building` footprints are kept. This avoids unused glyph `.pbf` requests and reduces style-layer work during tile parse on mobile.
 - `MapSection` initializes with `maxTileCacheSize: 15`, `renderWorldCopies: false`, and `fadeDuration: 0`.
 - `MapSection` uses a raster satellite source/layer over the vector style while an estate layout is open. The URL is `NEXT_PUBLIC_SATELLITE_TILES_URL`, defaulting to Esri World Imagery: `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}`. Attribution is `Imagery © Esri, Maxar, Earthstar Geographics`.
 - `MapSection` uses `LAYOUT_MAX_ZOOM = 17.2`; `GrowthCorridors` uses `DEFAULT_VIEW = { longitude: 78.44, latitude: 17.17, zoom: 11.35 }` and `LOCATION_ZOOM = 13.2`.
@@ -128,7 +129,7 @@ The units response is unwrapped by `fetchPropertyUnits` and supports a payload c
 
 ## 9. Functions and hooks used
 
-`MapSection` uses `useCallback`, `useEffect`, `useMemo`, `useRef`, and `useState`; MapLibre `LngLatBounds`, `Map`, and `Marker`; and functions including `syncLayoutRaster`, `loadRasterForProperty`, `fetchProperties`, `fetchPropertyAnchors`, `fetchPropertyById`, `fetchPropertyUnits`, `estateFromUnitsApi`, `estatePlaceholderFromProperty`, `propertyAnchor`, `loadLayoutPreviewRaster`, `loadLayoutRaster`, `formatPrice`, `formatInr`, and `trackEvent`.
+`MapSection` uses `useCallback`, `useEffect`, `useMemo`, `useRef`, and `useState`; MapLibre `LngLatBounds`, `Map`, and `GeoJSONSource`; and functions including `syncLayoutRaster`, `loadRasterForProperty`, `fetchProperties`, `fetchPropertyAnchors`, `fetchPropertyById`, `fetchPropertyUnits`, `estateFromUnitsApi`, `estatePlaceholderFromProperty`, `propertyAnchor`, `loadLayoutPreviewRaster`, `loadLayoutRaster`, `pinsToGeoJSON`, `ensurePropertyPinLayers`, `formatPrice`, `formatInr`, and `trackEvent`.
 
 `GrowthCorridors` uses `useEffect`, `useMemo`, `useRef`, and `useState`; MapLibre `Map` and `Marker`; and `fetchLocations`, `hasCoordinates`, `fetchPropertiesByLocation`, `formatPrice`, and `trackEvent`.
 
@@ -163,7 +164,7 @@ The source does not expose a separate documented compass, geolocation, or drawin
 
 ## 13. Markers, polygons, labels, or layers
 
-`MapSection` uses property `Marker` instances and estate GeoJSON/raster sources. Estate layer ids are:
+`MapSection` uses a WebGL GeoJSON property-pin source (`property-pins`) with layers `property-pins-halo`, `property-pins-circle`, and `property-pins-label`, plus estate GeoJSON/raster sources. Pin layers are added before estate layout layers so plot polygons stay on top and remain clickable. Estate layer ids are:
 
 `estate-site-pad-fill`, `estate-site-pad-edge`, `estate-open-fill`, `estate-open-edge`, `estate-plots-fill`, `estate-plots-outline`, `estate-plots-label`, `estate-roads-fill`, `estate-roads-casing`, `estate-roads-edge`, and `estate-roads-center`.
 
@@ -260,7 +261,7 @@ The selected location's `slug` is sent as `location_slug` to the properties endp
 
 ## 19. External services/integrations
 
-- OpenFreeMap vector style: `https://tiles.openfreemap.org/styles/liberty`.
+- OpenFreeMap vector style: `https://tiles.openfreemap.org/styles/liberty` (pruned before map init in `MapSection`; see §3).
 - `MapSection` MapLibre init sets `maxTileCacheSize: 15` and `renderWorldCopies: false` to limit offscreen tile retention and wrapped-world work during first paint.
 - On the map's first `idle` (viewport tiles rendered), `MapSection` calls `allowAnalyticsFlush()`; the first `POST /api/events/batch` then waits an additional `INITIAL_FLUSH_DELAY_MS` (4s) so it does not contend with tile streaming. Non-map routes use an 8s `startAnalytics` fallback. `pagehide` flushes are ungated.
 - Esri World Imagery raster tiles by default, configurable through `NEXT_PUBLIC_SATELLITE_TILES_URL`.
@@ -308,7 +309,7 @@ Direct map-relevant dependencies are `maplibre-gl`, `geotiff` (layout TIFF suppo
 - The default Esri World Imagery endpoint is documented in source as suitable for evaluation/development and requiring a contracted provider before commercial shipping.
 - `MapSection` includes static demo estate data alongside live API properties; the exact intended production scope of the static projects is UNKNOWN — needs verification.
 - **Performance & Architectural Bottlenecks (Audit)**:
-  - *Marker rebuilds (Resolved)*: Pins are DOM markers. Previously, state updates (wishlist, compare, EMI, selection) triggered full teardown and rebuilds of all DOM markers. Now marker lifecycles are decoupled: markers are created/removed strictly when pin data changes, while compare, EMI, and selection states update existing marker DOM classes, badges, and styles in place with zero rebuilds. New marker DOM inserts are further split across animation frames (chunk size 15) to avoid a single blocking create/addTo pass.
+  - *Marker rebuilds (Resolved)*: Property pins are no longer HTML `Marker` DOM nodes. They are a single GeoJSON source updated with `setData`; compare, EMI, feature-filter, and active-layout visibility are feature properties painted by circle/symbol layers on the GPU.
   - *Startup waterfall*: Property list and map tiles are prioritized on first load. Visitor/session/analytics POSTs are idle-deferred via `TelemetryBootstrap`; `GET /api/features` for bottom chips waits until `mapReady` + 800 ms. Wishlist no longer calls `fetchProperties` / `fetchFavorites` on mount. Mount-time silent units warm-up has been eliminated.
   - *Heavy bundle*: MapLibre is statically imported on subpages, but dynamically imported on `/` (`ssr: false`).
   - *Giant component*: `MapSection.tsx` spans ~3,000 lines with ~20 `useState` and ~17 `useEffect` hooks, increasing coupling and regression risks during changes.

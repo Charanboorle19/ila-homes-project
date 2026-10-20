@@ -24,7 +24,7 @@ The Next.js App Router frontend uses client-side service modules to call a tenan
 
 ## 5. OpenFreeMap integration
 
-**Service:** OpenFreeMap Liberty style at `https://tiles.openfreemap.org/styles/liberty`. **Purpose/where:** vector basemap for `MapSection`, `GrowthCorridors`, and `FutureNeighbourhoodMap`. It is consumed by MapLibre; no SDK, token, environment variable, or authentication is used. MapLibre map-error behavior applies, with a technical default viewport while locations load. External-style attribution compliance is UNKNOWN — needs verification. Client-side only.
+**Service:** OpenFreeMap Liberty style at `https://tiles.openfreemap.org/styles/liberty`. **Purpose/where:** vector basemap for `MapSection`, `GrowthCorridors`, and `FutureNeighbourhoodMap`. It is consumed by MapLibre; no SDK, token, environment variable, or authentication is used. `MapSection` fetches the style JSON and prunes unused layers (rail, `building-3d`, pedestrian paths, highway shields, airport POIs) through `src/lib/pruneLibertyStyle.ts` before `new Map()`, so MapLibre does not pull glyphs or evaluate those layers. `GrowthCorridors` / `FutureNeighbourhoodMap` still pass the style URL directly. MapLibre map-error behavior applies, with a technical default viewport while locations load. External-style attribution compliance is UNKNOWN — needs verification. Client-side only.
 
 ## 6. Satellite imagery integration
 

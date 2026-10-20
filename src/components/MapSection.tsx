@@ -85,6 +85,15 @@ import {
   SATELLITE_TILES_URL,
 } from "@/lib/satelliteTiles";
 import { loadPrunedLibertyStyle } from "@/lib/pruneLibertyStyle";
+import {
+  ILA_PIN_COMPARE_IMAGE_ID,
+  ILA_PIN_HIGHLIGHT_IMAGE_ID,
+  ILA_PIN_IMAGE_ID,
+  ILA_PIN_LABEL_BG_COMPARE_IMAGE_ID,
+  ILA_PIN_LABEL_BG_IMAGE_ID,
+  ILA_PIN_PIXEL_RATIO,
+  loadIlaPinImages,
+} from "@/lib/ilaMapPinImage";
 import { ILA_API_BASE_URL } from "@/lib/ilaApiConfig";
 import MapVersion, { type MapViewMode } from "@/components/map-version";
 import {
@@ -103,10 +112,9 @@ setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
-/** WebGL property pins — GeoJSON source + circle/symbol layers (no HTML Markers). */
+/** WebGL property pins — GeoJSON source + branded ILA icon/symbol layers (no HTML Markers). */
 const PROPERTY_PINS_SOURCE_ID = "property-pins";
-const PROPERTY_PINS_HALO_LAYER_ID = "property-pins-halo";
-const PROPERTY_PINS_CIRCLE_LAYER_ID = "property-pins-circle";
+const PROPERTY_PINS_ICON_LAYER_ID = "property-pins-icon";
 const PROPERTY_PINS_LABEL_LAYER_ID = "property-pins-label";
 
 /**
@@ -162,21 +170,6 @@ const SHOW_ESTATE_GEOJSON = true;
 const LAYOUT_MAX_ZOOM = 17.2;
 
 
-
-const PIN_ICON = `
-  <span class="ila-project-pin__anchor" aria-hidden="true">
-    <span class="ila-project-pin__halo"></span>
-    <span class="ila-project-pin__core">
-      <svg viewBox="300 205 180 135" class="ila-project-pin__icon" aria-hidden="true" fill="currentColor">
-        <rect x="311" y="216" width="19" height="112" />
-        <path d="M 339 216 H 358 V 300 H 405 V 328 H 361 Q 339 328 339 306 Z" />
-        <path fill-rule="evenodd" d="M 378 296 L 414 216 H 434 L 470 296 H 449 L 441 278 H 406 L 398 296 Z M 412 262 H 435 L 424 236 Z" />
-      </svg>
-    </span>
-    <span class="ila-project-pin__needle"></span>
-    <span class="ila-project-pin__point"></span>
-  </span>
-`;
 
 /**
  * Everything the map needs to place a pin. Deliberately not an EstateProject:
@@ -514,6 +507,63 @@ type PinVisualState = {
   featureMatchedPropertyIds: string[];
 };
 
+/**
+ * Candidate chip sides for `text-variable-anchor-offset`.
+ * Anchor name follows MapLibre: "left" places the label to the *right* of the point.
+ *
+ * Pin tip is at the geographic point (`icon-anchor: bottom`); the circular head sits
+ * ~5.2em above it at default icon-size. Offsets are from the tip and must clear:
+ *   - head radius (~1.6em at icon-size 0.82)
+ *   - pill overhang left of the text (~1.5em: stretchable content inset + icon-text-fit-padding)
+ *   - a small visual gap (~0.5em)
+ * → side chips need ~3.45em horizontal, not just head radius.
+ * dir is the geographic direction the label occupies (for neighbor scoring).
+ */
+const PIN_LABEL_ANCHORS = [
+  { anchor: "left", offset: [3.45, -5.2], dirX: 1, dirY: 0 },
+  { anchor: "right", offset: [-3.45, -5.2], dirX: -1, dirY: 0 },
+  { anchor: "top-left", offset: [2.85, -6.8], dirX: 0.7, dirY: -0.7 },
+  { anchor: "top-right", offset: [-2.85, -6.8], dirX: -0.7, dirY: -0.7 },
+  { anchor: "bottom", offset: [0, -8.6], dirX: 0, dirY: -1 },
+] as const;
+
+/** Neighbors farther apart than this (degrees) do not influence chip side. */
+const PIN_LABEL_NEIGHBOR_DEG = 0.045;
+
+/**
+ * Prefer chip sides away from nearby pins so labels do not sit on top of
+ * another pin. Returns a flat [anchor, [x, y], ...] list for MapLibre.
+ */
+function buildPinLabelPlacement(
+  pin: MapPin,
+  pins: MapPin[],
+): Array<string | [number, number]> {
+  const scores = PIN_LABEL_ANCHORS.map((slot) => {
+    let blocked = 0;
+    for (const other of pins) {
+      if (other.id === pin.id) continue;
+      const dx = other.center[0] - pin.center[0];
+      const dy = other.center[1] - pin.center[1];
+      const dist = Math.hypot(dx, dy);
+      if (dist < 1e-12 || dist > PIN_LABEL_NEIGHBOR_DEG) continue;
+      const ndx = dx / dist;
+      const ndy = dy / dist;
+      const alignment = ndx * slot.dirX + ndy * slot.dirY;
+      if (alignment <= 0.15) continue;
+      blocked += (alignment * alignment) / dist;
+    }
+    return { slot, blocked };
+  });
+
+  scores.sort((a, b) => a.blocked - b.blocked);
+
+  const placement: Array<string | [number, number]> = [];
+  for (const { slot } of scores) {
+    placement.push(slot.anchor, [slot.offset[0], slot.offset[1]]);
+  }
+  return placement;
+}
+
 /** Builds a GeoJSON FeatureCollection for GPU circle/symbol pin layers. */
 function pinsToGeoJSON(
   pins: MapPin[],
@@ -552,6 +602,7 @@ function pinsToGeoJSON(
           id: pin.id,
           name: pin.name,
           priceLabel,
+          labelPlacement: buildPinLabelPlacement(pin, pins),
           hidden: hidden ? 1 : 0,
           dimmed: isDimmed ? 1 : 0,
           highlighted: isHighlighted ? 1 : 0,
@@ -564,113 +615,194 @@ function pinsToGeoJSON(
   };
 }
 
-function ensurePropertyPinLayers(map: MapLibreMap) {
-  if (map.getSource(PROPERTY_PINS_SOURCE_ID)) return;
+async function ensurePropertyPinLayers(map: MapLibreMap) {
+  const images = await loadIlaPinImages();
+  const imageOpts = { pixelRatio: ILA_PIN_PIXEL_RATIO } as const;
+  // Label chips stretch around text. Coords are in raw image pixels (64×28 @ 2× = 128×56).
+  const labelBgOpts = {
+    pixelRatio: ILA_PIN_PIXEL_RATIO,
+    stretchX: [[28, 100]] as [number, number][],
+    stretchY: [[20, 36]] as [number, number][],
+    content: [16, 10, 112, 46] as [number, number, number, number],
+  };
+
+  if (!map.hasImage(ILA_PIN_IMAGE_ID)) {
+    map.addImage(ILA_PIN_IMAGE_ID, images.default, imageOpts);
+  }
+  if (!map.hasImage(ILA_PIN_HIGHLIGHT_IMAGE_ID)) {
+    map.addImage(ILA_PIN_HIGHLIGHT_IMAGE_ID, images.highlight, imageOpts);
+  }
+  if (!map.hasImage(ILA_PIN_COMPARE_IMAGE_ID)) {
+    map.addImage(ILA_PIN_COMPARE_IMAGE_ID, images.compare, imageOpts);
+  }
+  if (map.hasImage(ILA_PIN_LABEL_BG_IMAGE_ID)) {
+    map.removeImage(ILA_PIN_LABEL_BG_IMAGE_ID);
+  }
+  map.addImage(ILA_PIN_LABEL_BG_IMAGE_ID, images.labelBg, labelBgOpts);
+  if (map.hasImage(ILA_PIN_LABEL_BG_COMPARE_IMAGE_ID)) {
+    map.removeImage(ILA_PIN_LABEL_BG_COMPARE_IMAGE_ID);
+  }
+  map.addImage(ILA_PIN_LABEL_BG_COMPARE_IMAGE_ID, images.labelBgCompare, labelBgOpts);
+
+  const visibleFilter: FilterSpecification = ["!=", ["get", "hidden"], 1];
+
+  /**
+   * Price chips use per-feature `labelPlacement` (neighbor-aware side order).
+   * Collision is on: when chips would overlap (common when zoomed out), MapLibre
+   * keeps one in front and hides the rest — no mixed unreadable stack. Pin icons
+   * stay fully visible on their own layer. Zooming in frees space and more chips
+   * appear. Do not set icon-offset with icon-text-fit or the pill drifts off text.
+   */
+  const labelLayout = {
+    "icon-image": [
+      "case",
+      [">", ["get", "compareIndex"], 0],
+      ILA_PIN_LABEL_BG_COMPARE_IMAGE_ID,
+      ILA_PIN_LABEL_BG_IMAGE_ID,
+    ],
+    "icon-text-fit": "both" as const,
+    "icon-text-fit-padding": [3, 7, 3, 7] as [number, number, number, number],
+    // Collision: one chip wins crowded space; others stay hidden behind it.
+    "icon-allow-overlap": false,
+    "icon-ignore-placement": false,
+    "icon-padding": 2,
+    "icon-offset": [0, 0] as [number, number],
+    "icon-pitch-alignment": "viewport" as const,
+    "icon-rotation-alignment": "viewport" as const,
+    "text-field": [
+      "case",
+      [">", ["get", "compareIndex"], 0],
+      ["to-string", ["get", "compareIndex"]],
+      ["get", "priceLabel"],
+    ],
+    "text-size": [
+      "case",
+      [">", ["get", "compareIndex"], 0],
+      12,
+      11,
+    ],
+    // Per-pin side order from pinsToGeoJSON — not fixed to the right.
+    "text-variable-anchor-offset": ["get", "labelPlacement"],
+    "text-justify": "auto" as const,
+    "text-pitch-alignment": "viewport" as const,
+    "text-rotation-alignment": "viewport" as const,
+    "text-optional": false,
+    "text-allow-overlap": false,
+    "text-ignore-placement": false,
+    "text-padding": 2,
+    "text-font": [
+      "Open Sans Bold",
+      "Open Sans Regular",
+      "Arial Unicode MS Regular",
+    ],
+    "text-letter-spacing": 0.015,
+    "text-max-width": 14,
+    // Lower sort key places first and wins collisions (compare / highlight first).
+    "symbol-z-order": "source" as const,
+    "symbol-sort-key": [
+      "case",
+      [">", ["get", "compareIndex"], 0],
+      0,
+      ["==", ["get", "highlighted"], 1],
+      1,
+      2,
+    ],
+  };
+
+  const labelPaint = {
+    "text-color": [
+      "case",
+      [">", ["get", "compareIndex"], 0],
+      "#141519",
+      "#24231f",
+    ],
+    "text-halo-width": 0,
+    "icon-opacity": [
+      "case",
+      ["==", ["get", "dimmed"], 1],
+      0.28,
+      0.98,
+    ],
+    "text-opacity": [
+      "case",
+      ["==", ["get", "dimmed"], 1],
+      0.35,
+      1,
+    ],
+  };
+
+  const pinIconLayout = {
+    "icon-image": [
+      "case",
+      ["==", ["get", "compareSelected"], 1],
+      ILA_PIN_COMPARE_IMAGE_ID,
+      ["==", ["get", "highlighted"], 1],
+      ILA_PIN_HIGHLIGHT_IMAGE_ID,
+      ["==", ["get", "emiPulse"], 1],
+      ILA_PIN_HIGHLIGHT_IMAGE_ID,
+      ILA_PIN_IMAGE_ID,
+    ],
+    "icon-size": [
+      "case",
+      ["==", ["get", "compareSelected"], 1],
+      0.92,
+      ["==", ["get", "emiPulse"], 1],
+      0.9,
+      ["==", ["get", "highlighted"], 1],
+      0.88,
+      0.82,
+    ],
+    "icon-anchor": "bottom" as const,
+    "icon-allow-overlap": true,
+    "icon-ignore-placement": true,
+  };
+
+  const pinIconPaint = {
+    "icon-opacity": [
+      "case",
+      ["==", ["get", "dimmed"], 1],
+      0.32,
+      1,
+    ],
+  };
+
+  const addOrReplacePinLayers = () => {
+    if (map.getLayer(PROPERTY_PINS_LABEL_LAYER_ID)) {
+      map.removeLayer(PROPERTY_PINS_LABEL_LAYER_ID);
+    }
+    if (map.getLayer(PROPERTY_PINS_ICON_LAYER_ID)) {
+      map.removeLayer(PROPERTY_PINS_ICON_LAYER_ID);
+    }
+    map.addLayer({
+      id: PROPERTY_PINS_ICON_LAYER_ID,
+      type: "symbol",
+      source: PROPERTY_PINS_SOURCE_ID,
+      filter: visibleFilter,
+      layout: pinIconLayout,
+      paint: pinIconPaint,
+    });
+    map.addLayer({
+      id: PROPERTY_PINS_LABEL_LAYER_ID,
+      type: "symbol",
+      source: PROPERTY_PINS_SOURCE_ID,
+      filter: visibleFilter,
+      layout: labelLayout,
+      paint: labelPaint,
+    });
+  };
+
+  if (map.getSource(PROPERTY_PINS_SOURCE_ID)) {
+    // Recreate layers so stale text-offset / fixed-anchor props cannot linger.
+    addOrReplacePinLayers();
+    return;
+  }
 
   map.addSource(PROPERTY_PINS_SOURCE_ID, {
     type: "geojson",
     data: EMPTY_FC,
   });
 
-  const visibleFilter: FilterSpecification = ["!=", ["get", "hidden"], 1];
-
-  map.addLayer({
-    id: PROPERTY_PINS_HALO_LAYER_ID,
-    type: "circle",
-    source: PROPERTY_PINS_SOURCE_ID,
-    filter: visibleFilter,
-    paint: {
-      "circle-radius": [
-        "case",
-        ["==", ["get", "emiPulse"], 1],
-        16,
-        ["==", ["get", "highlighted"], 1],
-        14,
-        12,
-      ],
-      "circle-color": "#c6a46c",
-      "circle-opacity": [
-        "case",
-        ["==", ["get", "dimmed"], 1],
-        0.08,
-        0.28,
-      ],
-      "circle-blur": 0.35,
-    },
-  });
-
-  map.addLayer({
-    id: PROPERTY_PINS_CIRCLE_LAYER_ID,
-    type: "circle",
-    source: PROPERTY_PINS_SOURCE_ID,
-    filter: visibleFilter,
-    paint: {
-      "circle-radius": [
-        "case",
-        ["==", ["get", "compareSelected"], 1],
-        9,
-        ["==", ["get", "emiPulse"], 1],
-        8.5,
-        ["==", ["get", "highlighted"], 1],
-        8,
-        7,
-      ],
-      "circle-color": [
-        "case",
-        ["==", ["get", "compareSelected"], 1],
-        "#e0c58e",
-        ["==", ["get", "highlighted"], 1],
-        "#d4b57e",
-        "#c6a46c",
-      ],
-      "circle-opacity": [
-        "case",
-        ["==", ["get", "dimmed"], 1],
-        0.28,
-        0.95,
-      ],
-      "circle-stroke-width": 2,
-      "circle-stroke-color": "#171717",
-    },
-  });
-
-  map.addLayer({
-    id: PROPERTY_PINS_LABEL_LAYER_ID,
-    type: "symbol",
-    source: PROPERTY_PINS_SOURCE_ID,
-    filter: visibleFilter,
-    layout: {
-      "text-field": [
-        "case",
-        [">", ["get", "compareIndex"], 0],
-        ["to-string", ["get", "compareIndex"]],
-        ["get", "priceLabel"],
-      ],
-      "text-size": [
-        "case",
-        [">", ["get", "compareIndex"], 0],
-        12,
-        10,
-      ],
-      "text-offset": [0, 1.35],
-      "text-anchor": "top",
-      "text-optional": true,
-      "text-allow-overlap": false,
-      "text-ignore-placement": false,
-      "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
-    },
-    paint: {
-      "text-color": "#f2f0ea",
-      "text-halo-color": "#0a0b0e",
-      "text-halo-width": 1.4,
-      "text-opacity": [
-        "case",
-        ["==", ["get", "dimmed"], 1],
-        0.35,
-        1,
-      ],
-    },
-  });
+  addOrReplacePinLayers();
 }
 
 export type MapSectionProps = {
@@ -2152,112 +2284,115 @@ export default function MapSection({
         paint: { "raster-fade-duration": 0 },
       });
 
-      // Property pins as WebGL GeoJSON (under estate layers so plots stay clickable on top).
-      ensurePropertyPinLayers(liveMap);
+      void (async () => {
+        // Branded ILA pins first so estate layout layers stack above them.
+        await ensurePropertyPinLayers(liveMap);
+        if (cancelled || mapRef.current !== liveMap) return;
 
-      // Master Plan Layout sources, raster image layer, and vector plot/road layers
-      // configured cleanly in map-section-layouts.tsx
-      initLayoutLayers(liveMap);
+        // Master Plan Layout sources, raster image layer, and vector plot/road layers
+        // configured cleanly in map-section-layouts.tsx
+        initLayoutLayers(liveMap);
 
-      const selectPropertyPin = (event: MapLayerMouseEvent) => {
-        const feature = event.features?.[0];
-        const pinId = feature?.properties?.id as string | undefined;
-        if (!pinId) return;
+        const selectPropertyPin = (event: MapLayerMouseEvent) => {
+          const feature = event.features?.[0];
+          const pinId = feature?.properties?.id as string | undefined;
+          if (!pinId) return;
 
-        const currentPin = pinsByIdRef.current.get(pinId);
-        if (!currentPin) return;
+          const currentPin = pinsByIdRef.current.get(pinId);
+          if (!currentPin) return;
 
-        const isMobile = window.matchMedia("(max-width: 767px)").matches;
-        trackEvent({
-          event_type: "MAP_MARKER_CLICK",
-          property_id: currentPin.id,
-          metadata: { source: "map_pin", section_type: "hero_map" },
-        });
-
-        const handlers = pinHandlersRef.current;
-
-        if (compareSelectingModeRef.current) {
-          handlers.toggleCompareId(currentPin.id);
-          return;
-        }
-
-        if (emiSelectingPropertyRef.current) {
-          const matchedItem = handlers.propertyList.find((p) => p.id === currentPin.id);
-          const effectivePrice =
-            currentPin.price ?? matchedItem?.price ?? 5000000;
-          handlers.setEmiSelectedProperty({
-            id: currentPin.id,
-            name: currentPin.name,
-            price: effectivePrice,
-            location:
-              currentPin.location ||
-              [matchedItem?.locality, matchedItem?.city].filter(Boolean).join(", ") ||
-              undefined,
+          const isMobile = window.matchMedia("(max-width: 767px)").matches;
+          trackEvent({
+            event_type: "MAP_MARKER_CLICK",
+            property_id: currentPin.id,
+            metadata: { source: "map_pin", section_type: "hero_map" },
           });
-          handlers.setEmiSelectingProperty(false);
-          handlers.setEmiOpen(true);
-          return;
-        }
 
-        void handlers.selectProperty(currentPin.id, {
-          openSheet: true,
-          openDesktopCard: !isMobile,
-          openLayout: true,
+          const handlers = pinHandlersRef.current;
+
+          if (compareSelectingModeRef.current) {
+            handlers.toggleCompareId(currentPin.id);
+            return;
+          }
+
+          if (emiSelectingPropertyRef.current) {
+            const matchedItem = handlers.propertyList.find((p) => p.id === currentPin.id);
+            const effectivePrice =
+              currentPin.price ?? matchedItem?.price ?? 5000000;
+            handlers.setEmiSelectedProperty({
+              id: currentPin.id,
+              name: currentPin.name,
+              price: effectivePrice,
+              location:
+                currentPin.location ||
+                [matchedItem?.locality, matchedItem?.city].filter(Boolean).join(", ") ||
+                undefined,
+            });
+            handlers.setEmiSelectingProperty(false);
+            handlers.setEmiOpen(true);
+            return;
+          }
+
+          void handlers.selectProperty(currentPin.id, {
+            openSheet: true,
+            openDesktopCard: !isMobile,
+            openLayout: true,
+          });
+        };
+
+        liveMap.on("click", PROPERTY_PINS_ICON_LAYER_ID, selectPropertyPin);
+        liveMap.on("mouseenter", PROPERTY_PINS_ICON_LAYER_ID, () => {
+          liveMap.getCanvas().style.cursor = "pointer";
         });
-      };
-
-      liveMap.on("click", PROPERTY_PINS_CIRCLE_LAYER_ID, selectPropertyPin);
-      liveMap.on("mouseenter", PROPERTY_PINS_CIRCLE_LAYER_ID, () => {
-        liveMap.getCanvas().style.cursor = "pointer";
-      });
-      liveMap.on("mouseleave", PROPERTY_PINS_CIRCLE_LAYER_ID, () => {
-        liveMap.getCanvas().style.cursor = "";
-      });
-
-      const selectRenderedPlot = (event: MapMouseEvent) => {
-        const feature = liveMap.queryRenderedFeatures(event.point, {
-          layers: ["estate-plots-fill"],
-        })[0];
-        const id = feature?.properties?.id as string | undefined;
-        if (!id) return;
-
-        const project = projectsRef.current.find((candidate) =>
-          candidate.plots.some((plot) => plot.id === id),
-        );
-        if (!project) return;
-
-        openProject(project.id, id);
-
-        trackEvent({
-          event_type: "MAP_MARKER_CLICK",
-          property_id: activePropertyId ?? undefined,
-          metadata: {
-            plot_id: id,
-            project_id: project.id,
-            section_type: "hero_map",
-          },
+        liveMap.on("mouseleave", PROPERTY_PINS_ICON_LAYER_ID, () => {
+          liveMap.getCanvas().style.cursor = "";
         });
-      };
-      liveMap.on("click", selectRenderedPlot);
-      liveMap.on("mouseenter", "estate-plots-fill", () => {
-        liveMap.getCanvas().style.cursor = "pointer";
-      });
-      liveMap.on("mouseleave", "estate-plots-fill", () => {
-        liveMap.getCanvas().style.cursor = "";
-      });
 
-      // panelOpen starts true, and the effect below re-fits whenever the
-      // panel is toggled, so the first framing already reserves the sidebar.
-      fitBounds(liveMap, projectsBounds, 50, 13.2, true);
-      mapReadyRef.current = true;
-      setMapReady(true);
-      setMapError(false);
+        const selectRenderedPlot = (event: MapMouseEvent) => {
+          const feature = liveMap.queryRenderedFeatures(event.point, {
+            layers: ["estate-plots-fill"],
+          })[0];
+          const id = feature?.properties?.id as string | undefined;
+          if (!id) return;
 
-      // Release analytics batch flush only after the first idle (tiles painted),
-      // so POST /api/events/batch does not contend with OpenFreeMap downloads.
-      liveMap.once("idle", () => {
-        allowAnalyticsFlush();
-      });
+          const project = projectsRef.current.find((candidate) =>
+            candidate.plots.some((plot) => plot.id === id),
+          );
+          if (!project) return;
+
+          openProject(project.id, id);
+
+          trackEvent({
+            event_type: "MAP_MARKER_CLICK",
+            property_id: activePropertyId ?? undefined,
+            metadata: {
+              plot_id: id,
+              project_id: project.id,
+              section_type: "hero_map",
+            },
+          });
+        };
+        liveMap.on("click", selectRenderedPlot);
+        liveMap.on("mouseenter", "estate-plots-fill", () => {
+          liveMap.getCanvas().style.cursor = "pointer";
+        });
+        liveMap.on("mouseleave", "estate-plots-fill", () => {
+          liveMap.getCanvas().style.cursor = "";
+        });
+
+        // panelOpen starts true, and the effect below re-fits whenever the
+        // panel is toggled, so the first framing already reserves the sidebar.
+        fitBounds(liveMap, projectsBounds, 50, 13.2, true);
+        mapReadyRef.current = true;
+        setMapReady(true);
+        setMapError(false);
+
+        // Release analytics batch flush only after the first idle (tiles painted),
+        // so POST /api/events/batch does not contend with OpenFreeMap downloads.
+        liveMap.once("idle", () => {
+          allowAnalyticsFlush();
+        });
+      })();
     });
     })();
 
@@ -2295,45 +2430,57 @@ export default function MapSection({
     return () => clearTimeout(timer);
   }, [mapReady]);
 
-  // Sync property pins into the WebGL GeoJSON source (GPU circle/symbol layers).
+  // Sync property pins into the WebGL GeoJSON source (GPU symbol layers with ILA icons).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    ensurePropertyPinLayers(map);
-    const source = map.getSource(PROPERTY_PINS_SOURCE_ID) as GeoJSONSource | undefined;
-    if (!source) return;
+    let cancelled = false;
 
-    source.setData(
-      pinsToGeoJSON(pins, {
-        activeProjectId,
-        compareSelectingMode,
-        compareSelectedIds,
-        emiSelectingProperty,
-        selectedFeatureKeys,
-        featureMatchedPropertyIds,
-      }),
-    );
+    void (async () => {
+      await ensurePropertyPinLayers(map);
+      if (cancelled || mapRef.current !== map) return;
 
-    if (!activeProjectId) {
-      const signature = `${panelOpen}|${pins
-        .map((pin) => `${pin.id}:${pin.center[0]},${pin.center[1]}`)
-        .join("|")}`;
+      const source = map.getSource(PROPERTY_PINS_SOURCE_ID) as
+        | GeoJSONSource
+        | undefined;
+      if (!source) return;
 
-      if (signature !== fittedPinsRef.current) {
-        fittedPinsRef.current = signature;
-        if (fitTimerRef.current) clearTimeout(fitTimerRef.current);
-        fitTimerRef.current = setTimeout(() => {
-          fitTimerRef.current = null;
-          const liveMap = mapRef.current;
-          if (liveMap) fitBounds(liveMap, pinsBounds, 50, 13.2, panelOpen);
-        }, 120);
+      source.setData(
+        pinsToGeoJSON(pins, {
+          activeProjectId,
+          compareSelectingMode,
+          compareSelectedIds,
+          emiSelectingProperty,
+          selectedFeatureKeys,
+          featureMatchedPropertyIds,
+        }),
+      );
+
+      if (!activeProjectId) {
+        const signature = `${panelOpen}|${pins
+          .map((pin) => `${pin.id}:${pin.center[0]},${pin.center[1]}`)
+          .join("|")}`;
+
+        if (signature !== fittedPinsRef.current) {
+          fittedPinsRef.current = signature;
+          if (fitTimerRef.current) clearTimeout(fitTimerRef.current);
+          fitTimerRef.current = setTimeout(() => {
+            fitTimerRef.current = null;
+            const liveMap = mapRef.current;
+            if (liveMap) fitBounds(liveMap, pinsBounds, 50, 13.2, panelOpen);
+          }, 120);
+        }
       }
-    }
 
-    if (pins.length > 0) {
-      onMapLoaded?.();
-    }
+      if (pins.length > 0) {
+        onMapLoaded?.();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     mapReady,
     pins,

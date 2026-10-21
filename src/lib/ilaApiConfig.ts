@@ -23,13 +23,13 @@ function requireValue(name: string, value: string | undefined): string {
 }
 
 export const ILA_API_BASE_URL = requireValue(
-  "NEXT_PUBLICAPIURL",
-  process.env.NEXT_PUBLICAPIURL,
+  "NEXT_PUBLIC_API_URL or NEXT_PUBLICAPIURL",
+  process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLICAPIURL,
 );
 
 export const ILA_PROPERTY_ID = requireValue(
-  "NEXT_PUBLICILAPROPERTYID",
-  process.env.NEXT_PUBLICILAPROPERTYID,
+  "NEXT_PUBLIC_ILA_PROPERTY_ID or NEXT_PUBLICILAPROPERTYID",
+  process.env.NEXT_PUBLIC_ILA_PROPERTY_ID ?? process.env.NEXT_PUBLICILAPROPERTYID,
 );
 
 export function ilaUnitsUrl(propertyId: string = ILA_PROPERTY_ID): string {

@@ -78,7 +78,8 @@ export function isProxyableLayoutUrl(url: string): boolean {
 }
 
 export function layoutImageProxyUrl(layoutUrl: string): string {
-  return `/api/layout-image?url=${encodeURIComponent(layoutUrl)}`;
+  const cleanS3Url = layoutUrl.split("?")[0];
+  return `/api/layout-image?url=${encodeURIComponent(cleanS3Url)}`;
 }
 
 function pathFromUrl(url: string): string {

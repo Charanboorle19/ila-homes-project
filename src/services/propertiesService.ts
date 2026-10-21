@@ -252,11 +252,12 @@ export async function fetchPropertyById(
  * until the reported total is collected.
  *
  * The response also carries the estate's master plan: `layout_preview_url`, a
- * presigned PNG of it (`property_layout_cords` gives its extent), and the
- * older `tif_url`, the raw survey scan. The preview is preferred — it is what
- * the map draws when it is there. Both are presigned S3 objects that expire an
- * hour after they are minted. `centroid` is null on every current unit, so the
- * geometry is the only usable position source for a plot.
+ * presigned SVG of it (`property_layout_cords` gives its extent), and the
+ * older `tif_url` (legacy TIFF, or occasionally an `.svg` on that field). The
+ * SVG/preview is preferred — it is what the map draws when it is there. Both
+ * are presigned S3 objects that expire an hour after they are minted.
+ * `centroid` is null on every current unit, so the geometry is the only usable
+ * position source for a plot.
  */
 export type PropertyUnit = {
   id: string;
@@ -287,9 +288,9 @@ export type PropertyUnitsResult = {
   units: PropertyUnit[];
   /** Server-reported total, which can exceed the number of units returned. */
   total: number;
-  /** Presigned PNG master-plan preview. Expires, so it is not cached long-term. */
+  /** Presigned SVG (or raster) master-plan preview. Expires, so it is not cached long-term. */
   layoutPreviewUrl: string | null;
-  /** Presigned master-plan TIFF. Expires, so it is not cached long-term. */
+  /** Legacy TIFF URL, or an SVG when the API still uses this field. Expires. */
   tifUrl: string | null;
   layoutCords: PropertyLayoutCords | null;
 };
@@ -861,4 +862,4 @@ export async function searchProperties(options: {
       data?.no_results_found ?? ((data?.properties?.length ?? 0) === 0),
     message: data?.message ?? response?.message ?? null,
   };
-}
+}

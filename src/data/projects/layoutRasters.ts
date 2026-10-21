@@ -26,7 +26,12 @@ export type LayoutRaster = {
   url?: string;
   /** Already-decoded image, for bytes fetched through the same-origin proxy. */
   image?: LayoutRasterImage;
-  /** Clockwise corner coordinates in WGS84. */
+  /**
+   * Native SVG markup for an HTML overlay under the GeoJSON plots.
+   * Preferred for layout clarity — stays vector-sharp across zoom levels.
+   */
+  svgMarkup?: string;
+  /** Clockwise corner coordinates in WGS84 (NW → NE → SE → SW). */
   coordinates: [[number, number], [number, number], [number, number], [number, number]];
   opacity: number;
   bounds: LayoutRasterBounds;

@@ -9,47 +9,56 @@ import type { PropertyLayoutCords } from "@/services/propertiesService";
 /**
  * Inline TIFF support for the estate master plan.
  *
- * MapLibre cannot decode TIFF, and browsers cannot display one either, so the
- * file is decoded in the browser (geotiff.js) and handed to the map as a canvas
- * on an image source. The image is georeferenced with the extent the
- * units API returns (`property_layout_cords`) rather than GeoTIFF tags, which
- * keeps this independent of how the survey was exported.
+ * MapLibre cannot decode TIFF natively, so the file is decoded with geotiff.js
+ * into an ImageBitmap and handed to the MapLibre image source. Georeference
+ * uses `property_layout_cords` (not GeoTIFF tags).
  *
- * The API's `layout_preview_url` remains a separate PNG fallback — see
- * @/lib/layoutPreview.
+ * Format priority (SVG → TIFF → PNG) lives in `@/lib/layoutPreview`.
  */
 
-/**
- * The presigned TIFF host sends no CORS headers, so the scan is fetched through
- * this app's own origin. See src/app/api/layout-image/route.ts.
- */
 const LAYOUT_IMAGE_PROXY = "/api/layout-image";
 
 /**
- * Decoded scans are capped on both axes: WebGL textures are commonly limited to
- * 2048px per side, and a long thin layout export would otherwise slip past an
- * area-only cap.
+ * MapLibre uploads the layout as a single WebGL texture. Soft-capping at 2048
+ * made estate TIFFs look pixelated when zoomed in; we decode up to the GPU's
+ * MAX_TEXTURE_SIZE (capped at 8192 to bound RGBA memory ≈ 256MB).
  */
-const MAX_DECODED_EDGE = 2048;
-const MAX_DECODED_PIXELS = MAX_DECODED_EDGE * MAX_DECODED_EDGE;
-
-/**
- * The presigned TIFF expires (X-Amz-Expires=3600), so decoded results are
- * cached briefly and re-fetched once the signed URL is likely stale.
- */
+const HARD_MAX_DECODED_EDGE = 8192;
+/** Busts in-memory entries from the old 2048px decode path. */
+const CACHE_GEN = "hires-v1";
 const CACHE_TTL_MS = 45 * 60 * 1000;
 
 type CacheEntry = { image: LayoutRasterImage; cachedAt: number };
 
 const rasterCache = new Map<string, CacheEntry>();
 
+function cacheKey(propertyId: string): string {
+  return `${propertyId}:${CACHE_GEN}`;
+}
+
+/** Longest edge we will decode for the MapLibre image source. */
+export function resolveLayoutMaxDecodedEdge(): number {
+  let gpuMax = 4096;
+  try {
+    const canvas = document.createElement("canvas");
+    const gl =
+      canvas.getContext("webgl2", { failIfMajorPerformanceCaveat: false }) ||
+      canvas.getContext("webgl", { failIfMajorPerformanceCaveat: false });
+    if (gl) {
+      const reported = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      if (typeof reported === "number" && reported > 0) gpuMax = reported;
+    }
+  } catch {
+    // Keep the conservative default.
+  }
+  return Math.min(gpuMax, HARD_MAX_DECODED_EDGE);
+}
+
 /**
- * Fetches a layout TIFF, decodes it and returns a MapLibre image source entry.
- * Returns null when the file is missing or will not decode — the vector plots
- * are still usable without it, so this is never fatal.
+ * Fetches a layout TIFF, decodes it, and returns a MapLibre image-source entry.
+ * Returns undefined when the file is missing or will not decode.
  */
 export async function loadLayoutRaster(options: {
-  /** Cache key, normally the property id. */
   propertyId: string;
   tifUrl: string;
   cords: PropertyLayoutCords;
@@ -57,24 +66,26 @@ export async function loadLayoutRaster(options: {
   signal?: AbortSignal;
 }): Promise<LayoutRaster | undefined> {
   const { propertyId, tifUrl, cords, opacity = 0.85, signal } = options;
+  const key = cacheKey(propertyId);
 
-  const cached = rasterCache.get(propertyId);
+  const cached = rasterCache.get(key);
   let image: LayoutRasterImage;
 
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
     image = cached.image;
+    console.log("[ILA map] reusing cached layout TIFF", {
+      propertyId,
+      size: `${image.width}x${image.height}`,
+    });
   } else {
-    const decoded = await decodeTiffToCanvas(tifUrl, signal);
+    const decoded = await decodeTiffToDisplayImage(tifUrl, signal);
     if (!decoded) return undefined;
     image = decoded;
-    rasterCache.set(propertyId, { image, cachedAt: Date.now() });
+    rasterCache.set(key, { image, cachedAt: Date.now() });
   }
 
   return {
     id: `${propertyId}-layout`,
-    // The image source is created without a URL in MapSection. Supplying the
-    // decoded canvas makes updateImage({ image }) upload it directly instead
-    // of asking MapLibre to perform a second URL load.
     image,
     coordinates: layoutCordsToCoordinates(cords),
     opacity,
@@ -82,7 +93,7 @@ export async function loadLayoutRaster(options: {
   };
 }
 
-/** Decodes a TIFF into a canvas that MapLibre can upload directly. Decodes page 0 by default. */
+/** @deprecated Prefer decodeTiffToImageBitmap — kept for any callers that want a canvas. */
 export async function decodeTiffToCanvas(
   url: string,
   signal?: AbortSignal,
@@ -100,9 +111,6 @@ export type DecodedTiffPage = {
   totalPages: number;
 };
 
-/**
- * Inspects a TIFF and returns metadata along with the total page/image count.
- */
 export async function getTiffPageCount(
   url: string,
   signal?: AbortSignal,
@@ -121,8 +129,27 @@ export async function getTiffPageCount(
   }
 }
 
+async function decodeTiffToDisplayImage(
+  url: string,
+  signal?: AbortSignal,
+): Promise<LayoutRasterImage | null> {
+  const page = await decodeTiffPageToCanvas(url, 0, signal);
+  if (!page) return null;
+
+  try {
+    // MapLibre ImageSource is most reliable with ImageBitmap (see MapLibre docs).
+    return await createImageBitmap(page.canvas);
+  } catch (error) {
+    console.warn(
+      "[ILA map] createImageBitmap failed for TIFF canvas — using canvas directly",
+      error,
+    );
+    return page.canvas;
+  }
+}
+
 /**
- * Decodes a specific page of a multi-page or standard TIFF onto an HTML5 Canvas.
+ * Decodes a specific page of a TIFF onto an HTML canvas.
  */
 export async function decodeTiffPageToCanvas(
   url: string,
@@ -130,21 +157,32 @@ export async function decodeTiffPageToCanvas(
   signal?: AbortSignal,
 ): Promise<DecodedTiffPage | null> {
   try {
-    // Same-origin, because the S3 bucket allows no cross-origin reads.
     const proxied = `${LAYOUT_IMAGE_PROXY}?url=${encodeURIComponent(url)}`;
+    console.log("[ILA map] fetching layout TIFF via proxy…");
     const response = await fetch(proxied, { signal });
     if (!response.ok) {
+      let detail = "";
+      try {
+        detail = (await response.text()).slice(0, 200);
+      } catch {
+        // ignore
+      }
       console.warn(
         "[ILA map] layout TIFF fetch failed",
         response.status,
         response.statusText,
+        detail || undefined,
       );
       return null;
     }
+    const declared = Number(response.headers.get("content-length") ?? 0);
+    console.log(
+      `[ILA map] layout TIFF download started${declared > 0 ? ` — ${Math.round(declared / (1024 * 1024))} MB declared` : ""}`,
+    );
     const buffer = await response.arrayBuffer();
     if (signal?.aborted) return null;
+    console.log(`[ILA map] layout TIFF bytes received — ${buffer.byteLength} bytes`);
 
-    // Loaded on demand: geotiff.js is only needed once a layout is opened.
     const { fromArrayBuffer } = await import("geotiff");
     const tiff = await fromArrayBuffer(buffer);
     const totalPages = await tiff.getImageCount();
@@ -154,7 +192,7 @@ export async function decodeTiffPageToCanvas(
     const width = image.getWidth();
     const height = image.getHeight();
     if (!width || !height) {
-      console.warn("[ILA map] layout TIFF page has no image", {
+      console.warn("[ILA map] layout TIFF page has no dimensions", {
         width,
         height,
         pageIndex: targetIndex,
@@ -162,85 +200,66 @@ export async function decodeTiffPageToCanvas(
       return null;
     }
 
-    // Large scans are resampled during decode; a full-resolution read stays as
-    // a fallback for exports the resampler cannot handle.
+    const maxEdge = resolveLayoutMaxDecodedEdge();
+    const maxPixels = maxEdge * maxEdge;
     const scale = Math.min(
       1,
-      MAX_DECODED_EDGE / width,
-      MAX_DECODED_EDGE / height,
-      Math.sqrt(MAX_DECODED_PIXELS / (width * height)),
+      maxEdge / width,
+      maxEdge / height,
+      Math.sqrt(maxPixels / (width * height)),
     );
-    const scaled = {
-      width: Math.max(1, Math.round(width * scale)),
-      height: Math.max(1, Math.round(height * scale)),
-    };
-    const wantsResample = scale < 1;
+    const outW = Math.max(1, Math.round(width * scale));
+    const outH = Math.max(1, Math.round(height * scale));
+    const resample = outW !== width || outH !== height;
 
-    let decoded: { pixels: Uint8ClampedArray; width: number; height: number };
+    console.log("[ILA map] decoding layout TIFF", {
+      native: `${width}x${height}`,
+      target: `${outW}x${outH}`,
+      maxEdge,
+      downscaled: resample,
+      pages: totalPages,
+      samplesPerPixel: image.getSamplesPerPixel?.() ?? "?",
+    });
 
-    try {
-      decoded = wantsResample
-        ? {
-            pixels: await readChannels(image, {
-              signal,
-              width: scaled.width,
-              height: scaled.height,
-            }),
-            width: scaled.width,
-            height: scaled.height,
-          }
-        : {
-            pixels: await readChannels(image, { signal }),
-            width,
-            height,
-          };
-    } catch (error) {
-      console.warn(
-        "[ILA API] layout TIFF resample failed, reading full size",
-        error,
-      );
-      try {
-        decoded = { pixels: await readChannels(image, { signal }), width, height };
-      } catch (fullError) {
-        console.warn("[ILA API] layout TIFF readChannels fallback with readRasters", fullError);
-        const rasters = (await image.readRasters({ signal })) as unknown;
-        const normalized = normalizeRastersToUint8(rasters, width, height);
-        decoded = { pixels: normalized, width, height };
-      }
-    }
+    const pixels = await readTiffPixels(image, {
+      signal,
+      width: resample ? outW : undefined,
+      height: resample ? outH : undefined,
+    });
+    if (!pixels) return null;
 
-    const rgba = toRgba(decoded.pixels, decoded.width * decoded.height);
+    const pixelCount = outW * outH;
+    const rgba = toRgba(pixels, pixelCount);
     if (!rgba) {
-      console.warn(
-        "[ILA map] layout TIFF has an unsupported channel layout",
-        decoded.pixels.length,
-        "pixelCount:",
-        decoded.width * decoded.height,
-      );
+      console.warn("[ILA map] layout TIFF channel layout unsupported", {
+        bytes: pixels.length,
+        pixelCount,
+        stride: pixels.length / pixelCount,
+      });
       return null;
     }
 
     const canvas = document.createElement("canvas");
-    canvas.width = decoded.width;
-    canvas.height = decoded.height;
+    canvas.width = outW;
+    canvas.height = outH;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-      console.warn("[ILA map] no 2d canvas context available");
+      console.warn("[ILA map] no 2d canvas context available for TIFF");
       return null;
     }
 
-    const raster = ctx.createImageData(decoded.width, decoded.height);
-    raster.data.set(rgba);
-    ctx.putImageData(raster, 0, 0);
+    const imageData = ctx.createImageData(outW, outH);
+    imageData.data.set(rgba);
+    ctx.putImageData(imageData, 0, 0);
 
     console.info(
-      `[ILA map] layout TIFF decoded successfully: ${decoded.width}x${decoded.height} (page ${targetIndex + 1}/${totalPages})`,
+      `[ILA map] layout TIFF decoded successfully: ${outW}x${outH} (page ${targetIndex + 1}/${totalPages})`,
     );
 
     return {
       canvas,
-      width: decoded.width,
-      height: decoded.height,
+      width: outW,
+      height: outH,
       pageIndex: targetIndex,
       totalPages,
     };
@@ -250,65 +269,118 @@ export async function decodeTiffPageToCanvas(
   }
 }
 
-/**
- * Handles planar (array of typed arrays) or interleaved raster buffers, converting
- * any sample format (Uint8, Uint16, Float32, etc.) to 8-bit bytes.
- */
-function normalizeRastersToUint8(
-  rasters: unknown,
+type GeoTiffImage = {
+  getSamplesPerPixel?: () => number;
+  readRGB: (options: {
+    interleave: boolean;
+    enableAlpha?: boolean;
+    width?: number;
+    height?: number;
+    signal?: AbortSignal;
+  }) => Promise<unknown>;
+  readRasters: (options: {
+    interleave?: boolean;
+    width?: number;
+    height?: number;
+    signal?: AbortSignal;
+    samples?: number[];
+  }) => Promise<unknown>;
+};
+
+async function readTiffPixels(
+  image: GeoTiffImage,
+  options: { signal?: AbortSignal; width?: number; height?: number },
+): Promise<Uint8ClampedArray | null> {
+  const sizeOpts = {
+    ...(options.width && options.height
+      ? { width: options.width, height: options.height }
+      : {}),
+    signal: options.signal,
+  };
+
+  // 1) Prefer readRGB when the file is photometric RGB.
+  try {
+    const raw = (await image.readRGB({
+      interleave: true,
+      enableAlpha: true,
+      ...sizeOpts,
+    })) as ArrayLike<number>;
+    return copySamplesToUint8(raw);
+  } catch (rgbErr) {
+    console.warn(
+      "[ILA map] layout TIFF readRGB failed — falling back to readRasters",
+      rgbErr,
+    );
+  }
+
+  // 2) Generic rasters (greyscale, palette, CMYK-ish multi-band, etc.).
+  try {
+    const rasters = await image.readRasters({
+      interleave: true,
+      ...sizeOpts,
+    });
+    if (rasters && typeof rasters === "object" && "length" in (rasters as object)) {
+      return copySamplesToUint8(rasters as ArrayLike<number>);
+    }
+    // Planar: array of bands
+    if (Array.isArray(rasters)) {
+      const width = options.width;
+      const height = options.height;
+      if (!width || !height) {
+        console.warn("[ILA map] planar TIFF fallback needs explicit width/height");
+        return null;
+      }
+      return planarBandsToInterleaved(rasters as ArrayLike<number>[], width, height);
+    }
+  } catch (rasterErr) {
+    console.warn("[ILA map] layout TIFF readRasters failed", rasterErr);
+  }
+
+  return null;
+}
+
+function sampleToByte(val: number): number {
+  if (!Number.isFinite(val)) return 0;
+  // Normalized float imagery
+  if (val >= 0 && val <= 1) return Math.round(val * 255);
+  // 16-bit
+  if (val > 255 && val <= 65535) return Math.round((val / 65535) * 255);
+  // Already 8-bit (or slightly out of range)
+  return Math.max(0, Math.min(255, Math.round(val)));
+}
+
+function copySamplesToUint8(raw: ArrayLike<number>): Uint8ClampedArray {
+  const pixels = new Uint8ClampedArray(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    pixels[i] = sampleToByte(raw[i] as number);
+  }
+  return pixels;
+}
+
+function planarBandsToInterleaved(
+  bands: ArrayLike<number>[],
   width: number,
   height: number,
 ): Uint8ClampedArray {
   const pixelCount = width * height;
-  if (!rasters || pixelCount <= 0) return new Uint8ClampedArray(0);
-
-  // Case 1: Separate bands / planar: Array of TypedArrays [R, G, B] or [R, G, B, A]
-  if (Array.isArray(rasters) && rasters.length > 0 && "length" in (rasters[0] || {})) {
-    const bands = rasters as ArrayLike<number>[];
-    const numBands = Math.min(bands.length, 4);
-    const out = new Uint8ClampedArray(pixelCount * numBands);
-
-    for (let p = 0; p < pixelCount; p += 1) {
-      for (let b = 0; b < numBands; b += 1) {
-        const val = bands[b][p] ?? 0;
-        out[p * numBands + b] = val > 255 ? Math.round(val / 256) : val;
-      }
+  const numBands = Math.min(bands.length, 4);
+  const out = new Uint8ClampedArray(pixelCount * numBands);
+  for (let p = 0; p < pixelCount; p += 1) {
+    for (let b = 0; b < numBands; b += 1) {
+      out[p * numBands + b] = sampleToByte(bands[b][p] ?? 0);
     }
-    return out;
-  }
-
-  // Case 2: Interleaved TypedArray
-  const raw = rasters as ArrayLike<number>;
-  const out = new Uint8ClampedArray(raw.length);
-  for (let i = 0; i < raw.length; i += 1) {
-    const val = raw[i];
-    out[i] = val > 255 ? Math.round(val / 256) : val;
   }
   return out;
 }
 
-/**
- * Normalises geotiff output to RGBA.
- *
- * `readRGB` does not always return four channels: `enableAlpha` only adds an
- * alpha channel when the file actually carries one, so an opaque RGB layout
- * scan comes back with three samples per pixel. ImageData is fixed at RGBA, so
- * the stride is measured and expanded here — assuming 4 would silently drop a
- * quarter of every scan.
- */
 function toRgba(pixels: Uint8ClampedArray, pixelCount: number) {
   if (!pixelCount) return null;
 
   const stride = pixels.length / pixelCount;
-  if (
-    !Number.isInteger(stride) ||
-    stride < 1 ||
-    stride > 4
-  ) {
+  if (!Number.isInteger(stride) || stride < 1 || stride > 4) {
     return null;
   }
 
-  // Already RGBA.
   if (stride === 4) return pixels;
 
   const out = new Uint8ClampedArray(pixelCount * 4);
@@ -336,38 +408,4 @@ function toRgba(pixels: Uint8ClampedArray, pixelCount: number) {
     out[d + 3] = stride === 2 ? pixels[s + 1] : 255;
   }
   return out;
-}
-
-/**
- * Reads the scan's channels as bytes. geotiff types its output as a union of
- * typed arrays, so the values are copied into a plain byte array; the channel
- * count is whatever the file actually carries and is resolved by toRgba.
- */
-async function readChannels(
-  image: {
-    readRGB: (options: {
-      interleave: boolean;
-      enableAlpha?: boolean;
-      width?: number;
-      height?: number;
-      signal?: AbortSignal;
-    }) => Promise<unknown>;
-  },
-  options: {
-    signal?: AbortSignal;
-    width?: number;
-    height?: number;
-  },
-) {
-  const raw = (await image.readRGB({
-    interleave: true,
-    enableAlpha: true,
-    ...options,
-  })) as ArrayLike<number>;
-
-  // Preallocated rather than `.from()` so the result is backed by a plain
-  // ArrayBuffer, which is what ImageData accepts.
-  const pixels = new Uint8ClampedArray(raw.length);
-  for (let i = 0; i < raw.length; i += 1) pixels[i] = raw[i];
-  return pixels;
 }

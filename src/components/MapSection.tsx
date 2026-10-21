@@ -77,7 +77,14 @@ const PriceEmiFuture = dynamic(
 );
 import { allowAnalyticsFlush, trackEvent } from "@/services/analytics/tracker";
 import { formatInr } from "@/lib/propertyUtils";
-import { loadLayoutPreviewRaster } from "@/lib/layoutPreview";
+import {
+  loadLayoutPreviewRaster,
+  resolveLayoutImageCandidates,
+} from "@/lib/layoutPreview";
+import {
+  setLayoutSvgOverlayContent,
+  syncLayoutSvgOverlayPosition,
+} from "@/lib/layoutSvgHtmlOverlay";
 import { loadLayoutRaster } from "@/lib/layoutTiff";
 import {
   SATELLITE_ATTRIBUTION,
@@ -825,6 +832,7 @@ export default function MapSection({
 }: MapSectionProps = {}) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const layoutSvgBoxRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const pinsByIdRef = useRef<Map<string, MapPin>>(new Map());
   const pinHandlersRef = useRef<{
@@ -1118,16 +1126,14 @@ export default function MapSection({
   /**
    * Attaches the master plan to the open estate.
    *
-   * The units payload carries two images: `layout_preview_url`, a PNG of the
-   * plan already rendered at screen resolution, and `tif_url`, the survey scan
-   * itself. The preview is preferred — it needs no decode and is far smaller —
-   * and the TIFF is decoded only for properties that have no preview.
+   * Format priority (from `resolveLayoutImageCandidates` in layoutPreview):
+   *   1. SVG  — HTML overlay
+   *   2. TIFF — MapLibre image via geotiff decode
+   *   3. PNG  — (also JPEG/WebP) MapLibre image bitmap
    *
-   * Both are presigned S3 links that die an hour after they are minted, so a
-   * cached units payload can hand back a URL that is already expired (S3
-   * answers 403 "Request has expired") while the plot geometry — which never
-   * expires — still draws. On that failure the units payload is fetched once
-   * more to obtain a freshly signed URL, and only then is the layout given up on.
+   * Both `layout_preview_url` and `tif_url` are scanned; URLs are tried in that
+   * order until one loads. Presigned links expire (~1h); on total failure the
+   * units payload is refreshed once for fresh signatures, then we give up.
    */
   const attachLayoutImage = useCallback(
     async (input: {
@@ -1139,52 +1145,52 @@ export default function MapSection({
     }) => {
       let { layoutPreviewUrl, tifUrl, cords } = input;
 
-      // Prefer the TIFF supplied by the API. It is the authoritative layout
-      // image and is decoded locally before being handed to MapLibre. The
-      // preview is a fallback for properties without TIFF or where TIFF decode fails.
-      // If layoutPreviewUrl itself points to a .tif/.tiff, treat it as a TIFF scan.
-      const previewIsTiff = Boolean(
-        layoutPreviewUrl &&
-          /\.tiff?(?:$|\?)/i.test(layoutPreviewUrl),
-      );
-      const effectiveTifUrl = tifUrl ?? (previewIsTiff ? layoutPreviewUrl : null);
-      const effectivePreviewUrl = previewIsTiff ? null : layoutPreviewUrl;
+      const tryCandidates = async () => {
+        const candidates = resolveLayoutImageCandidates(layoutPreviewUrl, tifUrl);
+        if (candidates.length === 0) return undefined;
 
-      let imageUrl: string | null = effectiveTifUrl ?? effectivePreviewUrl;
-      let useTiff = Boolean(effectiveTifUrl);
-      if (!imageUrl) return;
+        console.log("[ILA map] layout image candidates (SVG → TIFF → PNG)", {
+          propertyId: input.propertyId,
+          candidates: candidates.map((c) => ({ format: c.format, loader: c.loader })),
+        });
 
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const currentImageUrl: string | null = imageUrl;
-        if (!currentImageUrl) return;
-        let raster = useTiff
-          ? await loadLayoutRaster({
+        for (const candidate of candidates) {
+          if (input.signal.aborted) return undefined;
+
+          const raster =
+            candidate.loader === "tiff"
+              ? await loadLayoutRaster({
+                  propertyId: input.propertyId,
+                  tifUrl: candidate.url,
+                  cords,
+                  signal: input.signal,
+                })
+              : await loadLayoutPreviewRaster({
+                  propertyId: input.propertyId,
+                  previewUrl: candidate.url,
+                  cords,
+                  signal: input.signal,
+                });
+
+          if (raster) {
+            console.log("[ILA map] layout image loaded", {
               propertyId: input.propertyId,
-              tifUrl: currentImageUrl,
-              cords,
-              signal: input.signal,
-            })
-          : await loadLayoutPreviewRaster({
-              propertyId: input.propertyId,
-              previewUrl: currentImageUrl,
-              cords,
-              signal: input.signal,
+              format: candidate.format,
+              loader: candidate.loader,
             });
+            return raster;
+          }
 
-        // If TIFF decoding failed on the first attempt but layoutPreviewUrl is available,
-        // immediately fall back to the PNG layout preview.
-        if (!raster && useTiff && layoutPreviewUrl && layoutPreviewUrl !== currentImageUrl) {
-          console.warn("[ILA map] layout TIFF decode failed, falling back to layoutPreviewUrl");
-          useTiff = false;
-          imageUrl = layoutPreviewUrl;
-          raster = await loadLayoutPreviewRaster({
+          console.warn("[ILA map] layout candidate failed, trying next format", {
             propertyId: input.propertyId,
-            previewUrl: layoutPreviewUrl,
-            cords,
-            signal: input.signal,
+            format: candidate.format,
           });
         }
+        return undefined;
+      };
 
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const raster = await tryCandidates();
         if (input.signal.aborted) return;
 
         if (raster) {
@@ -1212,13 +1218,6 @@ export default function MapSection({
         layoutPreviewUrl = refreshed.layoutPreviewUrl ?? layoutPreviewUrl;
         tifUrl = refreshed.tifUrl ?? tifUrl;
         if (refreshed.layoutCords) cords = refreshed.layoutCords;
-        // If TIFF failed previously, prefer previewUrl in the retry
-        if (!useTiff && layoutPreviewUrl) {
-          imageUrl = layoutPreviewUrl;
-        } else {
-          imageUrl = tifUrl ?? layoutPreviewUrl;
-          useTiff = Boolean(tifUrl);
-        }
       }
     },
     [],
@@ -2539,6 +2538,15 @@ export default function MapSection({
     }
 
     syncLayoutRaster(map, activeProject?.layoutRaster, Boolean(activeProject));
+    setLayoutSvgOverlayContent(
+      layoutSvgBoxRef.current,
+      activeProject ? activeProject.layoutRaster : undefined,
+    );
+    syncLayoutSvgOverlayPosition(
+      map,
+      layoutSvgBoxRef.current,
+      activeProject ? activeProject.layoutRaster : undefined,
+    );
 
     if (activeProject) {
       // Zoom to the estate the units API just returned. Estate plots span a
@@ -2547,6 +2555,29 @@ export default function MapSection({
       fitBounds(map, activeProject.bounds, 60, LAYOUT_MAX_ZOOM, panelOpen);
     }
   }, [activeProject, mapReady, panelOpen]);
+
+  /**
+   * Keep the HTML SVG layout locked to property_layout_cords while the map
+   * pans/zooms. pointer-events: none lets GeoJSON plot hits reach the canvas.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    const box = layoutSvgBoxRef.current;
+    if (!map || !mapReady || !box) return;
+
+    const raster = activeProject?.layoutRaster;
+    const sync = () => syncLayoutSvgOverlayPosition(map, box, raster);
+
+    sync();
+    map.on("move", sync);
+    map.on("zoom", sync);
+    map.on("resize", sync);
+    return () => {
+      map.off("move", sync);
+      map.off("zoom", sync);
+      map.off("resize", sync);
+    };
+  }, [activeProject?.layoutRaster, activeProject?.id, mapReady]);
 
   /**
    * Switches to satellite imagery if either the user explicitly toggled
@@ -2773,6 +2804,12 @@ export default function MapSection({
         }
       >
         <div ref={mapContainerRef} className="absolute inset-0 h-full w-full min-h-full" />
+
+        {/* Native SVG master plan — georeferenced HTML overlay under UI chrome.
+            pointer-events: none so plot GeoJSON stays clickable on the canvas. */}
+        <div className="ila-layout-html-root pointer-events-none absolute inset-0" aria-hidden>
+          <div ref={layoutSvgBoxRef} className="ila-layout-svg-box" hidden />
+        </div>
 
         {mapError ? (
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#ebe6de]/95 px-6 text-center">

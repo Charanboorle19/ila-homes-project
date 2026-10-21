@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import HomeReadyToVisit from "@/components/HomeReadyToVisit";
 
 const NAV_LINKS = [
   { href: "/why-us", label: "About" },
@@ -14,6 +15,7 @@ const NAV_LINKS = [
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const [contactModalOpen, setContactModalOpen] = useState(false);
   const lastScrollY = useRef(0);
   const pathname = usePathname();
 
@@ -99,6 +101,22 @@ export default function Navbar() {
           <ul className="flex items-center gap-8">
             {NAV_LINKS.map((link) => {
               const current = isCurrent(link.href);
+              const isContact = link.href === "#contact";
+
+              if (isContact) {
+                return (
+                  <li key={link.href}>
+                    <button
+                      type="button"
+                      onClick={() => setContactModalOpen(true)}
+                      className="relative text-sm tracking-[0.14em] uppercase transition-colors duration-200 text-white/70 hover:text-white cursor-pointer"
+                    >
+                      {link.label}
+                    </button>
+                  </li>
+                );
+              }
+
               return (
                 <li key={link.href}>
                   <Link
@@ -203,6 +221,25 @@ export default function Navbar() {
         <ul className="ila-gutter-x flex w-full flex-col gap-1 py-4">
           {NAV_LINKS.map((link) => {
             const current = isCurrent(link.href);
+            const isContact = link.href === "#contact";
+
+            if (isContact) {
+              return (
+                <li key={link.href}>
+                  <button
+                    type="button"
+                    className="block w-full text-left py-3 text-sm tracking-[0.14em] uppercase transition-colors duration-200 text-white/80 hover:text-white cursor-pointer"
+                    onClick={() => {
+                      setOpen(false);
+                      setContactModalOpen(true);
+                    }}
+                  >
+                    {link.label}
+                  </button>
+                </li>
+              );
+            }
+
             return (
               <li key={link.href}>
                 <Link
@@ -220,6 +257,61 @@ export default function Navbar() {
           })}
         </ul>
       </div>
+
+      {/* Contact Form Modal Popup */}
+      {contactModalOpen && (
+        <div
+          className="fixed inset-0 z-[350] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop animate-in fade-in duration-200"
+          onClick={() => setContactModalOpen(false)}
+        >
+          <div
+            className="relative flex w-full sm:w-[96vw] max-w-6xl max-h-[92vh] my-auto flex-col rounded-t-3xl sm:rounded-2xl border-t border-x-0 sm:border border-white/15 bg-[#17191d] text-[#f2f0ea] shadow-2xl overflow-hidden ila-modal-content"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6 bg-[#1a1c21]">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#c6a46c]">
+                  <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                </span>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">
+                    Contact ILA Homes
+                  </h3>
+                  <p className="text-xs text-[#9a9388]">
+                    Send us your enquiry or request a callback
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Close contact form"
+                title="Close"
+                onClick={() => setContactModalOpen(false)}
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#c6a46c]/50 bg-[#c6a46c]/20 text-[#c6a46c] shadow-md transition hover:bg-[#c6a46c] hover:text-[#17191d] hover:border-[#c6a46c] active:scale-95"
+              >
+                <svg className="h-4.5 w-4.5 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body: HomeReadyToVisit Form */}
+            <div className="flex-1 overflow-y-auto">
+              <HomeReadyToVisit
+                propertyName="ILA Homes"
+                onSuccess={() => setContactModalOpen(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

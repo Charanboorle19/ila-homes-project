@@ -195,9 +195,14 @@ export async function decodeTiffPageToCanvas(
   signal?: AbortSignal,
 ): Promise<DecodedTiffPage | null> {
   try {
-    const proxied = `${LAYOUT_IMAGE_PROXY}?url=${encodeURIComponent(url)}`;
+    const cleanUrl = url.split("?")[0];
+    const query = url.includes("?") ? url.split("?")[1] : "";
+    const headers: Record<string, string> = {};
+    if (query) headers["x-s3-query"] = query;
+
+    const proxied = `${LAYOUT_IMAGE_PROXY}?url=${encodeURIComponent(cleanUrl)}`;
     console.log("[ILA map] fetching layout TIFF via proxy…");
-    const response = await fetch(proxied, { signal });
+    const response = await fetch(proxied, { headers, signal });
     if (!response.ok) {
       let detail = "";
       try {

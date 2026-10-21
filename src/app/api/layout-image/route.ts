@@ -99,6 +99,12 @@ export async function GET(request: Request) {
     return badRequest("url host is not permitted");
   }
 
+  // If query tokens are passed via header (e.g. x-s3-query), attach them for private S3 auth
+  const s3Query = request.headers.get("x-s3-query");
+  if (s3Query && !parsed.search) {
+    parsed.search = s3Query.startsWith("?") ? s3Query : `?${s3Query}`;
+  }
+
   try {
     const upstream = await fetch(parsed, {
       headers: { Accept: "image/svg+xml,image/png,image/tiff,image/*" },
@@ -125,8 +131,6 @@ export async function GET(request: Request) {
 
     const declared = Number(upstream.headers.get("content-length") ?? 0);
     if (declared > MAX_BYTES) {
-      // Do not await cancel — draining a rejected multi-hundred-MB S3 body
-      // can block the route for minutes and surface as a slow 413.
       void upstream.body?.cancel().catch(() => undefined);
       console.warn(
         `[ILA API] layout image rejected: Content-Length ${declared} > ${MAX_BYTES}`,
@@ -145,6 +149,9 @@ export async function GET(request: Request) {
       return Response.json({ error: "upstream had no body" }, { status: 502 });
     }
 
+    // Buffer the payload so Vercel's Edge CDN can store it in cache (not chunked/streaming)
+    const arrayBuffer = await upstream.arrayBuffer();
+
     const headers = new Headers();
     headers.set(
       "Content-Type",
@@ -153,20 +160,9 @@ export async function GET(request: Request) {
     headers.set("Cache-Control", CACHE_CONTROL);
     headers.set("CDN-Cache-Control", CDN_CACHE_CONTROL);
     headers.set("Access-Control-Allow-Origin", "*");
+    headers.set("Content-Length", String(arrayBuffer.byteLength));
 
-    // Known size under the cap: pass the upstream stream through untouched
-    // (most reliable with Next.js / undici). Keep Content-Length so the
-    // browser can show download progress.
-    if (declared > 0) {
-      headers.set("Content-Length", String(declared));
-      return new Response(upstream.body, {
-        status: 200,
-        headers,
-      });
-    }
-
-    // Unknown size: count while streaming; omit Content-Length.
-    return new Response(limitedBodyStream(upstream.body, MAX_BYTES), {
+    return new Response(arrayBuffer, {
       status: 200,
       headers,
     });

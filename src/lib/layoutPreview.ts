@@ -78,7 +78,8 @@ export function isProxyableLayoutUrl(url: string): boolean {
 }
 
 export function layoutImageProxyUrl(layoutUrl: string): string {
-  return `/api/layout-image?url=${encodeURIComponent(layoutUrl)}`;
+  const cleanUrl = layoutUrl.split("?")[0];
+  return `/api/layout-image?url=${encodeURIComponent(cleanUrl)}`;
 }
 
 function pathFromUrl(url: string): string {
@@ -295,9 +296,12 @@ async function fetchLayoutPreview(
   signal?: AbortSignal,
 ): Promise<FetchedPreview | null> {
   const proxied = layoutImageProxyUrl(previewUrl);
+  const query = previewUrl.includes("?") ? previewUrl.split("?")[1] : "";
+  const headers: Record<string, string> = {};
+  if (query) headers["x-s3-query"] = query;
 
   try {
-    const response = await fetch(proxied, { signal });
+    const response = await fetch(proxied, { headers, signal });
     if (!response.ok) {
       console.warn(
         "[ILA map] layout preview fetch failed",

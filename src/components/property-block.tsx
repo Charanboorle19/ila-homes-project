@@ -195,6 +195,7 @@ export type PropertyBlockProps = {
   onSelectPlot?: (plot: Plot) => void;
   onOpenCompare?: (propertyId?: string) => void;
   onOpenEmi?: (propertyInfo: { id: string; name: string; price: number; location?: string }) => void;
+  hideMobile?: boolean;
 };
 
 /**
@@ -223,6 +224,7 @@ export default function PropertyBlock({
   onSelectPlot,
   onOpenCompare,
   onOpenEmi,
+  hideMobile = false,
 }: PropertyBlockProps) {
   // Gallery state
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -359,14 +361,14 @@ export default function PropertyBlock({
         .join(" – ")
     : property?.popupSample?.plotSizes ?? property?.sqYards ?? "133 – 449 sq yd";
 
-  // Starting price
+  // Starting price (only display if provided by response)
   const startingPrice =
     (apiProperty?.minimum_price != null
       ? formatPrice(Number(apiProperty.minimum_price))
       : apiProperty?.price
         ? formatPrice(apiProperty.price)
         : null) ??
-    (property?.price ? formatInr(property.price) : "₹12 L");
+    (property?.price ? formatInr(property.price) : null);
 
   // Approvals
   const approvalStatus =
@@ -505,9 +507,10 @@ export default function PropertyBlock({
 
   const handleConfirmShare = () => {
     const plotUrl = shareUrls[0] || `${window.location.origin}/properties/${activePropertyId || project.id}`;
+    const priceText = startingPrice ? ` · starting at ${startingPrice}` : "";
     const text = [
       `🏡 *${propertyName}*`,
-      `📍 ${propertyLocation} · starting at ${startingPrice}`,
+      `📍 ${propertyLocation}${priceText}`,
       plotUrl,
       "",
       "Review layout, pricing & financing details on ILA Homes.",
@@ -522,8 +525,9 @@ export default function PropertyBlock({
   };
 
   const handleWhatsApp = () => {
+    const priceText = startingPrice ? ` (starting at ${startingPrice})` : "";
     const text = encodeURIComponent(
-      `Hello, I am interested in ${propertyName} in ${propertyLocation} (starting at ${startingPrice}). Please share more details.`,
+      `Hello, I am interested in ${propertyName} in ${propertyLocation}${priceText}. Please share more details.`,
     );
     window.open(`https://wa.me/?text=${text}`, "_blank");
   };
@@ -532,7 +536,7 @@ export default function PropertyBlock({
     id: activePropertyId || project.id,
     name: propertyName,
     location: propertyLocation,
-    meta: `Starting at ${startingPrice} · ${plotSizeRange}`,
+    meta: startingPrice ? `Starting at ${startingPrice} · ${plotSizeRange}` : plotSizeRange,
     highlight: apiProperty?.description || property?.description || "Property details available from ILA Homes.",
     coverUrl: galleryImages[0] || null,
     image: familyCommunityImg,
@@ -638,12 +642,16 @@ export default function PropertyBlock({
             </p>
           </div>
           <div className="shrink-0 flex flex-col items-end">
-            <span className="block text-[10px] font-extrabold uppercase tracking-wider text-[#7a7265]">
-              Starting From
-            </span>
-            <span className="mt-0.5 block text-lg font-black text-[#876527] sm:text-xl">
-              {startingPrice}
-            </span>
+            {startingPrice ? (
+              <>
+                <span className="block text-[10px] font-extrabold uppercase tracking-wider text-[#7a7265]">
+                  Starting From
+                </span>
+                <span className="mt-0.5 block text-lg font-black text-[#876527] sm:text-xl">
+                  {startingPrice}
+                </span>
+              </>
+            ) : null}
 
             {/* Wishlist Button directly below the Pricing */}
             <button
@@ -770,7 +778,9 @@ export default function PropertyBlock({
                 <span className="text-xs font-extrabold text-[#141414]">{plot.title}</span>
                 <span className="mt-1 text-[11px] font-semibold text-[#5c5549]">{plot.area}</span>
                 <span className="mt-0.5 text-[10px] font-bold text-[#876527] uppercase tracking-wider">{plot.facing}</span>
-                <span className="mt-2 text-xs font-black text-[#1b5e3f]">{plot.price}</span>
+                {plot.price ? (
+                  <span className="mt-2 text-xs font-black text-[#1b5e3f]">{plot.price}</span>
+                ) : null}
               </button>
             );
           })}
@@ -947,9 +957,11 @@ export default function PropertyBlock({
 
       {/* Price & Size on high-visibility pill / row */}
       <div className="mt-2 flex items-center gap-2">
-        <span className="rounded-lg bg-[#c6a46c]/15 px-2.5 py-1 text-xs font-black text-[#876527]">
-          From {startingPrice}
-        </span>
+        {startingPrice ? (
+          <span className="rounded-lg bg-[#c6a46c]/15 px-2.5 py-1 text-xs font-black text-[#876527]">
+            From {startingPrice}
+          </span>
+        ) : null}
         <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
           {plotSizeRange}
         </span>
@@ -988,7 +1000,7 @@ export default function PropertyBlock({
       ) : null}
 
       {/* 8. UI & INTERACTION: MOBILE BOTTOM-SHEET POPUP (Warm Ivory Theme #f9f7f2) */}
-      {portalReady && !selectedPlot && !mapFullscreen
+      {portalReady && !selectedPlot && !mapFullscreen && !hideMobile
         ? createPortal(
             <div
               onTouchStart={handleTouchStart}

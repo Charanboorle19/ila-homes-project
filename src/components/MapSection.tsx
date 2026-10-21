@@ -1186,6 +1186,7 @@ export default function MapSection({
   const [compareSelectedIds, setCompareSelectedIds] = useState<string[]>([]);
   const [compareModalOpen, setCompareModalOpen] = useState(false);
 
+
   const startCompareMode = useCallback((initialId?: string) => {
     // Close any open property cards, layout, or mobile bottom-sheets
     setActiveProjectId(null);
@@ -3331,19 +3332,6 @@ export default function MapSection({
             );
           })}
 
-        {/* Desktop top-left corner: property name tag when hideDetails is true (e.g. on /properties/{id}) */}
-        {!mapFullscreen && hideDetails && (activeProject?.name || activeProperty?.name) ? (
-          <div className="pointer-events-none absolute top-3 left-3 z-20 hidden md:flex items-center gap-2 rounded-xl border border-black/15 bg-[#eae4da]/95 px-3.5 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.14)] backdrop-blur-md">
-            <div>
-              <p className="text-[9px] font-semibold tracking-[0.2em] text-[#7a5c28] uppercase">
-                Estate Layout &amp; Plots
-              </p>
-              <h3 className="text-sm font-semibold tracking-tight text-[#171717]">
-                {activeProject?.name ?? activeProperty?.name}
-              </h3>
-            </div>
-          </div>
-        ) : null}
 
 
 
@@ -3370,130 +3358,77 @@ export default function MapSection({
 
 
 
-        {!hideDetails && panelOpen && !compareSelectingMode ? (
+        {!hideDetails && panelOpen && !compareSelectingMode && !activeProject ? (
           <aside className="pointer-events-none absolute inset-y-0 left-0 z-20 hidden w-88 flex-col py-3 pl-3 md:flex sm:py-4">
             <div className="pointer-events-auto relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[8px_0_28px_rgba(15,23,42,0.14)]">
-              {activeProject && !singlePropertyId ? (
-                <button
-                  type="button"
-                  aria-label="Back to all developments"
-                  onClick={closeLayout}
-                  className="absolute top-2 left-2 z-30 flex items-center gap-1.5 rounded-lg bg-[#171717] px-2.5 py-1.5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:bg-[#333333]"
-                >
-                  <ArrowIcon className="h-3.5 w-3.5 rotate-180" />
-                  <span>Back</span>
-                </button>
-              ) : null}
+              <div className="shrink-0 border-b border-black/10 px-3 pt-4 pr-11 pb-3 sm:px-4 sm:pt-5 sm:pr-12">
+                <p className="text-[10px] font-semibold tracking-[0.22em] text-[#7a5c28] uppercase">
+                  Our Developments
+                </p>
+                <h2 className="mt-1.5 text-xl font-semibold tracking-tight text-[#171717] sm:text-2xl">
+                  Find Your Place in Hyderabad.
+                </h2>
+                <p className="mt-1.5 text-xs leading-relaxed text-[#3f3a34] sm:text-sm">
+                  Tap a project pin to open its estate layout on the map.
+                </p>
+              </div>
 
-              {activeProject ? (
-                // The property card replaces both the heading and the plot
-                // list while a layout is open on the desktop sidebar.
-                <div className="ila-scroll min-h-0 max-h-full shrink overflow-y-auto overscroll-contain border-b border-black/10 px-3 pt-12 pb-4 sm:px-4 sm:pt-12">
-                  <PropertyBlock
-                    desktopOpen={true}
-                    onCloseDesktop={closeLayout}
-                    portalReady={portalReady}
-                    selectedPlot={selectedPlot}
-                    mapFullscreen={mapFullscreen}
-                    mobileExpanded={propertySheetExpanded}
-                    onToggleMobileExpand={() => setPropertySheetExpanded((open) => !open)}
-                    onCloseMobile={() => {
-                      closeLayout();
-                      setPropertySheetExpanded(false);
-                    }}
-                    project={activeProject}
-                    property={activeProperty}
-                    apiProperty={activePopupApiProperty}
-                    tab={propertySheetTab}
-                    onTabChange={setPropertySheetTab}
-                    onOpenCompare={(propId) => {
-                      const idToCompare = propId || activePropertyId || activeProject?.id || activeProperty?.id;
-                      startCompareMode(idToCompare);
-                    }}
-                    onOpenEmi={(propertyInfo) => {
-                      setEmiSelectedProperty(propertyInfo);
-                      setEmiOpen(true);
-                      setEmiSelectingProperty(false);
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="shrink-0 border-b border-black/10 px-3 pt-4 pr-11 pb-3 sm:px-4 sm:pt-5 sm:pr-12">
-                  <p className="text-[10px] font-semibold tracking-[0.22em] text-[#7a5c28] uppercase">
-                    Our Developments
-                  </p>
-                  <h2 className="mt-1.5 text-xl font-semibold tracking-tight text-[#171717] sm:text-2xl">
-                    Find Your Place in Hyderabad.
-                  </h2>
-                  <p className="mt-1.5 text-xs leading-relaxed text-[#3f3a34] sm:text-sm">
-                    Tap a project pin to open its estate layout on the map.
-                  </p>
-                </div>
-              )}
-
-              {activeProject ? null : (
-                <div className="ila-scroll min-h-0 flex-1 space-y-0 overflow-y-auto">
-                  {filteredProperties.length === 0 ? (
-                    <div className="px-3 py-8 text-center text-sm font-medium text-[#3f3a34]">
-                      {remoteStatus === "loading" ? (
-                        <span className="inline-flex items-center justify-center gap-2">
-                          <span className="ila-loader ila-loader--sm" aria-hidden />
-                          Loading developments…
-                        </span>
-                      ) : remoteStatus === "error" ? (
-                        <div className="flex flex-col items-center gap-3">
-                          <p>Developments could not be loaded. Try again shortly.</p>
-                          <button
-                            type="button"
-                            onClick={() => setPropertiesRetryCount((c) => c + 1)}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-[#171717] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#333333] active:scale-95"
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      ) : query.trim() ? (
-                        <p>No developments match your search.</p>
-                      ) : (
-                        <p>No developments published yet.</p>
-                      )}
-                    </div>
-                  ) : (
-                    filteredProperties.map((item) => (
-                      <PropertyCard
-                        key={item.id}
-                        item={item}
-                        detail={
-                          item.id === activePropertyId ? activePropertyDetail : null
-                        }
-                        plotCount={item.id === activePropertyId ? unitsCount : 0}
-                        active={item.id === activePropertyId}
-                        onPrefetch={() => {
-                          // Warm estates outside the top-4 idle pre-warm as soon
-                          // as the visitor hovers a list row.
-                          void prefetchEstate(item.id).catch(() => {
-                            // Hover prefetch is best-effort.
-                          });
-                        }}
-                        onSelect={() => {
-                          void selectProperty(item.id, { openLayout: true });
-                          setPanelOpen(true);
-                          trackEvent({
-                            event_type: "PROPERTY_VIEW",
-                            property_id: item.id,
-                            metadata: { source: "homepage_developments_list" },
-                          });
-                        }}
-                      />
-                    ))
-                  )}
-                </div>
-              )}
+              <div className="ila-scroll min-h-0 flex-1 space-y-0 overflow-y-auto">
+                {filteredProperties.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-sm font-medium text-[#3f3a34]">
+                    {remoteStatus === "loading" ? (
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <span className="ila-loader ila-loader--sm" aria-hidden />
+                        Loading developments…
+                      </span>
+                    ) : remoteStatus === "error" ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <p>Developments could not be loaded. Try again shortly.</p>
+                        <button
+                          type="button"
+                          onClick={() => setPropertiesRetryCount((c) => c + 1)}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-[#171717] px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#333333] active:scale-95"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : query.trim() ? (
+                      <p>No developments match your search.</p>
+                    ) : (
+                      <p>No developments published yet.</p>
+                    )}
+                  </div>
+                ) : (
+                  filteredProperties.map((item) => (
+                    <PropertyCard
+                      key={item.id}
+                      item={item}
+                      detail={
+                        item.id === activePropertyId ? activePropertyDetail : null
+                      }
+                      plotCount={item.id === activePropertyId ? unitsCount : 0}
+                      active={item.id === activePropertyId}
+                      onPrefetch={() => {
+                        // Warm estates outside the top-4 idle pre-warm as soon
+                        // as the visitor hovers a list row.
+                        void prefetchEstate(item.id).catch(() => {
+                          // Hover prefetch is best-effort.
+                        });
+                      }}
+                      onSelect={() => {
+                        void selectProperty(item.id, { openLayout: true, openDesktopCard: true });
+                        trackEvent({
+                          event_type: "PROPERTY_VIEW",
+                          property_id: item.id,
+                          metadata: { source: "homepage_developments_list" },
+                        });
+                      }}
+                    />
+                  ))
+                )}
+              </div>
 
               <div className="shrink-0 border-t border-black/10 p-3 sm:p-4">
-                {/* A selected property must reach its own detail page, so the
-                    CTA switches from the contact anchor to /properties/{id}.
-                    In single-property mode, the visitor is already on the page,
-                    so point to the site-visit booking section (#next-step). */}
                 <Link
                   href={
                     singlePropertyId
@@ -3514,7 +3449,7 @@ export default function MapSection({
               </div>
             </div>
           </aside>
-        ) : !hideDetails && !compareSelectingMode ? (
+        ) : !hideDetails && !compareSelectingMode && !activeProject ? (
           <button
             type="button"
             aria-label="Open developments panel"
@@ -3555,6 +3490,7 @@ export default function MapSection({
             setEmiOpen(true);
             setEmiSelectingProperty(false);
           }}
+          hideMobile={Boolean(singlePropertyId)}
         />
         {/* Plot Details Popup (Styled exactly like property-block when minimized) */}
         {selectedPlot ? (

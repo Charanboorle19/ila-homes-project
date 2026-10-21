@@ -25,6 +25,10 @@ import {
 type Horizon = "today" | "2029";
 type NearByStatus = "idle" | "locating" | "located" | "denied";
 
+if (typeof window !== "undefined") {
+  setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+}
+
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const ITEMS_SOURCE = "future-items";
 const LINKS_SOURCE = "future-links";
@@ -369,7 +373,21 @@ export default function FutureNeighbourhoodMap({
     return () => mediaQuery.removeEventListener("change", updateDesktopList);
   }, []);
 
-  const origin: [number, number] = property.coordinates;
+  const origin: [number, number] = useMemo(() => {
+    const coords = property?.coordinates;
+    if (
+      Array.isArray(coords) &&
+      coords.length === 2 &&
+      Number.isFinite(coords[0]) &&
+      Number.isFinite(coords[1]) &&
+      !(coords[0] === 0 && coords[1] === 0)
+    ) {
+      return coords as [number, number];
+    }
+    return [78.44, 17.17];
+  }, [property?.coordinates]);
+
+  const mapZoom = Number.isFinite(property?.zoom) && property.zoom > 0 ? property.zoom : 13.5;
 
   const itemsRef = useRef(items);
   useEffect(() => {
@@ -590,12 +608,6 @@ export default function FutureNeighbourhoodMap({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    // Absolute worker URL, matching the developments map on the homepage.
-    setWorkerUrl(
-      new URL("/maplibre/maplibre-gl-worker.mjs", window.location.origin)
-        .toString(),
-    );
-
     let map: MapLibreMap;
     let plotLabelMarker: Marker | null = null;
     let hintTimer: number | undefined;
@@ -604,7 +616,7 @@ export default function FutureNeighbourhoodMap({
         container: containerRef.current,
         style: MAP_STYLE,
         center: origin,
-        zoom: property.zoom,
+        zoom: mapZoom,
         pitch: 0,
         attributionControl: { compact: true },
         dragRotate: false,
@@ -616,8 +628,6 @@ export default function FutureNeighbourhoodMap({
       });
     } catch (error) {
       console.error("Unable to initialise the neighbourhood map", error);
-      // Deferred: reporting this needs a render, not a synchronous update
-      // inside the effect body.
       queueMicrotask(() => setMapFailed(true));
       return;
     }
@@ -647,12 +657,13 @@ export default function FutureNeighbourhoodMap({
     }, "top-right");
 
     map.on("error", (event) => {
-      console.error("Neighbourhood map error", event.error);
-      if (!readyRef.current) setMapFailed(true);
+      console.warn("Neighbourhood map non-fatal warning/error", event.error);
     });
 
     map.on("load", () => {
       readyRef.current = true;
+      map.resize();
+      setTimeout(() => map.resize(), 200);
 
       map.addSource(ORIGIN_SOURCE, {
         type: "geojson",

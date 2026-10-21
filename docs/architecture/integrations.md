@@ -10,7 +10,7 @@ The Next.js App Router frontend uses client-side service modules to call a tenan
 
 **Service:** ILA backend API. **Purpose:** properties, units/plots, locations, documents, Buyer Fit, nearby places, active tenant Instagram reels, visitors, sessions, favourites, and analytics. **Where:** `src/services/apiClient.ts`, `propertiesService.ts`, `locationsService.ts`, `tenantReelsService.ts`, `favoritesService.ts`, `visitorService.ts`, `services/analytics/tracker.ts`, `MapSection.tsx`, `GrowthCorridors.tsx`, `FromTheField.tsx`, `PropertiesList.tsx`, and `ApiPropertyView.tsx`.
 
-**Base/config:** `NEXT_PUBLIC_API_URL` is required; trailing slashes are removed. Requests are `${NEXT_PUBLIC_API_URL}${path}`. Confirmed paths are `GET /api/properties`, `GET /api/properties/{id}`, `GET /api/properties/{id}/units?limit=all`, `GET /api/properties/{id}/documents`, `GET /api/properties/{id}/life-stage-fit`, `GET /api/properties/{id}/nearby-places`, `GET /api/locations`, `GET /api/tenant/reels/active`, location-filtered `GET /api/properties`, visitor/session POSTs, favourites GET/POST/DELETE, and `POST /api/events/batch`.
+**Base/config:** `NEXT_PUBLICAPIURL` is required; trailing slashes are removed. Requests are `${NEXT_PUBLICAPIURL}${path}`. Confirmed paths are `GET /api/properties`, `GET /api/properties/{id}`, `GET /api/properties/{id}/units?limit=all`, `GET /api/properties/{id}/documents`, `GET /api/properties/{id}/life-stage-fit`, `GET /api/properties/{id}/nearby-places`, `GET /api/locations`, `GET /api/tenant/reels/active`, location-filtered `GET /api/properties`, visitor/session POSTs, favourites GET/POST/DELETE, and `POST /api/events/batch`.
 
 `apiFetch` sends `Accept: application/json`, `ngrok-skip-browser-warning: true`, `X-Tenant-Domain`, optional JSON content type, and optional `Authorization: Bearer ...`. It supports abort signals and keepalive, parses JSON or returns `{ raw }`, and throws `ApiError` for non-OK responses. Missing data is normalized by service functions; callers own loading/error/fallback states. API UUID path ids are URL-encoded; slugs are not accepted for property detail. Backend authorization semantics and complete schemas are UNKNOWN — needs verification. Calls are primarily client-side.
 
@@ -72,9 +72,9 @@ Confirmed remote resources are OpenFreeMap styles, Esri satellite tiles, presign
 
 ## 16. Environment variables used by integrations
 
-- `NEXT_PUBLIC_API_URL` — required external ILA API base URL; no fallback, and module initialization throws if missing.
+- `NEXT_PUBLICAPIURL` — required external ILA API base URL; no fallback, and module initialization throws if missing.
 - `SITE_DOMAIN` — server-side tenant hostname fallback when `window.location.hostname` is unavailable; missing server-side tenant resolution throws.
-- `NEXT_PUBLIC_ILA_PROPERTY_ID` — required configured property id used by `ilaApiConfig.ts`, the units URL helper, and analytics fallback configuration; shortlist selection and tracked sharing use API property UUIDs.
+- `NEXT_PUBLICILAPROPERTYID` — required configured property id used by `ilaApiConfig.ts`, the units URL helper, and analytics fallback configuration; shortlist selection and tracked sharing use API property UUIDs.
 - `NEXT_PUBLIC_SATELLITE_TILES_URL` — optional satellite tile template; defaults to Esri World Imagery.
 - `NODE_ENV` — controls production cookie `Secure` and non-production analytics diagnostics.
 
@@ -99,7 +99,7 @@ The confirmed Edge integration is `src/app/api/layout-image/route.ts` (`runtime 
 ## 21. Data flow between integrations
 
 1. `TelemetryBootstrap` in the root layout mounts `VisitorInitializer`, `SessionInitializer`, and `AnalyticsInitializer` only after `requestIdleCallback` (timeout 2500 ms) or a 1500 ms `setTimeout` fallback, so visitor/session/analytics POSTs do not contend with first map paint. Those initializers then create/obtain anonymous visitor identity, start/reuse a session, and start analytics.
-2. Property/location components call `apiFetch`, which combines `NEXT_PUBLIC_API_URL`, tenant identity, common headers, optional token, and request path.
+2. Property/location components call `apiFetch`, which combines `NEXT_PUBLICAPIURL`, tenant identity, common headers, optional token, and request path.
 3. API responses are normalized by service helpers and `propertyMapper` into component-facing records.
 4. MapLibre consumes coordinates, GeoJSON, units, nearby places, and raster sources. OpenFreeMap supplies the vector style; Esri supplies satellite tiles.
 5. Units data supplies presigned S3 preview/TIFF URLs and layout coordinates. The browser requests the same-origin layout proxy; the server fetches S3; the client decodes the result or lets MapLibre load the proxied URL.
@@ -130,7 +130,7 @@ The layout proxy returns 400 for missing/invalid/non-HTTPS/non-S3 URLs, passes 4
 
 ## 24. Dependencies
 
-The integration architecture depends on `NEXT_PUBLIC_API_URL`, tenant hostname resolution, the ILA API envelope/endpoint contracts, API UUID ids, visitor cookie/session storage, MapLibre worker availability, OpenFreeMap style availability, satellite tile availability, presigned S3 URL validity, S3 CORS/proxy behavior, Next remote image configuration, and browser support for storage, canvas/ImageBitmap, timers, observers, and sharing APIs. It also depends on `maplibre-gl` and `geotiff` versions in `package.json`.
+The integration architecture depends on `NEXT_PUBLICAPIURL`, tenant hostname resolution, the ILA API envelope/endpoint contracts, API UUID ids, visitor cookie/session storage, MapLibre worker availability, OpenFreeMap style availability, satellite tile availability, presigned S3 URL validity, S3 CORS/proxy behavior, Next remote image configuration, and browser support for storage, canvas/ImageBitmap, timers, observers, and sharing APIs. It also depends on `maplibre-gl` and `geotiff` versions in `package.json`.
 
 ## 25. Known issues
 

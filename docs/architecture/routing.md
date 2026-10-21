@@ -270,7 +270,7 @@ No project middleware file was found. The only middleware-like files discovered 
 
 No environment variable changes the set of page routes. Environment/configuration affects dependencies used after navigation:
 
-- `NEXT_PUBLIC_API_URL` controls the API base URL used by client data requests.
+- `NEXT_PUBLICAPIURL` controls the API base URL used by client data requests.
 - Tenant resolution uses the browser hostname and the API client's tenant-header behavior; server-side `SITE_DOMAIN` is also referenced by that configuration.
 - `NEXT_PUBLIC_SATELLITE_TILES_URL` affects map imagery, not page routing.
 - `next.config.ts` allows configured development origins and restricts remote image patterns to HTTPS `**.amazonaws.com` hosts. It does not set custom Babel loaders or SWC legacy targets.

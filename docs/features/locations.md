@@ -178,7 +178,7 @@ The component uses Tailwind responsive utilities. List-view cards are horizontal
 
 ## 32. External integrations and dependencies
 
-The feature depends on React hooks, Next.js `Link`, MapLibre GL, the OpenFreeMap Liberty style, the ILA API configured through `NEXT_PUBLIC_API_URL`, tenant resolution through `X-Tenant-Domain`, optional browser token storage, and the shared analytics tracker. No geolocation API, location search provider, or separate locations route is used by the inspected component. API authentication/authorization outcomes for different tenant environments are UNKNOWN — needs verification.
+The feature depends on React hooks, Next.js `Link`, MapLibre GL, the OpenFreeMap Liberty style, the ILA API configured through `NEXT_PUBLICAPIURL`, tenant resolution through `X-Tenant-Domain`, optional browser token storage, and the shared analytics tracker. No geolocation API, location search provider, or separate locations route is used by the inspected component. API authentication/authorization outcomes for different tenant environments are UNKNOWN — needs verification.
 
 ## 33. Known limitations and maintenance constraints
 

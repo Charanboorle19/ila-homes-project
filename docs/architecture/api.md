@@ -10,9 +10,9 @@ The application also exposes same-origin Next.js routes: `/api/layout-image`, wh
 
 ## 2. API base URL configuration
 
-External API requests are joined to `ILA_API_BASE_URL`, loaded from `NEXT_PUBLIC_API_URL` by `src/lib/ilaApiConfig.ts`. Trailing slashes are removed. There is no fallback; a missing value throws `Missing required environment variable NEXT_PUBLIC_API_URL` during module initialization.
+External API requests are joined to `ILA_API_BASE_URL`, loaded from `NEXT_PUBLICAPIURL` by `src/lib/ilaApiConfig.ts`. Trailing slashes are removed. There is no fallback; a missing value throws `Missing required environment variable NEXT_PUBLICAPIURL` during module initialization.
 
-The external request form is `${NEXT_PUBLIC_API_URL}${path}`, where `path` is an `/api/...` path. The same-origin layout proxy uses the application origin and is not joined to the external base URL.
+The external request form is `${NEXT_PUBLICAPIURL}${path}`, where `path` is an `/api/...` path. The same-origin layout proxy uses the application origin and is not joined to the external base URL.
 
 ## 3. API client / fetch wrapper
 
@@ -295,7 +295,7 @@ No direct `POST /api/events` call was found in the current source; the tracker c
 - **Path parameters:** `id`, the API property UUID.
 - **Query parameters/body:** none.
 - **Required headers:** optional incoming `x-tenant-domain`; when absent the handler falls back to `NEXT_PUBLIC_TENANT_DOMAIN`, then `'192.168.29.7'`. Upstream also sends `ngrok-skip-browser-warning: true`. The browser prefetch client sends `X-Tenant-Domain` via `resolveTenantDomain()`.
-- **Upstream:** concurrently fetches `${NEXT_PUBLIC_API_URL}/api/properties/{id}` and `${NEXT_PUBLIC_API_URL}/api/properties/{id}/units?limit=all` (base URL falls back to `https://realestate.sperow.in`). Upstream headers are `Accept: application/json`, `X-Tenant-Domain: {tenantDomain}`, and `ngrok-skip-browser-warning: true`.
+- **Upstream:** concurrently fetches `${NEXT_PUBLICAPIURL}/api/properties/{id}` and `${NEXT_PUBLICAPIURL}/api/properties/{id}/units?limit=all` (base URL falls back to `https://realestate.sperow.in`). Upstream headers are `Accept: application/json`, `X-Tenant-Domain: {tenantDomain}`, and `ngrok-skip-browser-warning: true`.
 - **Response:** `{ property: propJson.data, units: unitsJson.data | null }`. Units failure is non-fatal — the route still returns the property with `units: null`.
 - **Errors:** only a failed property detail upstream returns `502`. Missing/failed units are logged and returned as `null`. Pre-warm callers catch and log; a single failing UUID does not block the other warm-ups.
 - **Implementation:** `src/app/api/estates/[id]/route.ts`.
@@ -358,9 +358,9 @@ Favourites mutations do not expose an `AbortSignal` in their service signatures.
 
 Confirmed API-related variables are:
 
-- `NEXT_PUBLIC_API_URL` — required external API base URL. The `/api/estates/[id]` route falls back to `https://realestate.sperow.in` when unset.
+- `NEXT_PUBLICAPIURL` — required external API base URL. The `/api/estates/[id]` route falls back to `https://realestate.sperow.in` when unset.
 - `NEXT_PUBLIC_TENANT_DOMAIN` — optional tenant hostname fallback used by `/api/estates/[id]` when the incoming `x-tenant-domain` header is absent.
-- `NEXT_PUBLIC_ILA_PROPERTY_ID` — required configured property id used by `ilaUnitsUrl` and related analytics/static configuration.
+- `NEXT_PUBLICILAPROPERTYID` — required configured property id used by `ilaUnitsUrl` and related analytics/static configuration.
 - `SITE_DOMAIN` — server-side fallback tenant hostname when `window` is unavailable.
 - `NEXT_PUBLIC_SATELLITE_TILES_URL` — optional map imagery URL; it is not an API request base URL.
 - `NODE_ENV` — controls the `Secure` visitor cookie attribute and development analytics diagnostics.
@@ -375,12 +375,12 @@ The `/api/layout-image` handler runs on the Edge runtime and streams its upstrea
 
 ## 24. API dependencies
 
-The application depends on the external ILA API configured by `NEXT_PUBLIC_API_URL`, tenant-aware CORS/authorization behavior, presigned Amazon S3 layout objects returned by units data, and the browser's cookie/localStorage/sessionStorage facilities. MapLibre consumes the normalized property/location/unit data. Analytics depends on backend event allow-lists and visitor/session identifiers. OpenFreeMap/Esri tile services are map integrations, not application API endpoints.
+The application depends on the external ILA API configured by `NEXT_PUBLICAPIURL`, tenant-aware CORS/authorization behavior, presigned Amazon S3 layout objects returned by units data, and the browser's cookie/localStorage/sessionStorage facilities. MapLibre consumes the normalized property/location/unit data. Analytics depends on backend event allow-lists and visitor/session identifiers. OpenFreeMap/Esri tile services are map integrations, not application API endpoints.
 
 ## 25. Known issues
 
 - The frontend relies on typed subsets of responses; the complete backend schemas are UNKNOWN — needs verification.
-- There is no client fallback when `NEXT_PUBLIC_API_URL` is missing.
+- There is no client fallback when `NEXT_PUBLICAPIURL` is missing.
 - API properties are mapped into a static-oriented record, so some sections use placeholders or shared defaults.
 - API property detail, documents, and Buyer Fit requests are independent; partial failure can produce a partially populated page.
 - The `GET /api/shares/{tracking_token}` response body is confirmed as a property summary under `data.property`, of which only `id` is used. Whether reading the endpoint records a share view, and whether it requires a prior visitor cookie, are UNKNOWN — needs verification.

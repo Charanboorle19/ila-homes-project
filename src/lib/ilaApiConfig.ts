@@ -1,7 +1,7 @@
 /**
  * Single API base URL for every tenant.
  *
- * The base URL comes from NEXT_PUBLIC_API_URL in the environment. There is no
+ * The base URL comes from NEXT_PUBLICAPIURL in the environment. There is no
  * hardcoded fallback: a missing value must fail loudly at startup rather than
  * silently pointing production at a stale ngrok tunnel.
  *
@@ -14,7 +14,7 @@ function requireValue(name: string, value: string | undefined): string {
   if (!value) {
     throw new Error(
       `Missing required environment variable ${name}. ` +
-        "Set it in .env.local for local dev, or under Environment Variables in your hosting platform (e.g. Vercel Project Settings).",
+      "Set it in .env.local for local dev, or under Environment Variables in your hosting platform (e.g. Vercel Project Settings).",
     );
   }
 
@@ -23,13 +23,13 @@ function requireValue(name: string, value: string | undefined): string {
 }
 
 export const ILA_API_BASE_URL = requireValue(
-  "NEXT_PUBLIC_API_URL",
-  process.env.NEXT_PUBLIC_API_URL,
+  "NEXT_PUBLICAPIURL",
+  process.env.NEXT_PUBLICAPIURL,
 );
 
 export const ILA_PROPERTY_ID = requireValue(
-  "NEXT_PUBLIC_ILA_PROPERTY_ID",
-  process.env.NEXT_PUBLIC_ILA_PROPERTY_ID,
+  "NEXT_PUBLICILAPROPERTYID",
+  process.env.NEXT_PUBLICILAPROPERTYID,
 );
 
 export function ilaUnitsUrl(propertyId: string = ILA_PROPERTY_ID): string {

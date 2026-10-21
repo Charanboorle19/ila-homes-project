@@ -376,7 +376,7 @@ Every press mints a fresh token, so a shared link always reflects the click that
 {origin}/property/{tracking_token}/view
 ```
 
-`origin` is `window.location.origin` — the domain the page is being viewed on. This deliberately avoids `NEXT_PUBLIC_API_URL`, which may be a transient ngrok tunnel in development and would produce unshareable links.
+`origin` is `window.location.origin` — the domain the page is being viewed on. This deliberately avoids `NEXT_PUBLICAPIURL`, which may be a transient ngrok tunnel in development and would produce unshareable links.
 
 The tracking token is not a property id, so it gets its own `/property/{token}/view` path rather than the catalogue's `/properties/{propertyId}`. The `/api/` prefix is never exposed to a visitor: an `/api/shares/{token}` link reads as a machine endpoint and invites callers who then bypass the page that records the visit. The response's relative `tracking_url` field is not used — the token is, per the specified URL shape.
 
@@ -503,7 +503,7 @@ Desktop presentation is provided by the same components and `PropertyDetail.css`
 
 ## 48. External integrations
 
-- API requests use the existing `apiFetch` client, `NEXT_PUBLIC_API_URL`, and tenant configuration.
+- API requests use the existing `apiFetch` client, `NEXT_PUBLICAPIURL`, and tenant configuration.
 - MapLibre GL renders Future Neighbourhood and satellite maps; the worker is `/maplibre/maplibre-gl-worker.mjs`.
 - Esri World Imagery supplies the satellite raster tiles.
 - OpenFreeMap’s Liberty style is used by Future Neighbourhood.

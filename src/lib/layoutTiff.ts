@@ -195,7 +195,8 @@ export async function decodeTiffPageToCanvas(
   signal?: AbortSignal,
 ): Promise<DecodedTiffPage | null> {
   try {
-    const proxied = `${LAYOUT_IMAGE_PROXY}?url=${encodeURIComponent(url)}`;
+    const cleanUrl = url.split("?")[0];
+    const proxied = `${LAYOUT_IMAGE_PROXY}?url=${encodeURIComponent(cleanUrl)}`;
     console.log("[ILA map] fetching layout TIFF via proxy…");
     const response = await fetch(proxied, { signal });
     if (!response.ok) {

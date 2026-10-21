@@ -8,7 +8,9 @@ export async function GET(request: Request, context: RouteContext) {
   const { id } = await context.params;
 
   const backendBase =
-    process.env.NEXT_PUBLICAPIURL ?? "https://realestate.sperow.in";
+    process.env.NEXT_PUBLIC_API_URL ??
+    process.env.NEXT_PUBLICAPIURL ??
+    "https://realestate.sperow.in";
 
   const tenantDomain =
     request.headers.get("x-tenant-domain") ||

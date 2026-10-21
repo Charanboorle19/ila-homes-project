@@ -9,10 +9,10 @@ The application uses a browser-oriented service layer over an external ILA API. 
 The application also exposes same-origin Next.js routes: `/api/layout-image`, which proxies validated presigned S3 layout images for browser/MapLibre use, and `/api/estates/[id]`, which aggregates property detail and units from the external API.
 
 ## 2. API base URL configuration
-
-External API requests are joined to `ILA_API_BASE_URL`, loaded from `NEXT_PUBLICAPIURL` by `src/lib/ilaApiConfig.ts`. Trailing slashes are removed. There is no fallback; a missing value throws `Missing required environment variable NEXT_PUBLICAPIURL` during module initialization.
-
-The external request form is `${NEXT_PUBLICAPIURL}${path}`, where `path` is an `/api/...` path. The same-origin layout proxy uses the application origin and is not joined to the external base URL.
+ 
+External API requests are joined to `ILA_API_BASE_URL`, loaded from `NEXT_PUBLIC_API_URL` (or `NEXT_PUBLICAPIURL`) by `src/lib/ilaApiConfig.ts`. Trailing slashes are removed. There is no fallback; a missing value throws `Missing required environment variable NEXT_PUBLIC_API_URL or NEXT_PUBLICAPIURL` during module initialization.
+ 
+The external request form is `${ILA_API_BASE_URL}${path}`, where `path` is an `/api/...` path. The same-origin layout proxy uses the application origin and is not joined to the external base URL.
 
 ## 3. API client / fetch wrapper
 

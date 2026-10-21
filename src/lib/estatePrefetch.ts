@@ -105,9 +105,8 @@ export function prefetchLayoutAsset(url: string): Promise<LayoutAssetPayload> {
   if (cached) return cached;
 
   const promise = (async (): Promise<LayoutAssetPayload> => {
-    const cleanUrl = url.split("?")[0];
     const res = await fetch(
-      `/api/layout-image?url=${encodeURIComponent(cleanUrl)}`,
+      `/api/layout-image?url=${encodeURIComponent(url)}`,
       { headers: tenantHeaders() },
     );
     if (!res.ok) {

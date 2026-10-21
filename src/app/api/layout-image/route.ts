@@ -99,38 +99,12 @@ export async function GET(request: Request) {
     return badRequest("url host is not permitted");
   }
 
-  let cleanUrl = `${parsed.origin}${parsed.pathname}`;
-  const hasAwsSignature = parsed.searchParams.has("X-Amz-Signature");
-
   try {
-    // Attempt fetch with the clean URL first if public, otherwise with full presigned URL.
-    // If the bucket requires presigned credentials, upstream will fall back to `parsed`.
-    let upstream: Response;
-    if (hasAwsSignature) {
-      // First try fetching the clean URL without expiring signature tokens
-      const publicAttempt = await fetch(cleanUrl, {
-        headers: { Accept: "image/svg+xml,image/png,image/tiff,image/*" },
-        credentials: "omit",
-        signal: request.signal,
-      });
-
-      if (publicAttempt.ok) {
-        upstream = publicAttempt;
-      } else {
-        // Fall back to the full presigned URL for private S3 buckets
-        upstream = await fetch(parsed, {
-          headers: { Accept: "image/svg+xml,image/png,image/tiff,image/*" },
-          credentials: "omit",
-          signal: request.signal,
-        });
-      }
-    } else {
-      upstream = await fetch(parsed, {
-        headers: { Accept: "image/svg+xml,image/png,image/tiff,image/*" },
-        credentials: "omit",
-        signal: request.signal,
-      });
-    }
+    const upstream = await fetch(parsed, {
+      headers: { Accept: "image/svg+xml,image/png,image/tiff,image/*" },
+      credentials: "omit",
+      signal: request.signal,
+    });
 
     if (!upstream.ok) {
       // Propagate upstream status; keep a small JSON body for clients.

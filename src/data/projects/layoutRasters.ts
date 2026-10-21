@@ -1,6 +1,6 @@
 import type { PropertyLayoutCords } from "@/services/propertiesService";
 
-/** Bounds of a master-plan image, in WGS84 degrees. */
+/** Bounds of a master-plan image, in EPSG:4326 (WGS84 lon/lat degrees). */
 export type LayoutRasterBounds = {
   minLng: number;
   minLat: number;
@@ -27,11 +27,12 @@ export type LayoutRaster = {
   /** Already-decoded image, for bytes fetched through the same-origin proxy. */
   image?: LayoutRasterImage;
   /**
-   * Native SVG markup for an HTML overlay under the GeoJSON plots.
-   * Preferred for layout clarity — stays vector-sharp across zoom levels.
+   * Legacy native SVG markup for an HTML overlay under the GeoJSON plots.
+   * Live layout loads now rasterize SVG to `image` (ImageBitmap) instead;
+   * when set, the HTML overlay path still takes precedence over the WebGL raster.
    */
   svgMarkup?: string;
-  /** Clockwise corner coordinates in WGS84 (NW → NE → SE → SW). */
+  /** Clockwise corner coordinates in EPSG:4326 (NW → NE → SE → SW) as [lng, lat]. */
   coordinates: [[number, number], [number, number], [number, number], [number, number]];
   opacity: number;
   bounds: LayoutRasterBounds;
@@ -66,9 +67,10 @@ export function layoutCordsToBounds(cords: PropertyLayoutCords): LayoutRasterBou
 }
 
 /**
- * Shreyas Green layout TIFF georeference (EPSG:3857 meters):
- * east 8725475.5286 · west 8725090.2539 · north 1936777.9021 · south 1936346.7373
- * Converted to WGS84 for MapLibre. Source asset: src/app/assets/shreyas_green_layout_asset.tif
+ * Shreyas Green layout georeference in EPSG:4326 (WGS84 degrees) for MapLibre:
+ * west 78.37881930400647 · east 78.3822802855224 ·
+ * south 17.13329363718222 · north 17.136994933863203
+ * Source asset: src/app/assets/shreyas_green_layout_asset.tif
  */
 export const SHREYAS_GREEN_LAYOUT_RASTER: LayoutRaster = {
   id: "shreyas-green-layout",

@@ -9,8 +9,8 @@
  *
  *   GET /api/layout-image?url=<presigned s3 url>
  *
- * App Router: the upstream body is **streamed** to the client (not buffered
- * into an ArrayBuffer), so large TIFFs do not blow server memory.
+ * Edge runtime: streams the upstream body and sets long-lived CDN cache
+ * headers so repeat layout loads hit the edge rather than S3.
  *
  * Only https S3 / CDN hosts are accepted so this cannot become an open proxy.
  */
@@ -30,11 +30,31 @@ const ALLOWED_HOST =
  */
 const MAX_BYTES = 256 * 1024 * 1024;
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+const CACHE_CONTROL =
+  "public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000";
+const CDN_CACHE_CONTROL = "public, s-maxage=604800";
+
+export const runtime = "edge";
 
 function badRequest(reason: string) {
   return Response.json({ error: reason }, { status: 400 });
+}
+
+/** Infer image MIME from the URL path when upstream type is missing/generic. */
+function contentTypeFromUrl(url: URL): string | null {
+  const path = url.pathname.toLowerCase();
+  if (path.endsWith(".svg")) return "image/svg+xml";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".tif") || path.endsWith(".tiff")) return "image/tiff";
+  return null;
+}
+
+function resolveContentType(upstreamType: string | null, url: URL): string {
+  const type = upstreamType?.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (type && type !== "application/octet-stream") {
+    return upstreamType!.split(";")[0]!.trim();
+  }
+  return contentTypeFromUrl(url) ?? upstreamType ?? "application/octet-stream";
 }
 
 /**
@@ -89,8 +109,7 @@ export async function GET(request: Request) {
     });
 
     if (!upstream.ok) {
-      // 403 is almost always "Request has expired" on a stale presigned URL.
-      // Read only a small error body — do not buffer success payloads here.
+      // Propagate upstream status; keep a small JSON body for clients.
       const detail = (await upstream.text().catch(() => "")).slice(0, 300);
       const expired = /expired/i.test(detail);
       console.warn(
@@ -102,7 +121,7 @@ export async function GET(request: Request) {
           error: expired ? "presigned url expired" : "upstream error",
           status: upstream.status,
         },
-        { status: upstream.status === 403 ? 403 : upstream.status === 404 ? 404 : 502 },
+        { status: upstream.status },
       );
     }
 
@@ -131,12 +150,11 @@ export async function GET(request: Request) {
     const headers = new Headers();
     headers.set(
       "Content-Type",
-      upstream.headers.get("content-type") ?? "image/png",
+      resolveContentType(upstream.headers.get("content-type"), parsed),
     );
-    // Presigned URL expires — never cache long-term. no-transform avoids
-    // intermediary recompression that would buffer the whole object.
-    headers.set("Cache-Control", "private, no-store, no-transform");
-    headers.set("X-Accel-Buffering", "no");
+    headers.set("Cache-Control", CACHE_CONTROL);
+    headers.set("CDN-Cache-Control", CDN_CACHE_CONTROL);
+    headers.set("Access-Control-Allow-Origin", "*");
 
     // Known size under the cap: pass the upstream stream through untouched
     // (most reliable with Next.js / undici). Keep Content-Length so the

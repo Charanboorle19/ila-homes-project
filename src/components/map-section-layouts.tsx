@@ -1,4 +1,9 @@
-import type { Map as MapLibreMap, GeoJSONSource, ImageSource } from "maplibre-gl";
+import type {
+  ExpressionSpecification,
+  Map as MapLibreMap,
+  GeoJSONSource,
+  ImageSource,
+} from "maplibre-gl";
 import type { EstateProject, LayoutRaster } from "@/data/projects";
 
 export const EMPTY_FC: GeoJSON.FeatureCollection = {
@@ -9,6 +14,9 @@ export const EMPTY_FC: GeoJSON.FeatureCollection = {
 /**
  * Estate Master-Plan & Plots Design Palette
  * Modify these tokens to redesign the plots, status fills, outlines, roads, and open spaces.
+ *
+ * Status hierarchy for buyers: Available pops (pulse + stronger fill);
+ * Booked / Sold / Blocked stay quieter but labelled.
  */
 export const LAYOUT_DESIGN = {
   // Site boundary / pad
@@ -20,23 +28,30 @@ export const LAYOUT_DESIGN = {
   openAreaEdge: "#E8F5C8",
 
   // Plot status fills
-  available: "#1F8A68",
-  sold: "#8A8178",
-  reserved: "#C6A46C",
+  available: "#10B981", // vibrant, attractive emerald green
+  booked: "#000000",
+  sold: "#000000",
+  blocked: "#000000",
+
+  // Status edge accents (when not selected)
+  availableEdge: "#047857",
+  bookedEdge: "#1A1A1A",
+  soldEdge: "#1A1A1A",
+  blockedEdge: "#1A1A1A",
 
   // Plot borders / outlines
   plotEdge: "#FFFFFF",
-  plotOutlineWidth: 1.15,
+  plotOutlineWidth: 1.5,
   plotOutlineOpacity: 0.95,
 
-  // Selected plot styling
-  selected: "#D4A84B",
-  selectedEdge: "#FFFFFF",
+  // Selected plot styling (cyan/blue highlight)
+  selected: "#06B6D4",
+  selectedEdge: "#0891B2",
   selectedOutlineWidth: 3.2,
 
   // Available plot pulse effect
-  pulseGlowAvailable: "#34D399",
-  pulseGlowEdge: "#E6FFFA",
+  pulseGlowAvailable: "#10B981",
+  pulseGlowEdge: "#A7F3D0",
 
   // Roads and internal circulation
   road: "#0B0B0B",
@@ -49,6 +64,32 @@ export const LAYOUT_DESIGN = {
   labelHaloWidth: 1.4,
 } as const;
 
+/** MapLibre match expression for status → fill color. */
+export const PLOT_STATUS_FILL_COLOR: ExpressionSpecification = [
+  "match",
+  ["get", "statusNorm"],
+  "available",
+  LAYOUT_DESIGN.available,
+  "booked",
+  LAYOUT_DESIGN.booked,
+  "blocked",
+  LAYOUT_DESIGN.blocked,
+  LAYOUT_DESIGN.sold,
+];
+
+/** MapLibre match expression for status → outline accent. */
+export const PLOT_STATUS_EDGE_COLOR: ExpressionSpecification = [
+  "match",
+  ["get", "statusNorm"],
+  "available",
+  LAYOUT_DESIGN.availableEdge,
+  "booked",
+  LAYOUT_DESIGN.bookedEdge,
+  "blocked",
+  LAYOUT_DESIGN.blockedEdge,
+  LAYOUT_DESIGN.soldEdge,
+];
+
 export const LAYOUT_LAYER_IDS = [
   "estate-site-pad-fill",
   "estate-site-pad-edge",
@@ -56,6 +97,8 @@ export const LAYOUT_LAYER_IDS = [
   "estate-open-edge",
   "estate-plots-fill",
   "estate-plots-outline",
+  "estate-plots-pulse",
+  "estate-plots-label",
   "estate-roads-fill",
   "estate-roads-casing",
   "estate-roads-edge",
@@ -84,7 +127,7 @@ export const LAYOUT_RASTER_PAINT = {
     0.82,
     17,
     0.92,
-  ],
+  ] as ExpressionSpecification,
 };
 
 /**
@@ -192,7 +235,7 @@ export function initLayoutLayers(map: MapLibreMap) {
     });
   }
 
-  // 5. Plots Fills (Status based: available vs sold vs reserved)
+  // 5. Plots Fills (status: available / booked / sold / blocked)
   if (!map.getLayer("estate-plots-fill")) {
     map.addLayer({
       id: "estate-plots-fill",
@@ -200,19 +243,23 @@ export function initLayoutLayers(map: MapLibreMap) {
       source: "estate-plots",
       layout: { visibility: "none" },
       paint: {
-        "fill-color": [
+        "fill-color": PLOT_STATUS_FILL_COLOR,
+        "fill-opacity": [
           "match",
           ["get", "statusNorm"],
           "available",
-          LAYOUT_DESIGN.available,
-          LAYOUT_DESIGN.sold,
+          1.0,
+          "booked",
+          0.32,
+          "blocked",
+          0.32,
+          0.32, // sold
         ],
-        "fill-opacity": 0.82,
       },
     });
   }
 
-  // 6. Plots Outlines
+  // 6. Plots Outlines (status-tinted edges so meaning is not fill-only)
   if (!map.getLayer("estate-plots-outline")) {
     map.addLayer({
       id: "estate-plots-outline",
@@ -220,22 +267,100 @@ export function initLayoutLayers(map: MapLibreMap) {
       source: "estate-plots",
       layout: { visibility: "none", "line-join": "miter" },
       paint: {
-        "line-color": LAYOUT_DESIGN.plotEdge,
+        "line-color": PLOT_STATUS_EDGE_COLOR,
         "line-width": LAYOUT_DESIGN.plotOutlineWidth,
         "line-opacity": LAYOUT_DESIGN.plotOutlineOpacity,
       },
     });
   }
 
-  // 7. Plot Number Labels (disabled as requested)
+  // 6b. Available pulse glow — opacity animated by MapSection while layout is open
+  if (!map.getLayer("estate-plots-pulse")) {
+    map.addLayer({
+      id: "estate-plots-pulse",
+      type: "line",
+      source: "estate-plots",
+      filter: ["==", ["get", "statusNorm"], "available"],
+      layout: { visibility: "none", "line-join": "round", "line-cap": "round" },
+      paint: {
+        "line-color": LAYOUT_DESIGN.pulseGlowAvailable,
+        "line-width": 3.2,
+        "line-opacity": 0.55,
+        "line-blur": 1.2,
+      },
+    });
+  }
+
+  // 7. Available Plot Badge Label (Check icon + AVAILABLE badge + Plot No + Area in sq yd)
   if (!map.getLayer("estate-plots-label")) {
     map.addLayer({
       id: "estate-plots-label",
       type: "symbol",
       source: "estate-plots",
+      filter: ["==", ["get", "statusNorm"], "available"],
       layout: {
         visibility: "none",
-        "text-field": "",
+        "text-field": [
+          "case",
+          ["==", ["get", "statusNorm"], "available"],
+          [
+            "case",
+            [
+              "all",
+              ["has", "sq_yards"],
+              ["!=", ["to-string", ["get", "sq_yards"]], ""],
+              ["!=", ["to-string", ["get", "sq_yards"]], "null"],
+            ],
+            [
+              "concat",
+              "AVAILABLE\nPlot ",
+              ["to-string", ["get", "plotNo"]],
+              "\n",
+              ["to-string", ["get", "sq_yards"]],
+              " sq yd",
+            ],
+            [
+              "concat",
+              "AVAILABLE\nPlot ",
+              ["to-string", ["get", "plotNo"]],
+            ],
+          ],
+          "",
+        ],
+        "text-justify": "center",
+        "text-line-height": 1.15,
+        "text-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          16.0,
+          5,
+          17.0,
+          6.5,
+          18.0,
+          8,
+          19.0,
+          10,
+        ],
+        "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+        "text-allow-overlap": false,
+        "text-padding": 3,
+        "symbol-placement": "point",
+        "text-max-width": 6,
+      },
+      paint: {
+        "text-color": "#15803D", // vibrant forest green
+        "text-halo-color": "#FFFFFF",
+        "text-halo-width": 1.2,
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          16.2,
+          0,
+          16.7,
+          1,
+        ],
       },
     });
   }
@@ -339,14 +464,18 @@ export function setLayoutData(map: MapLibreMap, project: EstateProject | null) {
 }
 
 /**
- * Synchronizes the MapLibre PNG/TIFF master-plan image when a layout is open.
+ * Synchronizes the MapLibre SVG/PNG/TIFF master-plan image when a layout is open.
  *
  * Pins the decoded bitmap into the WebGL image source with real-world corners
- * (NW→NE→SE→SW from `property_layout_cords`). SVG layouts still use the HTML
- * overlay (`svgMarkup`) and keep this raster layer hidden.
+ * (NW→NE→SE→SW from `property_layout_cords`). SVG layouts are rasterized to
+ * ImageBitmap upstream (`layoutPreview`); a legacy `svgMarkup` still hides this
+ * layer in favor of the HTML overlay.
  *
  * Layer stack: satellite → layout raster → GeoJSON plots. Raster never receives
  * click/hover — those hit `estate-plots-*` via map.on('click', layerId, …).
+ *
+ * Callers may invoke this directly from `applyLayoutRaster` (before React
+ * state) so the texture lands on the current animation frame.
  */
 export function syncLayoutRaster(
   map: MapLibreMap,

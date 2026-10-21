@@ -1,4 +1,4 @@
-export type PlotStatus = "available" | "sold";
+export type PlotStatus = "available" | "booked" | "sold" | "blocked";
 
 export type Plot = {
   id: string;

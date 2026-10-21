@@ -13,6 +13,7 @@
  */
 
 import {
+  type ExpressionSpecification,
   type GeoJSONSource,
   type ImageSource,
   type MapLibreMap,
@@ -31,15 +32,46 @@ export const LAYOUT = {
   siteEdge: "#C6A46C",
   openArea: "#7CB342",
   openAreaEdge: "#E8F5C8",
-  available: "#1F8A68",
-  sold: "#8A8178",
+  available: "#10B981",
+  booked: "#000000",
+  sold: "#000000",
+  blocked: "#000000",
+  availableEdge: "#047857",
+  bookedEdge: "#1A1A1A",
+  soldEdge: "#1A1A1A",
+  blockedEdge: "#1A1A1A",
+  pulseGlowAvailable: "#10B981",
   plotEdge: "#FFFFFF",
-  selected: "#D4A84B",
-  selectedEdge: "#FFFFFF",
+  selected: "#06B6D4",
+  selectedEdge: "#0891B2",
   road: "#0B0B0B",
   roadLine: "#FFFFFF",
   roadCasing: "#2A2A2A",
 } as const;
+
+const PLOT_STATUS_FILL_COLOR: ExpressionSpecification = [
+  "match",
+  ["get", "statusNorm"],
+  "available",
+  LAYOUT.available,
+  "booked",
+  LAYOUT.booked,
+  "blocked",
+  LAYOUT.blocked,
+  LAYOUT.sold,
+];
+
+const PLOT_STATUS_EDGE_COLOR: ExpressionSpecification = [
+  "match",
+  ["get", "statusNorm"],
+  "available",
+  LAYOUT.availableEdge,
+  "booked",
+  LAYOUT.bookedEdge,
+  "blocked",
+  LAYOUT.blockedEdge,
+  LAYOUT.soldEdge,
+];
 
 export const LAYOUT_LAYER_IDS = [
   "estate-site-pad-fill",
@@ -48,6 +80,7 @@ export const LAYOUT_LAYER_IDS = [
   "estate-open-edge",
   "estate-plots-fill",
   "estate-plots-outline",
+  "estate-plots-pulse",
   "estate-plots-label",
   "estate-roads-fill",
   "estate-roads-casing",
@@ -143,14 +176,18 @@ export function addEstateLayers(map: MapLibreMap): void {
     source: "estate-plots",
     layout: { visibility: "none" },
     paint: {
-      "fill-color": [
+      "fill-color": PLOT_STATUS_FILL_COLOR,
+      "fill-opacity": [
         "match",
         ["get", "statusNorm"],
         "available",
-        LAYOUT.available,
-        LAYOUT.sold,
+        1.0,
+        "booked",
+        0.32,
+        "blocked",
+        0.32,
+        0.32,
       ],
-      "fill-opacity": 0.82,
     },
   });
 
@@ -160,9 +197,23 @@ export function addEstateLayers(map: MapLibreMap): void {
     source: "estate-plots",
     layout: { visibility: "none", "line-join": "miter" },
     paint: {
-      "line-color": LAYOUT.plotEdge,
+      "line-color": PLOT_STATUS_EDGE_COLOR,
       "line-width": 1.15,
       "line-opacity": 0.95,
+    },
+  });
+
+  map.addLayer({
+    id: "estate-plots-pulse",
+    type: "line",
+    source: "estate-plots",
+    filter: ["==", ["get", "statusNorm"], "available"],
+    layout: { visibility: "none", "line-join": "round", "line-cap": "round" },
+    paint: {
+      "line-color": LAYOUT.pulseGlowAvailable,
+      "line-width": 3.2,
+      "line-opacity": 0.55,
+      "line-blur": 1.2,
     },
   });
 
@@ -170,35 +221,68 @@ export function addEstateLayers(map: MapLibreMap): void {
     id: "estate-plots-label",
     type: "symbol",
     source: "estate-plots",
+    filter: ["==", ["get", "statusNorm"], "available"],
     layout: {
       visibility: "none",
-      "text-field": ["get", "plotNo"],
+      "text-field": [
+        "case",
+        ["==", ["get", "statusNorm"], "available"],
+        [
+          "case",
+          [
+            "all",
+            ["has", "sq_yards"],
+            ["!=", ["to-string", ["get", "sq_yards"]], ""],
+            ["!=", ["to-string", ["get", "sq_yards"]], "null"],
+          ],
+          [
+            "concat",
+            "AVAILABLE\n#",
+            ["to-string", ["get", "plotNo"]],
+            "\n",
+            ["to-string", ["get", "sq_yards"]],
+            " sq yd",
+          ],
+          [
+            "concat",
+            "AVAILABLE\n#",
+            ["to-string", ["get", "plotNo"]],
+          ],
+        ],
+        "",
+      ],
+      "text-justify": "center",
+      "text-line-height": 1.15,
       "text-size": [
         "interpolate",
         ["linear"],
         ["zoom"],
-        15.5,
+        16.0,
+        5,
+        17.0,
+        6.5,
+        18.0,
         8,
-        17,
-        11,
-        18.5,
-        13,
+        19.0,
+        10,
       ],
+      "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
       "text-allow-overlap": false,
-      "text-padding": 2,
+      "text-padding": 3,
       "symbol-placement": "point",
+      "text-max-width": 6,
     },
     paint: {
-      "text-color": "#1a1a1a",
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 1.4,
+      "text-color": "#15803D",
+      "text-halo-color": "#FFFFFF",
+      "text-halo-width": 1.2,
       "text-opacity": [
         "interpolate",
         ["linear"],
         ["zoom"],
-        15.8,
-        0,
         16.2,
+        0,
+        16.7,
         1,
       ],
     },
@@ -370,33 +454,35 @@ export function highlightPlot(
     "case",
     ["==", ["get", "id"], active],
     LAYOUT.selected,
-    [
-      "match",
-      ["get", "statusNorm"],
-      "available",
-      LAYOUT.available,
-      LAYOUT.sold,
-    ],
+    PLOT_STATUS_FILL_COLOR,
   ]);
 
   // The master plan under the plots is the point of drawing it, so the fills go
-  // translucent while an image is showing and opaque without one. The outlines
-  // and labels stay solid either way, so plots remain readable and selectable.
-  const baseOpacity = hasRaster ? 0.4 : 0.82;
+  // translucent while an image is showing and opaque without one. Available
+  // stays strongest; booked/sold/blocked dim so inventory reads at a glance.
+  const scale = hasRaster ? 0.5 : 1;
   map.setPaintProperty("estate-plots-fill", "fill-opacity", [
     "case",
     ["==", ["get", "id"], active],
     0.95,
-    ["==", active, ""],
-    baseOpacity,
-    0.45,
+    [
+      "match",
+      ["get", "statusNorm"],
+      "available",
+      1.0,
+      "booked",
+      0.32,
+      "blocked",
+      0.32,
+      0.32, // sold
+    ],
   ]);
 
   map.setPaintProperty("estate-plots-outline", "line-color", [
     "case",
     ["==", ["get", "id"], active],
     LAYOUT.selectedEdge,
-    LAYOUT.plotEdge,
+    PLOT_STATUS_EDGE_COLOR,
   ]);
   map.setPaintProperty("estate-plots-outline", "line-width", [
     "case",

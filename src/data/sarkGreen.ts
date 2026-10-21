@@ -3,6 +3,11 @@ import plotsGeojson from "@/ila-demo-project/sark-green-plots.json";
 import roadsGeojson from "@/ila-demo-project/sark-green-road.json";
 import mainRoadsGeojson from "@/ila-demo-project/sark-green-main-road.json";
 import type { Plot, PlotStatus } from "@/data/plots";
+import {
+  normalizePlotStatus,
+  plotStatusShortLabel,
+  preferPlotStatus,
+} from "@/lib/plotStatus";
 
 type PlotProps = {
   fid: number;
@@ -61,11 +66,7 @@ function ringCentroid(ring: number[][]): [number, number] {
 }
 
 function normalizeStatus(status: string | null | undefined): PlotStatus {
-  const value = (status || "").trim().toUpperCase();
-  if (value === "AVL" || value === "AVAILABLE" || value === "OPEN") {
-    return "available";
-  }
-  return "sold";
+  return normalizePlotStatus(status, "sold");
 }
 
 function formatPlotNo(plotNo: string | null | undefined, fid: number): string {
@@ -231,9 +232,7 @@ export const SARK_GREEN_PLOTS: Plot[] = (() => {
         acc.centroids.reduce((sum, c) => sum + c[0], 0) / acc.centroids.length;
       const lat =
         acc.centroids.reduce((sum, c) => sum + c[1], 0) / acc.centroids.length;
-      const status: PlotStatus = acc.statuses.includes("available")
-        ? "available"
-        : "sold";
+      const status = preferPlotStatus(acc.statuses);
       const yards = acc.props.sq_yards
         ? `${acc.props.sq_yards} sq.yd`
         : "Area TBA";
@@ -282,6 +281,9 @@ export function getStyledPlotsGeo(): FeatureCollection {
           id: plotKeyFromNo(plotNo),
           featureId: `sg-${feature.properties.fid}`,
           statusNorm: normalizeStatus(feature.properties.status),
+          statusShort: plotStatusShortLabel(
+            normalizeStatus(feature.properties.status),
+          ),
           label: `Plot ${plotNo}`,
           plotNo,
         },

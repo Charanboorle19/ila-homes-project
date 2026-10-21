@@ -1,5 +1,10 @@
 import type { FeatureCollection, Polygon } from "geojson";
 import type { Plot, PlotStatus } from "@/data/plots";
+import {
+  normalizePlotStatus,
+  plotStatusShortLabel,
+  preferPlotStatus,
+} from "@/lib/plotStatus";
 
 import sarkPlots from "@/ila-demo-project/sark-green-plots.json";
 import sarkRoads from "@/ila-demo-project/sark-green-road.json";
@@ -108,23 +113,7 @@ function normalizeStatus(
   status: unknown,
   emptyAs: PlotStatus = "sold",
 ): PlotStatus {
-  const value = String(status ?? "")
-    .trim()
-    .toUpperCase();
-  if (!value) return emptyAs;
-  if (
-    value === "AVL" ||
-    value === "AVAILABLE" ||
-    value === "OPEN" ||
-    value === "UNSOLD" ||
-    value === "VACANT" ||
-    value === "FOR_SALE" ||
-    value === "READY" ||
-    value === "ACTIVE"
-  ) {
-    return "available";
-  }
-  return "sold";
+  return normalizePlotStatus(status, emptyAs);
 }
 
 function formatPlotNo(plotNo: unknown, fid: unknown): string {
@@ -389,9 +378,7 @@ export function buildEstateProject(config: BuildConfig): EstateProject {
         acc.centroids.reduce((sum, c) => sum + c[0], 0) / acc.centroids.length;
       const lat =
         acc.centroids.reduce((sum, c) => sum + c[1], 0) / acc.centroids.length;
-      const status: PlotStatus = acc.statuses.includes("available")
-        ? "available"
-        : "sold";
+      const status = preferPlotStatus(acc.statuses);
       const yards = acc.props.sq_yards
         ? `${acc.props.sq_yards} sq.yd`
         : "Area TBA";
@@ -423,6 +410,7 @@ export function buildEstateProject(config: BuildConfig): EstateProject {
       const props = (feature.properties || {}) as AnyProps;
       const fid = props.fid ?? index;
       const plotNo = formatPlotNo(getPlotNumber(props), fid);
+      const statusNorm = normalizeStatus(props.status, emptyAs);
       return [
         {
           type: "Feature" as const,
@@ -430,7 +418,8 @@ export function buildEstateProject(config: BuildConfig): EstateProject {
             ...props,
             id: `${config.id}-plot-${plotNo}`,
             featureId: `${config.id}-${fid}`,
-            statusNorm: normalizeStatus(props.status, emptyAs),
+            statusNorm,
+            statusShort: plotStatusShortLabel(statusNorm),
             label: `Plot ${plotNo}`,
             plotNo,
           },

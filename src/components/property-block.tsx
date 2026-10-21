@@ -566,6 +566,22 @@ export default function PropertyBlock({
           </span>
         </div>
 
+        {/* Close Button (Top Right) */}
+        {onClose ? (
+          <button
+            type="button"
+            aria-label="Close property details"
+            title="Close"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition hover:bg-black/75 active:scale-95 shadow-md"
+          >
+            <CloseIcon className="h-4 w-4" />
+          </button>
+        ) : null}
+
         {/* Navigation Arrows */}
         {galleryImages.length > 1 && (
           <>

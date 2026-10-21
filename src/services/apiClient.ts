@@ -58,7 +58,7 @@ export function resolveTenantDomain(): string {
 
   throw new Error(
     "Cannot resolve tenant domain: window is unavailable and SITE_DOMAIN is not set. " +
-      "Set SITE_DOMAIN in the environment for server-side requests.",
+    "Set SITE_DOMAIN in the environment for server-side requests.",
   );
 }
 
@@ -133,7 +133,7 @@ export async function apiFetch<T = unknown>(
     ...headers,
   });
 
-  // Absolute URL from NEXT_PUBLIC_API_URL. Relative paths would hit the site's
+  // Absolute URL from NEXT_PUBLICAPIURL. Relative paths would hit the site's
   // own domain instead of the API host.
   const response = await fetch(`${ILA_API_BASE_URL}${path}`, {
     method,

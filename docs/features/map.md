@@ -111,7 +111,7 @@ API property records contain fields including `id`, `location_id`, `name`, `slug
 
 ## 8. API request/response structure
 
-Requests are sent through `apiFetch` (`src/services/apiClient.ts`) to `NEXT_PUBLIC_API_URL`, with:
+Requests are sent through `apiFetch` (`src/services/apiClient.ts`) to `NEXT_PUBLICAPIURL`, with:
 
 - `X-Tenant-Domain`: current browser hostname, or `SITE_DOMAIN` server-side.
 - `Accept: application/json`.
@@ -276,7 +276,7 @@ The selected location's `slug` is sent as `location_slug` to the properties endp
 - `MapSection` MapLibre init sets `maxTileCacheSize: 15` and `renderWorldCopies: false` to limit offscreen tile retention and wrapped-world work during first paint.
 - On the map's first `idle` (viewport tiles rendered), `MapSection` calls `allowAnalyticsFlush()`; the first `POST /api/events/batch` then waits an additional `INITIAL_FLUSH_DELAY_MS` (4s) so it does not contend with tile streaming. Non-map routes use an 8s `startAnalytics` fallback. `pagehide` flushes are ungated.
 - Esri World Imagery raster tiles by default, configurable through `NEXT_PUBLIC_SATELLITE_TILES_URL`.
-- ILA backend API configured by `NEXT_PUBLIC_API_URL`.
+- ILA backend API configured by `NEXT_PUBLICAPIURL`.
 - Tenant identification through `X-Tenant-Domain`.
 - Optional bearer token from browser `localStorage` key `token`.
 - Analytics through `trackEvent` (`src/services/analytics/tracker`).
@@ -312,7 +312,7 @@ Direct map-relevant dependencies are `maplibre-gl`, `geotiff` (layout TIFF suppo
 
 ## 24. Known issues
 
-- The map depends on `NEXT_PUBLIC_API_URL`; there is no code fallback for a missing API base URL.
+- The map depends on `NEXT_PUBLICAPIURL`; there is no code fallback for a missing API base URL.
 - The map depends on the tenant header being resolved from the hostname (or `SITE_DOMAIN` server-side).
 - A property without coordinates has no map pin.
 - A property without unit geometries has no plot polygons/layout, although its property sheet can still be shown.

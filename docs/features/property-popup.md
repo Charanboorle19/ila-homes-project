@@ -307,7 +307,7 @@ The parent `MapSection` uses these service functions while preparing the selecte
 - `fetchPropertyById(propertyId)` — endpoint `GET /api/properties/{id}`.
 - `fetchPropertyUnits(propertyId)` — endpoint `GET /api/properties/{id}/units?limit=all&offset={offset}` for paged unit loading.
 
-The API base is `NEXT_PUBLIC_API_URL`, resolved by `apiFetch`/`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\ilaApiConfig.ts`. The property id for detail requests must be a UUID; `fetchPropertyById` rejects non-UUID ids.
+The API base is `NEXT_PUBLICAPIURL`, resolved by `apiFetch`/`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\ilaApiConfig.ts`. The property id for detail requests must be a UUID; `fetchPropertyById` rejects non-UUID ids.
 
 ## 13. API request/response structure relevant to the popup
 
@@ -608,7 +608,7 @@ The component uses the literal fallbacks documented in sections 10 and 11, inclu
 - `next/image` renders the popup image.
 - `next/link` renders the internal property and fragment links.
 - `react-dom`'s `createPortal` renders the mobile sheet into `document.body`.
-- `apiFetch` performs API requests using `NEXT_PUBLIC_API_URL` and tenant configuration.
+- `apiFetch` performs API requests using `NEXT_PUBLICAPIURL` and tenant configuration.
 - `trackEvent` records map marker clicks before property selection.
 
 No external popup/modal library is used.

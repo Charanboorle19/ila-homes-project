@@ -58,7 +58,7 @@ where `{id}` is the property UUID from the list item. Up to three detail request
 
 Favourites use `GET /api/favorites`, `POST /api/favorites` with JSON body `{ property_id: "{id}" }`, and `DELETE /api/favorites/{id}`. Favourite requests include the `X-Visitor-Code` header.
 
-All requests go through `apiFetch`, which uses `NEXT_PUBLIC_API_URL`, adds `X-Tenant-Domain`, and may add a stored bearer token.
+All requests go through `apiFetch`, which uses `NEXT_PUBLICAPIURL`, adds `X-Tenant-Domain`, and may add a stored bearer token.
 
 ## 9. Exact initial request size
 
@@ -298,7 +298,7 @@ Known current limitations and constraints are:
 - A detail failure falls back to the shorter list record, so fields such as status, locality, inventory, and RERA may be unavailable for that card.
 - Favourites depend on visitor readiness and the `X-Visitor-Code` header; failure does not fail the property list.
 - The list uses API UUID ids for detail navigation; it does not navigate with slugs.
-- The API base URL requires `NEXT_PUBLIC_API_URL`; tenant resolution requires the current hostname or server-side `SITE_DOMAIN`.
+- The API base URL requires `NEXT_PUBLICAPIURL`; tenant resolution requires the current hostname or server-side `SITE_DOMAIN`.
 - The Property List state must not be assumed to be shared with `MapSection`, Search, or Locations.
 - The exact backend behavior when more than 100 properties match is UNKNOWN — needs verification.
 - Application files were not modified for this documentation task; unrelated existing working-tree changes must be preserved.

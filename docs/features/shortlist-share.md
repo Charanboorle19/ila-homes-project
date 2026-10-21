@@ -217,7 +217,7 @@ Clicking a selected option removes only that option. Any selection change calls 
 - Remove: `SHORTLIST_REMOVE` with the same metadata shape.
 - WhatsApp share: `WHATSAPP_SHARE_CLICK` with the first selected API UUID as `property_id` and metadata `{ shortlist_count, property_ids, section_type: "shortlist_whatsapp" }`.
 
-The component has no `data-track` attributes. `ILA_PROPERTY_ID` is read from `NEXT_PUBLIC_ILA_PROPERTY_ID` through `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\ilaApiConfig.ts`. Exact server delivery, batching, and failure handling are owned by the analytics tracker and are UNKNOWN — needs verification.
+The component has no `data-track` attributes. `ILA_PROPERTY_ID` is read from `NEXT_PUBLICILAPROPERTYID` through `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\ilaApiConfig.ts`. Exact server delivery, batching, and failure handling are owned by the analytics tracker and are UNKNOWN — needs verification.
 
 ## 25. Relationship with Find Your Plot
 

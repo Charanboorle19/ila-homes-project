@@ -114,7 +114,7 @@ export async function createPropertyShares(input: {
  * id, so it gets its own `/property/{token}/view` path rather than the
  * catalogue's `/properties/{propertyId}`. The domain is the origin the page is
  * being viewed on, which stays correct on a LAN IP or a preview domain. It is
- * deliberately NOT built from NEXT_PUBLIC_API_URL, which may point at a
+ * deliberately NOT built from NEXT_PUBLICAPIURL, which may point at a
  * transient tunnel in development, and the `/api/...` prefix is never exposed:
  * an `/api/shares/{token}` link reads as a machine endpoint and invites
  * callers who then bypass the page that records the visit.

@@ -27,6 +27,10 @@ import {
   type PropertyPlotFacts,
 } from "@/lib/propertySummary";
 import {
+  PLOT_STATUS_LABEL,
+  plotStatusDisplayLabel,
+} from "@/lib/plotStatus";
+import {
   estateFromUnitsApi,
   estatePlaceholderFromProperty,
 } from "@/data/projects/fromApi";
@@ -59,6 +63,13 @@ const PROPERTIES_PER_PAGE = 100;
 
 /** Plot states the layout filter can show. Mirrors `MapSection`. */
 type FilterKey = "all" | PlotStatus;
+
+const PLOT_STATUS_PILL_CLASS: Record<PlotStatus, string> = {
+  available: "bg-[#1F8A68] text-white",
+  booked: "bg-[#111111] text-white",
+  sold: "bg-[#111111] text-white",
+  blocked: "bg-[#111111] text-white",
+};
 
 /**
  * Simultaneous teaser requests.
@@ -390,14 +401,26 @@ export default function GrowthCorridors() {
     return {
       all: plots.length,
       available: plots.filter((plot) => plot.status === "available").length,
+      booked: plots.filter((plot) => plot.status === "booked").length,
       sold: plots.filter((plot) => plot.status === "sold").length,
+      blocked: plots.filter((plot) => plot.status === "blocked").length,
     };
   }, [activeProject]);
 
   const plotFilters: { key: FilterKey; label: string; count: number }[] = [
     { key: "all", label: "All", count: plotCounts.all },
-    { key: "available", label: "Available", count: plotCounts.available },
-    { key: "sold", label: "Sold", count: plotCounts.sold },
+    {
+      key: "available",
+      label: PLOT_STATUS_LABEL.available,
+      count: plotCounts.available,
+    },
+    { key: "booked", label: PLOT_STATUS_LABEL.booked, count: plotCounts.booked },
+    { key: "sold", label: PLOT_STATUS_LABEL.sold, count: plotCounts.sold },
+    {
+      key: "blocked",
+      label: PLOT_STATUS_LABEL.blocked,
+      count: plotCounts.blocked,
+    },
   ];
 
   /** The tapped plot, or null when none is selected or the layout closed. */
@@ -1089,10 +1112,19 @@ export default function GrowthCorridors() {
       "estate-plots-fill",
       "estate-plots-outline",
       "estate-plots-label",
-    ];
+      "estate-plots-pulse",
+    ] as const;
 
     if (plotFilter === "all") {
-      for (const layerId of layers) map.setFilter(layerId, null);
+      for (const layerId of layers) {
+        if (!map.getLayer(layerId)) continue;
+        map.setFilter(
+          layerId,
+          layerId === "estate-plots-pulse"
+            ? (["==", ["get", "statusNorm"], "available"] as FilterSpecification)
+            : null,
+        );
+      }
       return;
     }
 
@@ -1101,7 +1133,15 @@ export default function GrowthCorridors() {
       ["get", "statusNorm"],
       plotFilter,
     ];
-    for (const layerId of layers) map.setFilter(layerId, expression);
+    for (const layerId of layers) {
+      if (!map.getLayer(layerId)) continue;
+      map.setFilter(
+        layerId,
+        layerId === "estate-plots-pulse"
+          ? (["all", ["==", ["get", "statusNorm"], "available"], expression] as FilterSpecification)
+          : expression,
+      );
+    }
   }, [plotFilter, mapReady, layoutOpen]);
 
   /**
@@ -1646,7 +1686,7 @@ export default function GrowthCorridors() {
                     return (
                       <article
                         key={item.id}
-                        className={`group relative flex w-[80vw] min-h-64 shrink-0 snap-start flex-col overflow-hidden rounded-2xl border p-6 text-left transition duration-300 sm:w-[46vw] lg:w-auto lg:min-w-[20rem] lg:flex-1 lg:flex-basis-0 lg:min-h-0 lg:p-5 xl:min-w-[22rem] ${
+                        className={`group relative flex w-[80vw] min-h-64 shrink-0 snap-start flex-col overflow-hidden rounded-2xl border p-6 text-left transition duration-300 sm:w-[46vw] lg:w-auto lg:min-w-80 lg:flex-1 lg:flex-basis-0 lg:min-h-0 lg:p-5 xl:min-w-88 ${
                           isActive
                             ? "border-[#c9a84c] bg-[#14120c]"
                             : "border-white/10 bg-[#0e1014] hover:-translate-y-1 hover:border-[#c9a84c]"
@@ -1692,7 +1732,7 @@ export default function GrowthCorridors() {
                         {/* Gold rail marks the selected locality. */}
                         <span
                           aria-hidden
-                          className={`absolute inset-y-0 left-0 z-20 w-[3px] transition-opacity ${
+                          className={`absolute inset-y-0 left-0 z-20 w-0.75 transition-opacity ${
                             isActive ? "bg-[#c9a84c] opacity-100" : "opacity-0"
                           }`}
                         />
@@ -1718,7 +1758,7 @@ export default function GrowthCorridors() {
                               property reads as the card's anchor. Both sizes are
                               fixed rather than responsive: a ramp would make
                               the section heading the larger text again at `lg`. */}
-                          <h3 className="mt-4 min-h-[4rem] text-[26px] font-extrabold tracking-tight text-white line-clamp-2">
+                          <h3 className="mt-4 min-h-16 text-[26px] font-extrabold tracking-tight text-white line-clamp-2">
                             {item.name}
                           </h3>
 
@@ -1728,7 +1768,7 @@ export default function GrowthCorridors() {
                               none of which helped a buyer decide. */}
                           <p className="mt-2.5 flex items-start gap-1.5 text-[14px] leading-relaxed font-medium text-white/85">
                             <PinIcon className="mt-0.5 h-4 w-4 shrink-0 text-[#c9a84c]" />
-                            <span className="break-words">{localityOf(item)}</span>
+                            <span className="wrap-break-word">{localityOf(item)}</span>
                           </p>
 
                           {/* Three teaser facts from the property's units.
@@ -1757,10 +1797,10 @@ export default function GrowthCorridors() {
                                   {facts.availableCount === 1 ? "plot" : "plots"}
                                 </span>
                               </p>
-                              <p className="min-w-0 font-bold text-white break-words">
+                              <p className="min-w-0 font-bold text-white wrap-break-word">
                                 {sizeLabel ?? "Size on request"}
                               </p>
-                              <p className="min-w-0 font-bold text-white break-words">
+                              <p className="min-w-0 font-bold text-white wrap-break-word">
                                 {facts.priceFrom !== null
                                   ? `From ${formatPrice(facts.priceFrom)}`
                                   : "Price on request"}
@@ -1774,7 +1814,7 @@ export default function GrowthCorridors() {
                               needs the per-plot flag rather than `facings`,
                               since one plot facing "East / South" is still
                               East-facing but adds South to the union. */}
-                          <div className="mt-3 flex min-h-[1.75rem] flex-wrap items-center gap-1.5">
+                          <div className="mt-3 flex min-h-7 flex-wrap items-center gap-1.5">
                             {facts &&
                             facts.availableCount > 0 &&
                             (facts.allEastFacing || facts.hasCorner) ? (
@@ -1798,7 +1838,7 @@ export default function GrowthCorridors() {
                               Held in the same spot as the old line so the action
                               row below keeps its `mt-auto` anchor and the grid
                               stays aligned. */}
-                          <div className="mt-2 min-h-[1.25rem]">
+                          <div className="mt-2 min-h-5">
                             {item.total_plots != null ? (
                               <p className="flex items-baseline gap-1.5 text-[13px]">
                                 <span className="font-extrabold text-[#c9a84c]">
@@ -1884,7 +1924,7 @@ export default function GrowthCorridors() {
                     onClick={openMapAll}
                     data-track="MAP_MARKER_CLICK"
                     data-track-meta={`{"section_type":"growth_corridors","surface":"grid_cta"}`}
-                    className="group flex min-h-64 w-[80vw] shrink-0 snap-start flex-col items-center justify-center gap-4 rounded-2xl border border-[#1b1d22]/25 bg-transparent p-6 text-center transition duration-300 hover:-translate-y-1 hover:border-[#8A6A1F] hover:bg-white/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8A6A1F] active:scale-[0.98] sm:w-[46vw] lg:w-auto lg:min-w-[20rem] lg:flex-1 lg:flex-basis-0 lg:min-h-0 lg:p-5 xl:min-w-[22rem]"
+                    className="group flex min-h-64 w-[80vw] shrink-0 snap-start flex-col items-center justify-center gap-4 rounded-2xl border border-[#1b1d22]/25 bg-transparent p-6 text-center transition duration-300 hover:-translate-y-1 hover:border-[#8A6A1F] hover:bg-white/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8A6A1F] active:scale-[0.98] sm:w-[46vw] lg:w-auto lg:min-w-80 lg:flex-1 lg:flex-basis-0 lg:min-h-0 lg:p-5 xl:min-w-88"
                   >
                     <span className="flex h-12 w-12 items-center justify-center rounded-full border border-[#1b1d22]/20 transition group-hover:border-[#8A6A1F]">
                       <MapIcon className="h-5 w-5 text-[#1b1d22] transition group-hover:text-[#8A6A1F]" />
@@ -2031,7 +2071,7 @@ export default function GrowthCorridors() {
                   return (
                     <li
                       key={item.id}
-                      className="w-[68vw] max-w-[230px] shrink-0 snap-start sm:w-[46vw] sm:max-w-65 lg:w-auto lg:max-w-none lg:shrink"
+                      className="w-[68vw] max-w-57.5 shrink-0 snap-start sm:w-[46vw] sm:max-w-65 lg:w-auto lg:max-w-none lg:shrink"
                     >
                       <button
                         type="button"
@@ -2053,7 +2093,7 @@ export default function GrowthCorridors() {
                             against the panel edge. */}
                         <span
                           aria-hidden
-                          className={`absolute inset-y-0 left-0 z-10 w-[3px] bg-[#c9a84c] transition-opacity ${
+                          className={`absolute inset-y-0 left-0 z-10 w-0.75 bg-[#c9a84c] transition-opacity ${
                             isActive ? "opacity-100" : "opacity-0"
                           }`}
                         />
@@ -2149,7 +2189,7 @@ export default function GrowthCorridors() {
               className={
                 mapFullscreen
                   ? "relative h-full w-full"
-                  : "relative h-[58vh] min-h-[360px] w-full flex-none lg:absolute lg:inset-0 lg:h-full"
+                  : "relative h-[58vh] min-h-90 w-full flex-none lg:absolute lg:inset-0 lg:h-full"
               }
             >
               {/* Desktop only. Below `lg` the sidebar's own top bar carries the same
@@ -2282,13 +2322,19 @@ export default function GrowthCorridors() {
                 </div>
               ) : null}
 
-              {/* Plot state filter, styled to match `MapSection`: a three-column
-                  strip where the active cell inverts to near-black and carries
-                  its own count. Sits below the back button rather than beside
-                  it, so neither control can cover the other at any width. */}
+              {/* Plot status legend + filter (available / booked / sold / blocked). */}
               {layoutOpen ? (
-                <div className="absolute left-3 top-14 z-20 w-56 max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_8px_20px_rgba(15,23,42,0.14)]">
-                  <div className="grid grid-cols-3">
+                <div
+                  className="absolute left-3 top-14 z-20 w-56 max-w-[calc(100%-1.5rem)] overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_8px_20px_rgba(15,23,42,0.14)]"
+                  role="group"
+                  aria-label="Plot status legend"
+                >
+                  <div className="border-b border-black/10 px-2.5 py-1.5">
+                    <p className="text-[9px] font-semibold tracking-[0.16em] text-[#7a5c28] uppercase">
+                      Plot status
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-1">
                     {plotFilters.map((item) => {
                       const isActive = plotFilter === item.key;
                       return (
@@ -2297,7 +2343,7 @@ export default function GrowthCorridors() {
                           type="button"
                           onClick={() => setPlotFilter(item.key)}
                           aria-pressed={isActive}
-                          className={`border-r border-black/10 px-2 py-2 text-left transition last:border-r-0 ${
+                          className={`border-b border-r border-black/10 px-2.5 py-1.5 text-left transition last:border-b-0 sm:border-r-0 ${
                             isActive
                               ? "bg-[#171717] text-white"
                               : "bg-transparent text-[#171717] hover:bg-[#cfc3a8]"
@@ -2340,13 +2386,9 @@ export default function GrowthCorridors() {
                           {selectedPlot.title}
                         </h3>
                         <span
-                          className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wide text-white uppercase ${
-                            selectedPlot.status === "sold"
-                              ? "bg-[#736b60]"
-                              : "bg-[#1f5c45]"
-                          }`}
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wide uppercase ${PLOT_STATUS_PILL_CLASS[selectedPlot.status]}`}
                         >
-                          {selectedPlot.status}
+                          {plotStatusDisplayLabel(selectedPlot.status)}
                         </span>
                       </div>
                       <p className="mt-1 text-xs font-medium text-[#3f3a34]">
@@ -2410,8 +2452,10 @@ export default function GrowthCorridors() {
                           <h3 className="truncate text-sm font-semibold text-[#171717]">
                             {selectedPlot.title}
                           </h3>
-                          <span className="shrink-0 rounded-full bg-[#1f5c45] px-2 py-0.5 text-[9px] font-semibold tracking-wide text-white uppercase">
-                            {selectedPlot.status}
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wide uppercase ${PLOT_STATUS_PILL_CLASS[selectedPlot.status]}`}
+                          >
+                            {plotStatusDisplayLabel(selectedPlot.status)}
                           </span>
                         </div>
                         <p className="mt-1 text-xs font-medium text-[#3f3a34]">

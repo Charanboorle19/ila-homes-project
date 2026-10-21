@@ -8,6 +8,7 @@ import dynamic from "next/dynamic";
 import PropertyBlock from "@/components/property-block";
 import Wishlist from "@/components/wishlist";
 import FeatureTutorial from "@/components/FeatureTutorial";
+import HomeReadyToVisit from "@/components/HomeReadyToVisit";
 
 const CompareProperties = dynamic(() => import("@/components/CompareProperties"), {
   ssr: false,
@@ -50,14 +51,19 @@ import { getPropertyById, type PropertyRecord } from "@/data/properties";
 import {
   fetchProperties,
   fetchPropertyAnchors,
-  fetchPropertyById,
-  fetchPropertyUnits,
   formatPrice,
   type ApiProperty,
   type PropertyAnchor,
   type PropertyLayoutCords,
   type PropertyListItem,
 } from "@/services/propertiesService";
+import {
+  clearEstateCache,
+  getEstateData,
+  getLayoutAsset,
+  peekLayoutAsset,
+  prefetchEstate,
+} from "@/lib/estatePrefetch";
 import {
   fetchActiveFeatures,
   findPropertiesByFeatures,
@@ -78,6 +84,7 @@ const PriceEmiFuture = dynamic(
 import { allowAnalyticsFlush, trackEvent } from "@/services/analytics/tracker";
 import { formatInr } from "@/lib/propertyUtils";
 import {
+  loadLayoutPreviewFromPrefetch,
   loadLayoutPreviewRaster,
   resolveLayoutImageCandidates,
 } from "@/lib/layoutPreview";
@@ -85,7 +92,10 @@ import {
   setLayoutSvgOverlayContent,
   syncLayoutSvgOverlayPosition,
 } from "@/lib/layoutSvgHtmlOverlay";
-import { loadLayoutRaster } from "@/lib/layoutTiff";
+import {
+  loadLayoutRaster,
+  loadLayoutRasterFromBuffer,
+} from "@/lib/layoutTiff";
 import {
   SATELLITE_ATTRIBUTION,
   SATELLITE_LAYER_ID,
@@ -107,12 +117,32 @@ import MapVersion, { type MapViewMode } from "@/components/map-version";
 import {
   LAYOUT_DESIGN,
   LAYOUT_LAYER_IDS,
+  PLOT_STATUS_EDGE_COLOR,
+  PLOT_STATUS_FILL_COLOR,
   initLayoutLayers,
   setLayoutData,
   syncLayoutRaster,
 } from "@/components/map-section-layouts";
+import {
+  PLOT_STATUS_LABEL,
+  plotStatusDisplayLabel,
+} from "@/lib/plotStatus";
 
 type FilterKey = "all" | PlotStatus;
+
+const PLOT_STATUS_PILL_CLASS: Record<PlotStatus, string> = {
+  available: "bg-[#10B981] text-white font-semibold",
+  booked: "bg-[#111111] text-white",
+  sold: "bg-[#111111] text-white",
+  blocked: "bg-[#111111] text-white",
+};
+
+const PLOT_STATUS_SWATCH: Record<PlotStatus, string> = {
+  available: LAYOUT_DESIGN.available,
+  booked: LAYOUT_DESIGN.booked,
+  sold: LAYOUT_DESIGN.sold,
+  blocked: LAYOUT_DESIGN.blocked,
+};
 type SheetTab = "about" | "plots" | "features" | "location";
 
 // Next/Turbopack cannot resolve MapLibre's bundled worker sibling imports.
@@ -159,6 +189,7 @@ const PLOT_SEARCH_FIELDS = [
   "price",
   "per_sq_yard_price",
   "per_sq_ft_price",
+  "dimensions",
   "status",
   "statusNorm",
 ] as const;
@@ -400,18 +431,73 @@ function featureIcon(key: string, className = "h-4 w-4"): React.ReactNode {
  * known for the property that is currently open, so they are passed in when
  * `detail` matches.
  */
+function parseUnitsEnvelope(units: unknown): {
+  unitsJson: unknown;
+  unitCount: number;
+  layoutPreviewUrl: string | null;
+  tifUrl: string | null;
+  layoutCords: PropertyLayoutCords | null;
+} {
+  const data =
+    units && typeof units === "object" ? (units as Record<string, unknown>) : null;
+
+  const items = Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(units)
+      ? units
+      : [];
+
+  const layoutPreviewUrl =
+    typeof data?.layout_preview_url === "string" && data.layout_preview_url
+      ? data.layout_preview_url
+      : null;
+  const tifUrl =
+    typeof data?.tif_url === "string" && data.tif_url ? data.tif_url : null;
+
+  let layoutCords: PropertyLayoutCords | null = null;
+  const rawCords = data?.property_layout_cords;
+  if (rawCords && typeof rawCords === "object") {
+    const c = rawCords as Partial<PropertyLayoutCords>;
+    const { east, west, north, south } = c;
+    if (
+      [east, west, north, south].every(
+        (n) => typeof n === "number" && Number.isFinite(n),
+      ) &&
+      east !== west &&
+      north !== south
+    ) {
+      layoutCords = {
+        east: east as number,
+        west: west as number,
+        north: north as number,
+        south: south as number,
+      };
+    }
+  }
+
+  return {
+    unitsJson: units ?? items,
+    unitCount: items.length,
+    layoutPreviewUrl,
+    tifUrl,
+    layoutCords,
+  };
+}
+
 function PropertyCard({
   item,
   detail,
   plotCount,
   active,
   onSelect,
+  onPrefetch,
 }: {
   item: PropertyListItem;
   detail: ApiProperty | null;
   plotCount: number;
   active: boolean;
   onSelect: () => void;
+  onPrefetch?: () => void;
 }) {
   const location =
     detail?.locality || detail?.city || detail?.address || detail?.location_name || "";
@@ -422,6 +508,7 @@ function PropertyCard({
     <button
       type="button"
       onClick={onSelect}
+      onMouseEnter={onPrefetch}
       aria-pressed={active}
       className={`group flex w-full items-center gap-3 border-x-0 border-t-0 border-b border-black/10 p-3 text-left transition hover:bg-[#cfc8bc] ${
         active ? "bg-[#cfc3a8]" : "bg-transparent"
@@ -881,6 +968,11 @@ export default function MapSection({
   const pendingAnchorsRef = useRef<Record<string, PropertyAnchor>>({});
   const anchorRafRef = useRef<number | null>(null);
   const selectAbortRef = useRef<AbortController | null>(null);
+  /** Layout finished before `setRemoteProject(estate)` — merge on estate commit. */
+  const pendingLayoutRef = useRef<{
+    propertyId: string;
+    raster: LayoutRaster;
+  } | null>(null);
   /** A camera request for a property with no plot geometry to frame. The nonce
    *  makes repeated clicks on the same property distinct. */
   const [focusRequest, setFocusRequest] = useState<{
@@ -1085,6 +1177,7 @@ export default function MapSection({
     location?: string;
   } | null>(null);
   const [desktopPropertyCardOpen, setDesktopPropertyCardOpen] = useState(false);
+  const [plotEnquiryModalOpen, setPlotEnquiryModalOpen] = useState(false);
 
   // Compare mode state (selecting properties on map & viewing comparison table)
   const [compareSelectingMode, setCompareSelectingMode] = useState(false);
@@ -1127,14 +1220,34 @@ export default function MapSection({
    * Attaches the master plan to the open estate.
    *
    * Format priority (from `resolveLayoutImageCandidates` in layoutPreview):
-   *   1. SVG  — HTML overlay
+   *   1. SVG  — ImageBitmap → MapLibre `estate-layout-image`
    *   2. TIFF — MapLibre image via geotiff decode
    *   3. PNG  — (also JPEG/WebP) MapLibre image bitmap
    *
    * Both `layout_preview_url` and `tif_url` are scanned; URLs are tried in that
    * order until one loads. Presigned links expire (~1h); on total failure the
    * units payload is refreshed once for fresh signatures, then we give up.
+   *
+   * Paints the WebGL image source on the current frame via `syncLayoutRaster`
+   * before React state updates, so the master plan does not wait on reconcile.
    */
+  const applyLayoutRaster = useCallback(
+    (propertyId: string, raster: LayoutRaster) => {
+      pendingLayoutRef.current = { propertyId, raster };
+      const map = mapRef.current;
+      if (map) {
+        syncLayoutRaster(map, raster, true);
+      }
+      setRemoteProject((current) => {
+        if (!current || current.id !== propertyId) return current;
+        // Already merged via pendingLayoutRef on estate commit — skip a no-op render.
+        if (current.layoutRaster === raster) return current;
+        return { ...current, layoutRaster: raster };
+      });
+    },
+    [],
+  );
+
   const attachLayoutImage = useCallback(
     async (input: {
       propertyId: string;
@@ -1144,6 +1257,64 @@ export default function MapSection({
       signal: AbortSignal;
     }) => {
       let { layoutPreviewUrl, tifUrl, cords } = input;
+
+      const decodeAsset = async (
+        candidateUrl: string,
+        loader: "tiff" | "svg-html" | "raster",
+        assetData: string | ArrayBuffer,
+        contentType: string,
+      ): Promise<LayoutRaster | undefined> => {
+        if (loader === "tiff" && assetData instanceof ArrayBuffer) {
+          return loadLayoutRasterFromBuffer({
+            propertyId: input.propertyId,
+            buffer: assetData,
+            cords,
+            signal: input.signal,
+          });
+        }
+        return loadLayoutPreviewFromPrefetch({
+          propertyId: input.propertyId,
+          previewUrl: candidateUrl,
+          cords,
+          data: assetData,
+          contentType,
+          signal: input.signal,
+        });
+      };
+
+      // Fast path: warm layoutAssetCache hit → decode and apply, skip refresh loop.
+      {
+        const warmCandidates = resolveLayoutImageCandidates(
+          layoutPreviewUrl,
+          tifUrl,
+        );
+        for (const candidate of warmCandidates) {
+          if (input.signal.aborted) return;
+          const cachedPromise = peekLayoutAsset(candidate.url);
+          if (!cachedPromise) continue;
+          try {
+            const { data: assetData, contentType } = await cachedPromise;
+            if (input.signal.aborted) return;
+            const raster = await decodeAsset(
+              candidate.url,
+              candidate.loader,
+              assetData,
+              contentType,
+            );
+            if (raster) {
+              console.log("[ILA map] layout image fast-path (warm cache)", {
+                propertyId: input.propertyId,
+                format: candidate.format,
+                loader: candidate.loader,
+              });
+              applyLayoutRaster(input.propertyId, raster);
+              return;
+            }
+          } catch {
+            // Fall through to full candidate / refresh path.
+          }
+        }
+      }
 
       const tryCandidates = async () => {
         const candidates = resolveLayoutImageCandidates(layoutPreviewUrl, tifUrl);
@@ -1157,20 +1328,42 @@ export default function MapSection({
         for (const candidate of candidates) {
           if (input.signal.aborted) return undefined;
 
-          const raster =
-            candidate.loader === "tiff"
-              ? await loadLayoutRaster({
-                  propertyId: input.propertyId,
-                  tifUrl: candidate.url,
-                  cords,
-                  signal: input.signal,
-                })
-              : await loadLayoutPreviewRaster({
-                  propertyId: input.propertyId,
-                  previewUrl: candidate.url,
-                  cords,
-                  signal: input.signal,
-                });
+          let raster: LayoutRaster | undefined;
+
+          try {
+            const { data: assetData, contentType } = await getLayoutAsset(
+              candidate.url,
+            );
+            if (input.signal.aborted) return undefined;
+            raster = await decodeAsset(
+              candidate.url,
+              candidate.loader,
+              assetData,
+              contentType,
+            );
+          } catch (prefetchErr) {
+            console.warn(
+              "[ILA map] layout prefetch miss — falling back to cold load",
+              prefetchErr,
+            );
+          }
+
+          if (!raster) {
+            raster =
+              candidate.loader === "tiff"
+                ? await loadLayoutRaster({
+                    propertyId: input.propertyId,
+                    tifUrl: candidate.url,
+                    cords,
+                    signal: input.signal,
+                  })
+                : await loadLayoutPreviewRaster({
+                    propertyId: input.propertyId,
+                    previewUrl: candidate.url,
+                    cords,
+                    signal: input.signal,
+                  });
+          }
 
           if (raster) {
             console.log("[ILA map] layout image loaded", {
@@ -1194,11 +1387,7 @@ export default function MapSection({
         if (input.signal.aborted) return;
 
         if (raster) {
-          setRemoteProject((current) =>
-            current && current.id === input.propertyId
-              ? { ...current, layoutRaster: raster }
-              : current,
-          );
+          applyLayoutRaster(input.propertyId, raster);
           return;
         }
 
@@ -1210,21 +1399,29 @@ export default function MapSection({
         }
 
         console.warn(
-          "[ILA map] layout image failed — re-requesting units for a fresh presigned URL",
+          "[ILA map] layout image failed — re-requesting estate for a fresh presigned URL",
         );
-        const refreshed = await fetchPropertyUnits(input.propertyId, input.signal);
-        if (input.signal.aborted) return;
-        if (!refreshed.layoutPreviewUrl && !refreshed.tifUrl) return;
-        layoutPreviewUrl = refreshed.layoutPreviewUrl ?? layoutPreviewUrl;
-        tifUrl = refreshed.tifUrl ?? tifUrl;
-        if (refreshed.layoutCords) cords = refreshed.layoutCords;
+        clearEstateCache(input.propertyId);
+        try {
+          const refreshed = await getEstateData(input.propertyId);
+          if (input.signal.aborted) return;
+          const parsed = parseUnitsEnvelope(refreshed.units);
+          if (!parsed.layoutPreviewUrl && !parsed.tifUrl) return;
+          layoutPreviewUrl = parsed.layoutPreviewUrl ?? layoutPreviewUrl;
+          tifUrl = parsed.tifUrl ?? tifUrl;
+          if (parsed.layoutCords) cords = parsed.layoutCords;
+        } catch (refreshErr) {
+          console.warn("[ILA map] estate refresh for layout URL failed", refreshErr);
+          return;
+        }
       }
     },
-    [],
+    [applyLayoutRaster],
   );
 
   /**
-   * Loads one property: detail, then `/units` for its layout, then draws it.
+   * Loads one property via `/api/estates/{id}` (cached by estatePrefetch),
+   * builds plot GeoJSON, then attaches the layout image.
    *
    * `openLayout`/`openSheet` are for pin taps and list taps alike: the map
    * already knows which property was chosen, so the master plan (desktop) or
@@ -1244,6 +1441,7 @@ export default function MapSection({
       selectAbortRef.current?.abort();
       const controller = new AbortController();
       selectAbortRef.current = controller;
+      pendingLayoutRef.current = null;
 
       setActivePropertyId(propertyId);
 
@@ -1266,9 +1464,6 @@ export default function MapSection({
         const staticProject = getProjectById(staticProjectId) ?? getProjectById(propertyId);
 
         if (staticProject) {
-          const propertyRecord =
-            getPropertyById(propertyId) ??
-            getPropertyById(propertyId === "sark-green" ? "sark-green-plains" : propertyId);
           setRemoteProject(staticProject);
           setRemoteStatus("ready");
           setSelectedId(null);
@@ -1289,50 +1484,85 @@ export default function MapSection({
           return;
         }
 
-        const detail = await fetchPropertyById(propertyId, controller.signal);
+        // Cached estate aggregate (pre-warmed / hover-prefetched when available).
+        const { property: propDetail, units: unitsData } =
+          await getEstateData(propertyId);
+        if (controller.signal.aborted) return;
+
+        console.log("[ILA API] property click — response", {
+          propertyId,
+          property: propDetail,
+          units: unitsData,
+        });
+
+        const detail = propDetail as ApiProperty;
         setActivePropertyDetail(detail);
+
+        const {
+          unitsJson,
+          unitCount,
+          layoutPreviewUrl,
+          tifUrl,
+          layoutCords,
+        } = parseUnitsEnvelope(unitsData);
+        setUnitsCount(unitCount);
+
+        // Start the layout image as soon as cords + URL exist — concurrent with
+        // vector plot geometry work (pending raster merges when estate commits).
+        let layoutAttachStarted = false;
+        if (layoutCords && (layoutPreviewUrl || tifUrl)) {
+          layoutAttachStarted = true;
+          void attachLayoutImage({
+            propertyId,
+            layoutPreviewUrl,
+            tifUrl,
+            cords: layoutCords,
+            signal: controller.signal,
+          });
+        }
 
         // Coordinates come from the property detail or fallback to the list row
         const listItem = propertyList.find((item) => item.id === propertyId);
-        const anchor = propertyAnchor(detail) ?? (listItem ? propertyAnchor(listItem) : null);
+        const anchor =
+          propertyAnchor(detail) ??
+          (listItem ? propertyAnchor(listItem) : null);
         setPropertyAnchors((prev) =>
           anchor ? { ...prev, [propertyId]: anchor } : prev,
         );
 
-        const { units, layoutPreviewUrl, tifUrl, layoutCords } = await fetchPropertyUnits(
-          propertyId,
-          controller.signal,
-        );
-        setUnitsCount(units.length);
+        const locationLabel =
+          [detail.locality, detail.city].filter(Boolean).join(", ") ||
+          "Hyderabad";
 
         let estate: EstateProject | null = null;
-        try {
-          if (units.length > 0) {
+        // Build vector plots when units exist; otherwise fall through to placeholder.
+        if (unitsData != null) {
+          try {
             estate = estateFromUnitsApi({
               propertyId,
               name: detail.name,
-              location:
-                [detail.locality, detail.city].filter(Boolean).join(", ") ||
-                "Hyderabad",
+              location: locationLabel,
               anchor,
               layoutCords,
-              unitsJson: units,
+              unitsJson,
             });
+          } catch (geomErr) {
+            console.warn(
+              "[ILA API] could not build vector plots from units, checking layout image",
+              geomErr,
+            );
           }
-        } catch (geomErr) {
-          console.warn("[ILA API] could not build vector plots from units, checking layout image", geomErr);
         }
 
-        // If no vector polygons exist (or units was empty), create a fallback estate project
-        // georeferenced to layoutCords or the property anchor so the layout raster can still render.
+        // If units are null / have no geometries, create a fallback estate
+        // georeferenced to layoutCords or the property anchor so the layout
+        // raster can still render (estate-plots-* stay empty).
         if (!estate) {
           if (anchor) {
             estate = estatePlaceholderFromProperty({
               propertyId,
               name: detail.name,
-              location:
-                [detail.locality, detail.city].filter(Boolean).join(", ") ||
-                "Hyderabad",
+              location: locationLabel,
               anchor,
             });
             if (layoutCords) {
@@ -1349,8 +1579,19 @@ export default function MapSection({
           setFilter("all");
           if (options.openSheet) setSelectedProjectId(propertyId);
           if (options.openDesktopCard) setDesktopPropertyCardOpen(true);
-          console.info("[ILA API] property has no units and no coordinates", detail.name);
+          console.info(
+            "[ILA API] property has no units and no coordinates",
+            detail.name,
+          );
           return;
+        }
+
+        // Layout may have finished concurrently — merge before the first commit
+        // so React and the map open with one paint (applyLayoutRaster may already
+        // have pushed the texture via syncLayoutRaster).
+        const pending = pendingLayoutRef.current;
+        if (pending && (pending as { propertyId: string; raster: LayoutRaster }).propertyId === propertyId) {
+          estate.layoutRaster = (pending as { propertyId: string; raster: LayoutRaster }).raster;
         }
 
         setRemoteProject(estate);
@@ -1361,36 +1602,35 @@ export default function MapSection({
         setMobilePlotExpanded(false);
         setPropertySheetExpanded(false);
 
-        // If layoutCords is missing from the units response, derive
-        // layout coordinates from the unit bounds so the master plan image can still be drawn.
-        const effectiveCords: PropertyLayoutCords | null =
-          layoutCords ??
-          (estate?.bounds
-            ? {
-                west: estate.bounds.minLng,
-                east: estate.bounds.maxLng,
-                north: estate.bounds.maxLat,
-                south: estate.bounds.minLat,
-              }
-            : null);
+        // Fallback: no API layoutCords — derive from plot bounds and attach late.
+        if (!layoutAttachStarted) {
+          const effectiveCords: PropertyLayoutCords | null =
+            layoutCords ??
+            (estate.bounds
+              ? {
+                  west: estate.bounds.minLng,
+                  east: estate.bounds.maxLng,
+                  north: estate.bounds.maxLat,
+                  south: estate.bounds.minLat,
+                }
+              : null);
 
-        // The master plan is attached after the estate is on the map, so a
-        // slow or failed download never delays the view itself.
-        if (effectiveCords && (layoutPreviewUrl || tifUrl)) {
-          void attachLayoutImage({
-            propertyId,
-            layoutPreviewUrl,
-            tifUrl,
-            cords: effectiveCords,
-            signal: controller.signal,
-          });
-        } else {
-          console.warn("[ILA map] units response had no layout image to draw", {
-            propertyId,
-            hasLayoutPreviewUrl: Boolean(layoutPreviewUrl),
-            hasTifUrl: Boolean(tifUrl),
-            hasLayoutCords: Boolean(effectiveCords),
-          });
+          if (effectiveCords && (layoutPreviewUrl || tifUrl)) {
+            void attachLayoutImage({
+              propertyId,
+              layoutPreviewUrl,
+              tifUrl,
+              cords: effectiveCords,
+              signal: controller.signal,
+            });
+          } else {
+            console.warn("[ILA map] units response had no layout image to draw", {
+              propertyId,
+              hasLayoutPreviewUrl: Boolean(layoutPreviewUrl),
+              hasTifUrl: Boolean(tifUrl),
+              hasLayoutCords: Boolean(effectiveCords),
+            });
+          }
         }
 
         // The layout can only be opened once its geometry is loaded.
@@ -1410,7 +1650,7 @@ export default function MapSection({
         console.warn("[ILA API] property load failed", error);
       }
     },
-    [attachLayoutImage],
+    [attachLayoutImage, propertyList],
   );
 
   // Keep pin click handlers in a ref so WebGL layer listeners stay stable across renders.
@@ -1435,6 +1675,28 @@ export default function MapSection({
   // Keep latest selectProperty for post-list open without re-fetching the catalogue.
   const selectPropertyRef = useRef(selectProperty);
   selectPropertyRef.current = selectProperty;
+
+  // Pre-warm the first few catalogue estates (and their layout assets) after list load.
+  useEffect(() => {
+    if (!propertyList || propertyList.length === 0) return;
+
+    console.log(
+      "⚡ [MapSection] Triggering pre-warm for:",
+      propertyList.slice(0, 4).map((p) => p.id),
+    );
+
+    const timer = setTimeout(() => {
+      propertyList.slice(0, 4).forEach((prop) => {
+        void prefetchEstate(prop.id).catch((err) => {
+          // Background warm-up is best-effort; one bad estate must not surface
+          // as an uncaught rejection (e.g. upstream 502 for a single UUID).
+          console.warn("[MapSection] estate pre-warm failed", prop.id, err);
+        });
+      });
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [propertyList]);
 
   // Step 1: list every property — one shared controller/promise per fetch key.
   useEffect(() => {
@@ -1499,7 +1761,7 @@ export default function MapSection({
       .catch((error: unknown) => {
         if (ignore || controller.signal.aborted) return;
         if (singlePropertyId) {
-          // In single property mode, also try selecting directly via fetchPropertyById
+          // In single property mode, also try selecting directly via getEstateData
           void selectPropertyRef.current(singlePropertyId, {
             openLayout: true,
             openSheet: false,
@@ -1822,7 +2084,9 @@ export default function MapSection({
     return {
       all: plots.length,
       available: plots.filter((p) => p.status === "available").length,
+      booked: plots.filter((p) => p.status === "booked").length,
       sold: plots.filter((p) => p.status === "sold").length,
+      blocked: plots.filter((p) => p.status === "blocked").length,
     };
   }, [activeProject, projects]);
 
@@ -1877,6 +2141,71 @@ export default function MapSection({
     [activeProject, selectedId],
   );
 
+  const [hoveredPlotId, setHoveredPlotId] = useState<string | null>(null);
+  const hoveredPlot = useMemo(
+    () => (hoveredPlotId ? activeProject?.plots.find((p) => p.id === hoveredPlotId) ?? null : null),
+    [activeProject, hoveredPlotId],
+  );
+
+  // Floating tags: display compact floating tags ONLY for available plots when zoomed in.
+  // Booked, sold, or blocked plots show no tag when clicked/hovered (they only show the popup).
+  const displayPlotsForTags = useMemo(() => {
+    if (!activeProject?.plots) return [];
+    const list: typeof activeProject.plots = [];
+
+    for (const p of activeProject.plots) {
+      if (p.status === "available" && Number.isFinite(p.lng) && Number.isFinite(p.lat)) {
+        list.push(p);
+      }
+    }
+
+    return list;
+  }, [activeProject]);
+
+  const [plotTagPositions, setPlotTagPositions] = useState<Record<string, { x: number; y: number }>>({});
+
+  // Update floating tag screen coordinates as map pans, zooms, or layout opens.
+  // Only display tags when map is zoomed in (zoom >= 16.5) to keep zoomed-out portfolio view clean.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !layoutOpen || displayPlotsForTags.length === 0) {
+      setPlotTagPositions({});
+      return;
+    }
+
+    const updatePositions = () => {
+      try {
+        if (map.getZoom() < 16.5) {
+          setPlotTagPositions({});
+          return;
+        }
+
+        const bounds = map.getBounds();
+        const nextPositions: Record<string, { x: number; y: number }> = {};
+
+        for (const p of displayPlotsForTags) {
+          // Check if within bounds with small buffer to prevent popping at edges
+          if (bounds.contains([p.lng, p.lat])) {
+            const point = map.project([p.lng, p.lat]);
+            nextPositions[p.id] = { x: point.x, y: point.y };
+          }
+        }
+
+        setPlotTagPositions(nextPositions);
+      } catch {
+        setPlotTagPositions({});
+      }
+    };
+
+    updatePositions();
+    map.on("move", updatePositions);
+    map.on("zoom", updatePositions);
+    return () => {
+      map.off("move", updatePositions);
+      map.off("zoom", updatePositions);
+    };
+  }, [displayPlotsForTags, layoutOpen, mapReady]);
+
   const openProject = (projectId: ProjectId, plotId?: string | null) => {
     setPanelOpen(true);
     setActiveProjectId(projectId);
@@ -1907,11 +2236,14 @@ export default function MapSection({
     setPropertySheetExpanded(false);
     setFilter("all");
     setQuery("");
+    setFocusRequest(null);
     // Closing a popup must return the map to its regular zoomed-out portfolio
-    // view. Clearing the fitted-signature guard forces the pins effect to
-    // re-fit (and drop the satellite basemap) even though the pins themselves
-    // have not moved.
+    // view. Clearing the fitted-signature guard and immediately fitting bounds.
     fittedPinsRef.current = "";
+    const map = mapRef.current;
+    if (map) {
+      fitBounds(map, pinsBounds, 50, 13.2, panelOpen);
+    }
   };
 
   const closePanel = () => {
@@ -2341,8 +2673,14 @@ export default function MapSection({
         };
 
         liveMap.on("click", PROPERTY_PINS_ICON_LAYER_ID, selectPropertyPin);
-        liveMap.on("mouseenter", PROPERTY_PINS_ICON_LAYER_ID, () => {
+        liveMap.on("mouseenter", PROPERTY_PINS_ICON_LAYER_ID, (event: MapLayerMouseEvent) => {
           liveMap.getCanvas().style.cursor = "pointer";
+          const pinId = event.features?.[0]?.properties?.id;
+          if (typeof pinId === "string" && pinId.length > 0) {
+            void prefetchEstate(pinId).catch(() => {
+              // Hover prefetch is best-effort.
+            });
+          }
         });
         liveMap.on("mouseleave", PROPERTY_PINS_ICON_LAYER_ID, () => {
           liveMap.getCanvas().style.cursor = "";
@@ -2373,11 +2711,17 @@ export default function MapSection({
           });
         };
         liveMap.on("click", selectRenderedPlot);
-        liveMap.on("mouseenter", "estate-plots-fill", () => {
+        liveMap.on("mousemove", "estate-plots-fill", (e: MapMouseEvent) => {
           liveMap.getCanvas().style.cursor = "pointer";
+          const feature = liveMap.queryRenderedFeatures(e.point, {
+            layers: ["estate-plots-fill"],
+          })[0];
+          const id = feature?.properties?.id as string | undefined;
+          setHoveredPlotId(id || null);
         });
         liveMap.on("mouseleave", "estate-plots-fill", () => {
           liveMap.getCanvas().style.cursor = "";
+          setHoveredPlotId(null);
         });
 
         // panelOpen starts true, and the effect below re-fits whenever the
@@ -2529,10 +2873,14 @@ export default function MapSection({
 
     for (const layerId of LAYOUT_LAYER_IDS) {
       if (map.getLayer(layerId)) {
+        // Do not display yellow dotted site boundary on the layout
+        const isVisible =
+          layerId !== "estate-site-pad-edge" &&
+          Boolean(activeProject && SHOW_ESTATE_GEOJSON);
         map.setLayoutProperty(
           layerId,
           "visibility",
-          activeProject && SHOW_ESTATE_GEOJSON ? "visible" : "none",
+          isVisible ? "visible" : "none",
         );
       }
     }
@@ -2596,7 +2944,7 @@ export default function MapSection({
     );
   }, [layoutOpen, mapReady, userMapViewMode]);
 
-  // Highlight selected plot
+  // Highlight selected plot + status hierarchy (available strongest)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layoutOpen || !map.getLayer("estate-plots-fill")) {
@@ -2604,44 +2952,59 @@ export default function MapSection({
     }
 
     const active = selectedId || "";
+    const scale = activeProject?.layoutRaster ? 0.5 : 1;
 
+    // Selected plot: translucent emerald green fill (#10B981 at 0.55) with green outline (#047857).
+    // Available plots: solid green (#10B981); booked/sold/blocked: muted dark fill (0.32).
     map.setPaintProperty("estate-plots-fill", "fill-color", [
       "case",
       ["==", ["get", "id"], active],
-      LAYOUT.selected,
+      "#10B981",
+      PLOT_STATUS_FILL_COLOR,
+    ]);
+    map.setPaintProperty("estate-plots-fill", "fill-opacity", [
+      "case",
+      ["==", ["get", "id"], active],
+      0.55,
       [
         "match",
         ["get", "statusNorm"],
         "available",
-        LAYOUT.available,
-        LAYOUT.sold,
+        1.0,
+        "booked",
+        0.32,
+        "blocked",
+        0.32,
+        0.32, // sold / fallback
       ],
-    ]);
-    // The master plan under the plots is the point of drawing it, so the fills
-    // go translucent while an image is showing and opaque without one — the
-    // outlines and labels stay solid either way, so plots remain readable and
-    // selectable.
-    const baseOpacity = activeProject?.layoutRaster ? 0.4 : 0.82;
-    map.setPaintProperty("estate-plots-fill", "fill-opacity", [
-      "case",
-      ["==", ["get", "id"], active],
-      0.95,
-      ["==", active, ""],
-      baseOpacity,
-      0.45,
     ]);
     map.setPaintProperty("estate-plots-outline", "line-color", [
       "case",
       ["==", ["get", "id"], active],
-      LAYOUT.selectedEdge,
-      LAYOUT.plotEdge,
+      "#047857",
+      PLOT_STATUS_EDGE_COLOR,
     ]);
     map.setPaintProperty("estate-plots-outline", "line-width", [
       "case",
       ["==", ["get", "id"], active],
-      3.2,
-      1.15,
+      3.0,
+      [
+        "match",
+        ["get", "statusNorm"],
+        "available",
+        2.0,
+        1.15,
+      ],
     ]);
+
+    // Hide labels inside plots — info is displayed in the floating tag instead
+    if (map.getLayer("estate-plots-label")) {
+      map.setLayoutProperty("estate-plots-label", "visibility", "none");
+    }
+
+    if (map.getLayer("estate-plots-dimensions")) {
+      map.setLayoutProperty("estate-plots-dimensions", "visibility", "none");
+    }
   }, [
     selectedId,
     layoutOpen,
@@ -2650,6 +3013,41 @@ export default function MapSection({
     activeProject?.plots.length,
     activeProject?.layoutRaster,
   ]);
+
+  /** Soft breathing glow on available plot edges while a layout is open. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !layoutOpen || !map.getLayer("estate-plots-pulse")) {
+      return;
+    }
+
+    let frame = 0;
+    let raf = 0;
+    const tick = (now: number) => {
+      if (!map.getLayer("estate-plots-pulse")) return;
+      const t = (now % 2200) / 2200;
+      const wave = 0.5 + 0.5 * Math.sin(t * Math.PI * 2);
+      map.setPaintProperty(
+        "estate-plots-pulse",
+        "line-opacity",
+        0.28 + wave * 0.5,
+      );
+      map.setPaintProperty(
+        "estate-plots-pulse",
+        "line-width",
+        2.4 + wave * 2.2,
+      );
+      frame = raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf || frame);
+      if (map.getLayer("estate-plots-pulse")) {
+        map.setPaintProperty("estate-plots-pulse", "line-opacity", 0.45);
+        map.setPaintProperty("estate-plots-pulse", "line-width", 3.2);
+      }
+    };
+  }, [layoutOpen, mapReady, activeProject?.id]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -2703,10 +3101,24 @@ export default function MapSection({
       ]);
     }
 
+    const plotLayers = [
+      "estate-plots-fill",
+      "estate-plots-outline",
+      "estate-plots-label",
+      "estate-plots-pulse",
+    ] as const;
+
     if (predicates.length === 0) {
-      map.setFilter("estate-plots-fill", null);
-      map.setFilter("estate-plots-outline", null);
-      map.setFilter("estate-plots-label", null);
+      for (const layerId of plotLayers) {
+        if (!map.getLayer(layerId)) continue;
+        // Pulse stays available-only even when status/search filters are clear.
+        map.setFilter(
+          layerId,
+          layerId === "estate-plots-pulse"
+            ? (["==", ["get", "statusNorm"], "available"] as FilterSpecification)
+            : null,
+        );
+      }
       return;
     }
 
@@ -2714,9 +3126,15 @@ export default function MapSection({
       predicates.length === 1 ? predicates[0] : ["all", ...predicates]
     ) as FilterSpecification;
 
-    map.setFilter("estate-plots-fill", expression);
-    map.setFilter("estate-plots-outline", expression);
-    map.setFilter("estate-plots-label", expression);
+    for (const layerId of plotLayers) {
+      if (!map.getLayer(layerId)) continue;
+      map.setFilter(
+        layerId,
+        layerId === "estate-plots-pulse"
+          ? (["all", ["==", ["get", "statusNorm"], "available"], expression] as FilterSpecification)
+          : expression,
+      );
+    }
   }, [filter, matchedPlotNumbers, mapReady]);
 
   const zoomBy = (delta: number) => {
@@ -2737,11 +3155,7 @@ export default function MapSection({
     closeLayout();
   };
 
-  const filters: { key: FilterKey; label: string; count: number }[] = [
-    { key: "all", label: "All", count: counts.all },
-    { key: "available", label: "Available", count: counts.available },
-    { key: "sold", label: "Sold", count: counts.sold },
-  ];
+
 
   const loading = remoteStatus === "loading";
 
@@ -2865,6 +3279,58 @@ export default function MapSection({
           </button>
         ) : null}
 
+        {/* Floating Tags for All Available Plots & Active Plot (Short & Neat) */}
+        {layoutOpen &&
+          displayPlotsForTags.map((plot) => {
+            const pos = plotTagPositions[plot.id];
+            if (!pos) return null;
+            const isSelected = selectedId === plot.id;
+            const isHovered = hoveredPlotId === plot.id;
+
+            return (
+              <div
+                key={plot.id}
+                className={`pointer-events-none absolute transition-transform duration-75 ease-out select-none ${
+                  isSelected || isHovered ? "z-30" : "z-25"
+                }`}
+                style={{
+                  left: `${pos.x}px`,
+                  top: `${pos.y}px`,
+                  transform: "translate(-50%, -100%) translateY(-8px)",
+                }}
+              >
+                <div
+                  className={`relative flex items-center gap-1.5 rounded-md border px-2 py-0.5 shadow-[0_4px_12px_rgba(0,0,0,0.15)] ${
+                    isSelected
+                      ? "border-[#047857] bg-white ring-2 ring-[#10B981]/50"
+                      : "border-black/10 bg-white/98"
+                  }`}
+                >
+                  {/* Plot Number: e.g. Plot 24 */}
+                  <span className="text-[10px] font-bold text-neutral-900 tracking-tight whitespace-nowrap">
+                    Plot {plot.title.replace(/^Plot\s*/i, "")}
+                  </span>
+
+                  {/* Area e.g. 240 sq yd */}
+                  {plot.area && plot.area !== "Area TBA" ? (
+                    <>
+                      <span className="text-neutral-300 text-[9px] leading-none">·</span>
+                      <span className="text-[9.5px] font-semibold text-neutral-600 whitespace-nowrap">
+                        {plot.area.replace(/\s*sq\.?yd/i, " sq yd")}
+                      </span>
+                    </>
+                  ) : null}
+
+                  {/* Minimal bottom pointer stem */}
+                  <div
+                    className="absolute left-1/2 top-full -translate-x-1/2 -mt-px h-0 w-0 border-x-[3.5px] border-x-transparent border-t-[4px] border-t-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)]"
+                    aria-hidden
+                  />
+                </div>
+              </div>
+            );
+          })}
+
         {/* Desktop top-left corner: property name tag when hideDetails is true (e.g. on /properties/{id}) */}
         {!mapFullscreen && hideDetails && (activeProject?.name || activeProperty?.name) ? (
           <div className="pointer-events-none absolute top-3 left-3 z-20 hidden md:flex items-center gap-2 rounded-xl border border-black/15 bg-[#eae4da]/95 px-3.5 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.14)] backdrop-blur-md">
@@ -2878,6 +3344,8 @@ export default function MapSection({
             </div>
           </div>
         ) : null}
+
+
 
         {/* Top Left: Map Version Switcher (Default View / Satellite Version) */}
         {/* Hidden when a property is clicked/open */}
@@ -2999,6 +3467,13 @@ export default function MapSection({
                         }
                         plotCount={item.id === activePropertyId ? unitsCount : 0}
                         active={item.id === activePropertyId}
+                        onPrefetch={() => {
+                          // Warm estates outside the top-4 idle pre-warm as soon
+                          // as the visitor hovers a list row.
+                          void prefetchEstate(item.id).catch(() => {
+                            // Hover prefetch is best-effort.
+                          });
+                        }}
                         onSelect={() => {
                           void selectProperty(item.id, { openLayout: true });
                           setPanelOpen(true);
@@ -3056,7 +3531,7 @@ export default function MapSection({
         {/* Integrated Desktop & Mobile Property Block */}
         <PropertyBlock
           desktopOpen={desktopPropertyCardOpen}
-          onCloseDesktop={() => setDesktopPropertyCardOpen(false)}
+          onCloseDesktop={closeLayout}
           portalReady={portalReady}
           selectedPlot={selectedPlot}
           mapFullscreen={mapFullscreen}
@@ -3066,8 +3541,8 @@ export default function MapSection({
             closeLayout();
             setPropertySheetExpanded(false);
           }}
-          project={selectedProject}
-          property={selectedProperty}
+          project={activeProject ?? selectedProject}
+          property={activeProperty ?? selectedProperty}
           apiProperty={activePopupApiProperty}
           tab={propertySheetTab}
           onTabChange={setPropertySheetTab}
@@ -3081,145 +3556,182 @@ export default function MapSection({
             setEmiSelectingProperty(false);
           }}
         />
-        {/* Mobile bottom-sheet plot details — compact first, expandable on demand */}
+        {/* Plot Details Popup (Styled exactly like property-block when minimized) */}
         {selectedPlot ? (
-          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-60 md:hidden">
-            <div className="pointer-events-auto max-h-[42vh] overflow-y-auto animate-sheet-up rounded-t-2xl border-t border-black/10 bg-[#d9d2c7] shadow-[0_-12px_40px_rgba(15,23,42,0.28)] pb-[env(safe-area-inset-bottom)]">
-              <div className="flex justify-center pt-2.5 pb-1" aria-hidden>
-                <span className="h-1 w-10 rounded-full bg-black/20" />
+          <>
+            {/* Mobile Bottom Popup */}
+            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[200] flex flex-col items-center justify-end md:hidden">
+              <div className="pointer-events-auto flex w-full max-h-[85vh] max-w-lg flex-col overflow-hidden rounded-t-[1.75rem] border-x border-t border-[#ded9cf] bg-[#f9f7f2] px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-12px_36px_rgba(36,35,31,0.22)] animate-in fade-in slide-in-from-bottom-6 duration-200">
+                {/* Top Controls Row */}
+                <div className="flex shrink-0 items-center justify-between gap-2 pb-1">
+                  <button
+                    type="button"
+                    aria-label="Close plot details"
+                    onClick={() => {
+                      setSelectedId(null);
+                      setMobilePlotExpanded(false);
+                      if (activeProjectId) {
+                        setSelectedProjectId(activeProjectId);
+                        setDesktopPropertyCardOpen(true);
+                        setPropertySheetExpanded(false);
+                      }
+                    }}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-[#24231f] border border-[#ded9cf] shadow-xs transition active:scale-95"
+                  >
+                    <CloseIcon className="h-3.5 w-3.5" />
+                  </button>
+
+                  {/* Handle Bar */}
+                  <div className="flex h-6 w-24 items-center justify-center">
+                    <span className="h-1 w-10 rounded-full bg-[#c9c3b6]" />
+                  </div>
+
+                  {/* Status Pill */}
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase ${
+                      selectedPlot.status === "available"
+                        ? "bg-[#10B981] text-white"
+                        : "bg-[#111111] text-white"
+                    }`}
+                  >
+                    {plotStatusDisplayLabel(selectedPlot.status)}
+                  </span>
+                </div>
+
+                {/* Minimized Content Body */}
+                <div className="flex w-full flex-col justify-center select-none py-1">
+                  <h3 className="truncate text-base font-extrabold tracking-tight text-[#141414]">
+                    {selectedPlot.title}
+                  </h3>
+
+                  <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-[#5c5549]">
+                    <svg className="h-3.5 w-3.5 shrink-0 text-[#c6a46c]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    <span className="truncate">{selectedPlot.location}</span>
+                  </p>
+
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="rounded-lg bg-[#c6a46c]/15 px-2.5 py-1 text-xs font-black text-[#876527]">
+                      {selectedPlot.price}
+                    </span>
+                    <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
+                      {selectedPlot.area}
+                    </span>
+                    {selectedPlot.facing ? (
+                      <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
+                        {selectedPlot.facing}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Actions: Enquiry & View Property */}
+                  <div className="mt-3 flex items-center gap-2 pt-2 border-t border-[#ded9cf]/70">
+                    <button
+                      type="button"
+                      onClick={() => setPlotEnquiryModalOpen(true)}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-xs font-black tracking-wider uppercase text-[#141414] shadow-xs transition hover:brightness-105 active:scale-[0.98] cursor-pointer"
+                    >
+                      Enquiry
+                    </button>
+                    {activePropertyHref ? (
+                      <Link
+                        href={activePropertyHref}
+                        className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-black/15 bg-white py-2.5 text-xs font-black text-[#141414] shadow-xs transition hover:bg-[#faf7f0] active:scale-[0.98] whitespace-nowrap"
+                      >
+                        View Property
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
               </div>
-              <div className="relative px-3 pb-3">
+            </div>
+
+            {/* Desktop Bottom-Left Popup Card */}
+            <div
+              className="pointer-events-auto absolute bottom-4 z-30 hidden w-[340px] max-w-[calc(100%-2rem)] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-2xl border border-[#ded9cf] bg-[#f9f7f2] p-4 shadow-[0_16px_40px_rgba(36,35,31,0.18)] animate-in fade-in zoom-in-95 md:block"
+              style={{
+                left: panelOpen ? `min(calc(100% - 356px), ${DESKTOP_PANEL_RESERVED + 12}px)` : 16,
+                maxHeight: "calc(100% - 2rem)",
+              }}
+            >
+              {/* Header / Top Controls */}
+              <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#ded9cf]">
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase ${
+                    selectedPlot.status === "available"
+                      ? "bg-[#10B981] text-white"
+                      : "bg-[#111111] text-white"
+                  }`}
+                >
+                  {plotStatusDisplayLabel(selectedPlot.status)}
+                </span>
                 <button
                   type="button"
                   aria-label="Close plot details"
                   onClick={() => {
                     setSelectedId(null);
-                    setMobilePlotExpanded(false);
+                    if (activeProjectId) {
+                      setSelectedProjectId(activeProjectId);
+                      setDesktopPropertyCardOpen(true);
+                    }
                   }}
-                  className="absolute top-1 right-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-[#171717] text-white transition hover:bg-[#333333]"
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[#5c5348] border border-[#ded9cf] shadow-xs transition hover:bg-[#eae5db] active:scale-95"
                 >
                   <CloseIcon className="h-3.5 w-3.5" />
                 </button>
-                <div className="pr-10">
-                  <div className="flex items-center gap-2">
-                    <h3 className="truncate text-sm font-semibold text-[#171717]">
-                      {selectedPlot.title}
-                    </h3>
-                    <span className="shrink-0 rounded-full bg-[#1f5c45] px-2 py-0.5 text-[9px] font-semibold tracking-wide text-white uppercase">
-                      {selectedPlot.status}
+              </div>
+
+              {/* Minimized Content Body */}
+              <div className="flex w-full flex-col justify-center select-none pt-2.5">
+                <h3 className="truncate text-base font-extrabold tracking-tight text-[#141414]">
+                  {selectedPlot.title}
+                </h3>
+
+                <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-[#5c5549]">
+                  <svg className="h-3.5 w-3.5 shrink-0 text-[#c6a46c]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                  <span className="truncate">{selectedPlot.location}</span>
+                </p>
+
+                <div className="mt-2.5 flex items-center gap-2">
+                  <span className="rounded-lg bg-[#c6a46c]/15 px-2.5 py-1 text-xs font-black text-[#876527]">
+                    {selectedPlot.price}
+                  </span>
+                  <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
+                    {selectedPlot.area}
+                  </span>
+                  {selectedPlot.facing ? (
+                    <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
+                      {selectedPlot.facing}
                     </span>
-                  </div>
-                  <p className="mt-1 text-xs font-medium text-[#3f3a34]">
-                    {selectedPlot.area} · {selectedPlot.price}
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-[#5c5348]">
-                    {selectedPlot.location}
-                  </p>
+                  ) : null}
                 </div>
 
-                <button
-                  type="button"
-                  aria-expanded={mobilePlotExpanded}
-                  onClick={() => setMobilePlotExpanded((expanded) => !expanded)}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-black/15 bg-black/5 px-3 py-2 text-xs font-semibold text-[#171717] transition hover:bg-black/10"
-                >
-                  {mobilePlotExpanded ? "Show less" : "View plot details"}
-                  <span aria-hidden>{mobilePlotExpanded ? "⌃" : "⌄"}</span>
-                </button>
-
-                {mobilePlotExpanded ? (
-                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/10 pt-3 text-xs text-[#3f3a34]">
-                    <div>
-                      <span className="block text-[10px] uppercase tracking-wide text-[#756c60]">
-                        Facing
-                      </span>
-                      <strong className="font-semibold text-[#171717]">{selectedPlot.facing}</strong>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] uppercase tracking-wide text-[#756c60]">
-                        Location
-                      </span>
-                      <strong className="font-semibold text-[#171717]">{selectedPlot.location}</strong>
-                    </div>
-                    <Link
-                      href="#contact"
-                      className="col-span-2 mt-1 flex items-center justify-center gap-2 rounded-lg bg-neutral-900 px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
-                    >
-                      Enquire about this plot
-                      <ArrowIcon className="h-3.5 w-3.5" />
-                    </Link>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {/* Desktop plot read-out. The mobile bottom sheet above is md:hidden,
-            so desktop needs its own card or a selected plot has no detail. */}
-        {selectedPlot ? (
-          <div
-            className="pointer-events-auto absolute bottom-3 z-30 hidden w-80 overflow-hidden rounded-xl border border-black/15 bg-[#d9d2c7] shadow-[0_12px_36px_rgba(15,23,42,0.22)] md:block"
-            style={{ left: panelOpen ? DESKTOP_PANEL_RESERVED + 12 : 12 }}
-          >
-            <div className="relative px-3 pt-3 pb-3">
-              <button
-                type="button"
-                aria-label="Close plot details"
-                onClick={() => setSelectedId(null)}
-                className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#171717] text-white transition hover:bg-[#333333]"
-              >
-                <CloseIcon className="h-3 w-3" />
-              </button>
-              <div className="pr-9">
-                <div className="flex items-center gap-2">
-                  <h3 className="truncate text-sm font-semibold text-[#171717]">
-                    {selectedPlot.title}
-                  </h3>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wide text-white uppercase ${
-                      selectedPlot.status === "sold"
-                        ? "bg-[#736b60]"
-                        : "bg-[#1f5c45]"
-                    }`}
+                {/* Actions: Enquiry & View Property */}
+                <div className="mt-3.5 flex items-center gap-2 pt-2.5 border-t border-[#ded9cf]">
+                  <button
+                    type="button"
+                    onClick={() => setPlotEnquiryModalOpen(true)}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-xs font-black tracking-wider uppercase text-[#141414] shadow-xs transition hover:brightness-105 active:scale-[0.98] cursor-pointer"
                   >
-                    {selectedPlot.status}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs font-medium text-[#3f3a34]">
-                  {selectedPlot.area} · {selectedPlot.price}
-                </p>
-                <p className="mt-0.5 truncate text-xs text-[#5c5348]">
-                  {selectedPlot.location}
-                </p>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-black/10 pt-3 text-xs text-[#3f3a34]">
-                <div>
-                  <span className="block text-[10px] tracking-wide text-[#756c60] uppercase">
-                    Facing
-                  </span>
-                  <strong className="font-semibold text-[#171717]">
-                    {selectedPlot.facing}
-                  </strong>
-                </div>
-                <div>
-                  <span className="block text-[10px] tracking-wide text-[#756c60] uppercase">
-                    Location
-                  </span>
-                  <strong className="font-semibold text-[#171717]">
-                    {selectedPlot.location}
-                  </strong>
+                    Enquiry
+                  </button>
+                  {activePropertyHref ? (
+                    <Link
+                      href={activePropertyHref}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-black/15 bg-white py-2.5 text-xs font-black text-[#141414] shadow-xs transition hover:bg-[#faf7f0] active:scale-[0.98] whitespace-nowrap"
+                    >
+                      View Property
+                    </Link>
+                  ) : null}
                 </div>
               </div>
-              <Link
-                href="#contact"
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-neutral-900 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
-              >
-                Enquire about this plot
-                <ArrowIcon className="h-3.5 w-3.5" />
-              </Link>
             </div>
-          </div>
+          </>
         ) : null}
 
         {/* FindYourPlot feature cards side-by-side at the bottom of the map */}
@@ -3757,6 +4269,60 @@ export default function MapSection({
             </div>
           </div>
         ) : null}
+
+        {/* Plot Enquiry Form Modal Popup */}
+        {plotEnquiryModalOpen && selectedPlot && (
+          <div
+            className="fixed inset-0 z-300 flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop animate-in fade-in duration-200"
+            onClick={() => setPlotEnquiryModalOpen(false)}
+          >
+            <div
+              className="relative flex w-full sm:w-[96vw] max-w-6xl max-h-[92vh] my-auto flex-col rounded-t-3xl sm:rounded-2xl border-t border-x-0 sm:border border-white/15 bg-[#17191d] text-[#f2f0ea] shadow-2xl overflow-hidden ila-modal-content"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6 bg-[#1a1c21]">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#c6a46c]">
+                    <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h3 className="text-base font-extrabold text-white">
+                      Enquire: {selectedPlot.title}
+                    </h3>
+                    <p className="text-xs text-[#9a9388]">
+                      {activeProject?.name || activeProperty?.name || "ILA Homes"} &middot; {selectedPlot.area} &middot; {selectedPlot.price}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close enquiry form"
+                  title="Close"
+                  onClick={() => setPlotEnquiryModalOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[#c6a46c]/50 bg-[#c6a46c]/20 text-[#c6a46c] shadow-md transition hover:bg-[#c6a46c] hover:text-[#17191d] hover:border-[#c6a46c] active:scale-95"
+                >
+                  <CloseIcon className="h-4.5 w-4.5 stroke-[2.5]" />
+                </button>
+              </div>
+
+              {/* Modal Body: HomeReadyToVisit Enquiry Form */}
+              <div className="flex-1 overflow-y-auto">
+                <HomeReadyToVisit
+                  propertyName={`${activeProject?.name || activeProperty?.name || "Property"} - ${selectedPlot.title}`}
+                  propertyId={activePropertyId || activeProject?.id || activeProperty?.id}
+                  onSuccess={() => setPlotEnquiryModalOpen(false)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
 
         {/* map zoom + fullscreen controls - hidden during compare mode */}
         {!compareSelectingMode ? (

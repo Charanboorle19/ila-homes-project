@@ -11,7 +11,7 @@ import type { PropertyLayoutCords } from "@/services/propertiesService";
  *
  * MapLibre cannot decode TIFF natively, so the file is decoded with geotiff.js
  * into an ImageBitmap and handed to the MapLibre image source. Georeference
- * uses `property_layout_cords` (not GeoTIFF tags).
+ * uses `property_layout_cords` in EPSG:4326 (not GeoTIFF tags).
  *
  * Format priority (SVG → TIFF → PNG) lives in `@/lib/layoutPreview`.
  */
@@ -81,6 +81,44 @@ export async function loadLayoutRaster(options: {
     const decoded = await decodeTiffToDisplayImage(tifUrl, signal);
     if (!decoded) return undefined;
     image = decoded;
+    rasterCache.set(key, { image, cachedAt: Date.now() });
+  }
+
+  return {
+    id: `${propertyId}-layout`,
+    image,
+    coordinates: layoutCordsToCoordinates(cords),
+    opacity,
+    bounds: layoutCordsToBounds(cords),
+  };
+}
+
+/**
+ * Decode a prefetched TIFF ArrayBuffer into a MapLibre layout raster entry.
+ */
+export async function loadLayoutRasterFromBuffer(options: {
+  propertyId: string;
+  buffer: ArrayBuffer;
+  cords: PropertyLayoutCords;
+  opacity?: number;
+  signal?: AbortSignal;
+}): Promise<LayoutRaster | undefined> {
+  const { propertyId, buffer, cords, opacity = 0.85, signal } = options;
+  const key = cacheKey(propertyId);
+
+  const cached = rasterCache.get(key);
+  let image: LayoutRasterImage;
+
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    image = cached.image;
+  } else {
+    const page = await decodeTiffBufferToCanvas(buffer, 0, signal);
+    if (!page) return undefined;
+    try {
+      image = await createImageBitmap(page.canvas);
+    } catch {
+      image = page.canvas;
+    }
     rasterCache.set(key, { image, cachedAt: Date.now() });
   }
 
@@ -182,6 +220,21 @@ export async function decodeTiffPageToCanvas(
     const buffer = await response.arrayBuffer();
     if (signal?.aborted) return null;
     console.log(`[ILA map] layout TIFF bytes received — ${buffer.byteLength} bytes`);
+    return decodeTiffBufferToCanvas(buffer, pageIndex, signal);
+  } catch (error) {
+    console.warn("[ILA map] layout TIFF page decode failed", error);
+    return null;
+  }
+}
+
+/** Decode an already-fetched TIFF buffer onto a canvas. */
+export async function decodeTiffBufferToCanvas(
+  buffer: ArrayBuffer,
+  pageIndex = 0,
+  signal?: AbortSignal,
+): Promise<DecodedTiffPage | null> {
+  try {
+    if (signal?.aborted) return null;
 
     const { fromArrayBuffer } = await import("geotiff");
     const tiff = await fromArrayBuffer(buffer);
@@ -264,7 +317,7 @@ export async function decodeTiffPageToCanvas(
       totalPages,
     };
   } catch (error) {
-    console.warn("[ILA map] layout TIFF page decode failed", error);
+    console.warn("[ILA map] layout TIFF buffer decode failed", error);
     return null;
   }
 }

@@ -276,6 +276,26 @@ function unitToFeature(unit: unknown, index: number): Feature | null {
     "price_per_sq_ft",
   ]);
 
+  const rawDimensions = pickString(obj, [
+    "dimensions",
+    "dimension",
+    "plot_dimensions",
+    "plotDimensions",
+    "size_dimensions",
+  ]);
+
+  // Clean and abbreviate dimensions, e.g. "52 feet * 51 feet 11 inches" -> "52' × 51'11\""
+  const dimensions = rawDimensions
+    ? rawDimensions
+        .replace(/feet|foot|ft\.?/gi, "'")
+        .replace(/inches|inch|in\.?/gi, '"')
+        .replace(/\s*\*\s*|\s*x\s*/gi, " × ")
+        .replace(/\s*'\s*/g, "'")
+        .replace(/\s*"\s*/g, '"')
+        .replace(/\s*×\s*/g, " × ")
+        .trim()
+    : null;
+
   return {
     type: "Feature",
     properties: {
@@ -291,6 +311,7 @@ function unitToFeature(unit: unknown, index: number): Feature | null {
       price,
       per_sq_yard_price: perSqYard,
       per_sq_ft_price: perSqFt,
+      dimensions,
       source_id: pickString(obj, ["id", "uuid", "unit_id", "unitId"]),
       ...(centroidLng != null && centroidLat != null
         ? { centroid_lng: centroidLng, centroid_lat: centroidLat }

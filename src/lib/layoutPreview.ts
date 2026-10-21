@@ -10,12 +10,15 @@ import {
  * The estate master-plan preview (`layout_preview_url` / `tif_url` on units).
  *
  * Format priority (highest → lowest):
- *   1. SVG  — native markup → HTML overlay (sharp under GeoJSON plots)
+ *   1. SVG  — rasterized to ImageBitmap → MapLibre image source
  *   2. TIFF — decoded via `@/lib/layoutTiff` → MapLibre image source
  *   3. PNG  — (also JPEG/WebP) decoded bitmap → MapLibre image source
  *
- * Georeference uses `property_layout_cords` (NW→NE→SE→SW). Bytes come through
- * `/api/layout-image` because the bucket has no CORS headers.
+ * Georeference uses `property_layout_cords` in EPSG:4326 (WGS84 lon/lat
+ * degrees), corners NW→NE→SE→SW as [lng, lat] — same as a MapLibre `image`
+ * source (`[WEST,NORTH]…[WEST,SOUTH]`). The decoded bitmap is uploaded as-is
+ * (no mercator letterboxing); QGIS/EPSG:4326 exports already match those corners.
+ * Bytes come through `/api/layout-image` because the bucket has no CORS headers.
  */
 
 /** Accepts virtual-hosted and path-style presigned S3 URLs, CloudFront, DigitalOcean Spaces, or API host. */
@@ -28,6 +31,30 @@ const HARD_MAX_DECODED_EDGE = 8192;
 
 export type LayoutImageFormat = "svg" | "tiff" | "png";
 
+/**
+ * Unit status palette used for layout rendering.
+ * AVAILABLE keeps its vibrant emerald tone while non-available statuses
+ * (BOOKED, SOLD, BLOCKED) use pure black/dark shades.
+ */
+export const UNIT_STATUS_COLORS = {
+  AVAILABLE: "#10B981", // vibrant, attractive emerald green
+  BOOKED: "#000000",    // black shade
+  SOLD: "#000000",      // black shade
+  BLOCKED: "#000000",   // black shade
+} as const;
+
+export type UnitStatus = keyof typeof UNIT_STATUS_COLORS;
+
+export function getUnitStatusColor(status?: string | null): string {
+  const normalized = (status || "").trim().toUpperCase();
+  if (normalized === "AVAILABLE") return UNIT_STATUS_COLORS.AVAILABLE;
+  if (normalized === "BOOKED") return UNIT_STATUS_COLORS.BOOKED;
+  if (normalized === "SOLD") return UNIT_STATUS_COLORS.SOLD;
+  if (normalized === "BLOCKED") return UNIT_STATUS_COLORS.BLOCKED;
+  return UNIT_STATUS_COLORS.BLOCKED; // fallback to black shade for any non-available/unknown status
+}
+
+
 /** How a candidate should be loaded. */
 export type LayoutImageLoader = "svg-html" | "tiff" | "raster";
 
@@ -37,9 +64,7 @@ export type LayoutImageCandidate = {
   loader: LayoutImageLoader;
 };
 
-type CacheEntry =
-  | { kind: "svg"; markup: string; cachedAt: number }
-  | { kind: "image"; image: LayoutRasterImage; cachedAt: number };
+type CacheEntry = { kind: "image"; image: LayoutRasterImage; cachedAt: number };
 
 const previewCache = new Map<string, CacheEntry>();
 
@@ -133,12 +158,12 @@ function urlLooksLikeSvg(url: string): boolean {
 }
 
 /**
- * Fetches a layout preview and returns a MapLibre / HTML-overlay entry.
+ * Fetches a layout preview and returns a MapLibre image-source entry.
  *
- * SVG → `svgMarkup` (HTML overlay).
+ * SVG → rasterized `ImageBitmap` (no HTML DOM overlay).
  * PNG/JPEG/WebP → decoded `ImageBitmap` for the native MapLibre `image` source
- *   (`estate-layout-image`), georeferenced with NW→NE→SE→SW corners — no DOM
- *   wrapper, so pan/zoom stay locked to the WebGL pipeline under GeoJSON plots.
+ *   (`estate-layout-image`), georeferenced with NW→NE→SE→SW corners — pan/zoom
+ *   stay locked to the WebGL pipeline under GeoJSON plots.
  * TIFF must be loaded via `@/lib/layoutTiff` (`loadLayoutRaster`), not this helper.
  */
 export async function loadLayoutPreviewRaster(options: {
@@ -176,14 +201,6 @@ export async function loadLayoutPreviewRaster(options: {
       kind: cached.kind,
       coordinates: geometry.coordinates,
     });
-    if (cached.kind === "svg") {
-      return {
-        id: `${propertyId}-layout`,
-        svgMarkup: cached.markup,
-        opacity,
-        ...geometry,
-      };
-    }
     return {
       id: `${propertyId}-layout`,
       image: cached.image,
@@ -194,47 +211,84 @@ export async function loadLayoutPreviewRaster(options: {
 
   const fetched = await fetchLayoutPreview(previewUrl, signal);
   if (!fetched) return undefined;
+  if (signal?.aborted) return undefined;
 
-  if (fetched.kind === "svg") {
-    previewCache.set(propertyId, {
-      kind: "svg",
-      markup: fetched.markup,
-      cachedAt: Date.now(),
-    });
-    console.log("[ILA map] layout SVG ready for HTML overlay", {
-      propertyId,
-      coordinates: geometry.coordinates,
-      bounds: geometry.bounds,
-    });
-    return {
-      id: `${propertyId}-layout`,
-      svgMarkup: fetched.markup,
-      opacity,
-      ...geometry,
-    };
-  }
-
+  const image = fetched.image;
   previewCache.set(propertyId, {
     kind: "image",
-    image: fetched.image,
+    image,
     cachedAt: Date.now(),
   });
-  console.log("[ILA map] layout PNG registered for MapLibre image source", {
+  console.log("[ILA map] layout preview registered for MapLibre image source", {
     propertyId,
-    size: `${fetched.image.width}x${fetched.image.height}`,
+    size: `${image.width}x${image.height}`,
     coordinates: geometry.coordinates,
   });
   return {
     id: `${propertyId}-layout`,
-    image: fetched.image,
+    image,
     opacity,
     ...geometry,
   };
 }
 
-type FetchedPreview =
-  | { kind: "svg"; markup: string }
-  | { kind: "image"; image: LayoutRasterImage };
+type FetchedPreview = { kind: "image"; image: LayoutRasterImage };
+
+/**
+ * Prints the S3 layout asset itself in DevTools (image thumbnail + metadata).
+ * Uses a blob object URL so Chrome/Edge show the picture inline in the console.
+ */
+function logS3LayoutImageToConsole(
+  label: string,
+  data: Blob | ArrayBuffer | string,
+  meta: { previewUrl?: string; contentType?: string },
+): void {
+  const contentType =
+    meta.contentType ||
+    (data instanceof Blob ? data.type : "") ||
+    (typeof data === "string" ? "image/svg+xml" : "application/octet-stream");
+
+  const blob =
+    data instanceof Blob
+      ? data
+      : new Blob([typeof data === "string" ? data : data], { type: contentType });
+
+  const objectUrl = URL.createObjectURL(blob);
+  const img = new Image();
+  img.onload = () => {
+    const previewH = Math.min(160, img.naturalHeight || 160);
+    const previewW =
+      img.naturalWidth && img.naturalHeight
+        ? Math.max(40, Math.round((previewH * img.naturalWidth) / img.naturalHeight))
+        : 160;
+    console.log(`[ILA map] ${label}`, {
+      previewUrl: meta.previewUrl,
+      contentType: blob.type || contentType,
+      sizeBytes: blob.size,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+      objectUrl,
+    });
+    console.log(
+      `%c `,
+      `font-size:1px;padding:${previewH}px ${previewW}px;background:url(${JSON.stringify(objectUrl)}) center / contain no-repeat;`,
+    );
+    console.log("[ILA map] S3 layout <img>", img);
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  };
+  img.onerror = () => {
+    // TIFF / odd types often fail in <img>; still expose the blob for inspection.
+    console.log(`[ILA map] ${label} (blob — browser could not preview as <img>)`, {
+      previewUrl: meta.previewUrl,
+      contentType: blob.type || contentType,
+      sizeBytes: blob.size,
+      objectUrl,
+      blob,
+    });
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  };
+  img.src = objectUrl;
+}
 
 async function fetchLayoutPreview(
   previewUrl: string,
@@ -255,9 +309,10 @@ async function fetchLayoutPreview(
 
     const blob = await response.blob();
     if (signal?.aborted) return null;
-    console.log(
-      `[ILA map] layout preview fetched — ${blob.size} bytes, ${blob.type || "unknown type"}, ${new URL(previewUrl).host}`,
-    );
+    logS3LayoutImageToConsole("S3 layout image (cold fetch)", blob, {
+      previewUrl,
+      contentType: blob.type,
+    });
 
     const preferSvg =
       mimeLooksLikeSvg(blob.type) || urlLooksLikeSvg(previewUrl);
@@ -268,13 +323,17 @@ async function fetchLayoutPreview(
         console.warn("[ILA map] layout URL looked like SVG but bytes were not");
         return null;
       }
-      return { kind: "svg", markup: prepareSvgMarkup(text) };
+      const image = await rasterizeSvgToImageBitmap(text);
+      if (signal?.aborted) return null;
+      return { kind: "image", image };
     }
 
     const head = await blob.slice(0, 512).text();
     if (textLooksLikeSvg(head)) {
       const text = await blob.text();
-      return { kind: "svg", markup: prepareSvgMarkup(text) };
+      const image = await rasterizeSvgToImageBitmap(text);
+      if (signal?.aborted) return null;
+      return { kind: "image", image };
     }
 
     try {
@@ -293,10 +352,11 @@ async function fetchLayoutPreview(
 }
 
 /**
- * Normalize root `<svg>` so it fills the georeferenced HTML box
- * (`preserveAspectRatio="none"` matches MapLibre image-source stretch).
+ * Ensure xmlns. Use `preserveAspectRatio="none"` so the SVG fills the bitmap
+ * edge-to-edge; MapLibre then maps those edges to EPSG:4326 corners (same as
+ * a georeferenced PNG overlay).
  */
-function prepareSvgMarkup(svgText: string): string {
+export function prepareSvgMarkup(svgText: string): string {
   let text = svgText.trim();
 
   if (/<svg\b/i.test(text) && !/<svg\b[^>]*xmlns=/i.test(text)) {
@@ -307,13 +367,60 @@ function prepareSvgMarkup(svgText: string): string {
   }
 
   text = text.replace(/<svg\b([^>]*)>/i, (_match, attrs: string) => {
-    let next = String(attrs)
-      .replace(/\spreserveAspectRatio\s*=\s*["'][^"']*["']/gi, "")
-      .replace(/\sstyle\s*=\s*["'][^"']*["']/gi, "");
-    return `<svg${next} preserveAspectRatio="none" style="display:block;width:100%;height:100%">`;
+    let next = String(attrs).replace(
+      /\spreserveAspectRatio\s*=\s*["'][^"']*["']/gi,
+      "",
+    );
+    return `<svg${next} preserveAspectRatio="none">`;
   });
 
+  // Inject CSS rules to enforce solid black shade on non-available statuses
+  // (BOOKED, SOLD, BLOCKED) while leaving AVAILABLE bright.
+  const statusStyles = `
+    <style id="ila-status-shades">
+      .status-available, [data-status="available" i], [data-status="AVAILABLE"], .available { fill: ${UNIT_STATUS_COLORS.AVAILABLE} !important; fill-opacity: 1 !important; stroke: #047857 !important; stroke-width: 1.5px !important; }
+      .status-booked, [data-status="booked" i], [data-status="BOOKED"], .booked { fill: ${UNIT_STATUS_COLORS.BOOKED} !important; fill-opacity: 0.35 !important; }
+      .status-sold, [data-status="sold" i], [data-status="SOLD"], .sold { fill: ${UNIT_STATUS_COLORS.SOLD} !important; fill-opacity: 0.35 !important; }
+      .status-blocked, [data-status="blocked" i], [data-status="BLOCKED"], .blocked { fill: ${UNIT_STATUS_COLORS.BLOCKED} !important; fill-opacity: 0.35 !important; }
+    </style>
+  `.trim();
+
+  if (text.includes("</svg>")) {
+    text = text.replace("</svg>", `${statusStyles}</svg>`);
+  }
+
   return text;
+}
+
+/**
+ * Rasterize SVG markup to an ImageBitmap for MapLibre's GPU image source.
+ * Avoids injecting raw SVG into the HTML overlay DOM.
+ */
+async function rasterizeSvgToImageBitmap(
+  svgText: string,
+): Promise<LayoutRasterImage> {
+  const prepared = prepareSvgMarkup(svgText);
+  const svgBlob = new Blob([prepared], { type: "image/svg+xml" });
+  const blobUrl = URL.createObjectURL(svgBlob);
+  try {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = blobUrl;
+    await img.decode();
+    if (typeof createImageBitmap === "function") {
+      return await createImageBitmap(img);
+    }
+    // Fallback: keep a clone that does not depend on the revoked blob URL.
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return img;
+    ctx.drawImage(img, 0, 0);
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
 }
 
 function loadHtmlImage(url: string): Promise<HTMLImageElement> {
@@ -361,6 +468,109 @@ async function decodeRasterPreview(blob: Blob): Promise<LayoutRasterImage> {
   });
   full.close();
   return resized;
+}
+
+/**
+ * Build a LayoutRaster from a prefetched `/api/layout-image` payload
+ * (SVG text or PNG-family ArrayBuffer). TIFF must use `loadLayoutRasterFromBuffer`.
+ * SVG is rasterized to ImageBitmap — never returned as `svgMarkup` for DOM injection.
+ */
+export async function loadLayoutPreviewFromPrefetch(options: {
+  propertyId: string;
+  previewUrl: string;
+  cords: PropertyLayoutCords;
+  data: string | ArrayBuffer;
+  contentType?: string;
+  opacity?: number;
+  signal?: AbortSignal;
+}): Promise<LayoutRaster | undefined> {
+  const {
+    propertyId,
+    previewUrl,
+    cords,
+    data,
+    contentType = "",
+    opacity = 0.9,
+    signal,
+  } = options;
+
+  if (signal?.aborted) return undefined;
+  if (detectLayoutImageFormat(previewUrl) === "tiff") {
+    console.warn(
+      "[ILA map] loadLayoutPreviewFromPrefetch called with a TIFF URL — use loadLayoutRasterFromBuffer",
+      previewUrl,
+    );
+    return undefined;
+  }
+
+  const geometry = {
+    coordinates: layoutCordsToCoordinates(cords),
+    bounds: layoutCordsToBounds(cords),
+  };
+
+  logS3LayoutImageToConsole("S3 layout image (prefetch)", data, {
+    previewUrl,
+    contentType,
+  });
+
+  const preferSvg =
+    typeof data === "string" ||
+    mimeLooksLikeSvg(contentType) ||
+    urlLooksLikeSvg(previewUrl);
+
+  if (preferSvg) {
+    const text =
+      typeof data === "string"
+        ? data
+        : new TextDecoder().decode(data);
+    if (!textLooksLikeSvg(text)) {
+      console.warn("[ILA map] prefetched layout looked like SVG but bytes were not");
+      return undefined;
+    }
+    try {
+      const image = await rasterizeSvgToImageBitmap(text);
+      if (signal?.aborted) return undefined;
+      previewCache.set(propertyId, {
+        kind: "image",
+        image,
+        cachedAt: Date.now(),
+      });
+      return {
+        id: `${propertyId}-layout`,
+        image,
+        opacity,
+        ...geometry,
+      };
+    } catch (svgErr) {
+      if (signal?.aborted) return undefined;
+      console.warn("[ILA map] prefetched SVG rasterize failed", svgErr);
+      return undefined;
+    }
+  }
+
+  try {
+    const blob = new Blob(
+      [typeof data === "string" ? data : new Uint8Array(data)],
+      { type: contentType || "application/octet-stream" },
+    );
+    const image = await decodeRasterPreview(blob);
+    if (signal?.aborted) return undefined;
+    previewCache.set(propertyId, {
+      kind: "image",
+      image,
+      cachedAt: Date.now(),
+    });
+    return {
+      id: `${propertyId}-layout`,
+      image,
+      opacity,
+      ...geometry,
+    };
+  } catch (decodeErr) {
+    if (signal?.aborted) return undefined;
+    console.warn("[ILA map] prefetched layout raster decode failed", decodeErr);
+    return undefined;
+  }
 }
 
 /**

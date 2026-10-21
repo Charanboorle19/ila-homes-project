@@ -276,7 +276,7 @@ export type PropertyUnit = {
   source: unknown;
 };
 
-/** Extent of the master-plan scan, in WGS84 degrees. */
+/** Extent of the master-plan scan, in EPSG:4326 (WGS84 lon/lat degrees). */
 export type PropertyLayoutCords = {
   east: number;
   west: number;

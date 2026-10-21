@@ -210,7 +210,7 @@ No App Router `error.tsx` file exists.
 - `/properties`: `PropertiesList` represents list-load failure in client state; favourite failures are shown separately and do not fail the route.
 - `/properties/[propertyId]`: invalid API ids and failed API property loads render an in-page unavailable state rather than throwing to a route error boundary. Documents and life-stage-fit failures are isolated from the main property view.
 - `/property/[trackingToken]/view`: a failed or unresolved token renders an in-page unavailable state using the same classes and copy as `ApiPropertyView`'s own error state, with a link back to `/properties`. Aborted token requests are ignored.
-- `/api/layout-image`: returns `400` for missing/invalid/non-HTTPS/non-S3 `url`, passes through `403`/`404` classes of upstream failures, returns `413` for oversized data, and returns `502` for other upstream/fetch failures.
+- `/api/layout-image`: returns `400` for missing/invalid/non-HTTPS/non-S3 `url`, propagates non-OK upstream status codes, returns `413` for oversized data, and returns `502` for fetch failures.
 
 Exact handling of unexpected render exceptions is `UNKNOWN — needs verification` because no route-level error file is present.
 
@@ -396,5 +396,5 @@ Three decisions in that shape:
 - Do not treat internal API request paths as browser page routes.
 - Do not infer a redirect, middleware, route-level 404, route-level error boundary, or route-level loading UI where none is present.
 - Preserve the current client/server split: route files compose pages, while client components own browser interactions and most data loading.
-- Preserve the `/api/layout-image?url=` validation boundary if documenting or relying on the current route handler: HTTPS S3 hosts only, no forwarded cookies, 60 MB maximum, and private no-store responses.
+- Preserve the `/api/layout-image?url=` validation boundary if documenting or relying on the current route handler: HTTPS S3 hosts only, no forwarded cookies, Edge runtime, 256 MB maximum, SVG/PNG/TIFF content-type inference, and public CDN cache / CORS headers.
 - If a behavior cannot be confirmed from source, retain the exact wording `UNKNOWN — needs verification` rather than inferring it.

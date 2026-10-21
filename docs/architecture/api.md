@@ -6,7 +6,7 @@ This document describes the API architecture currently implemented in the reposi
 
 The application uses a browser-oriented service layer over an external ILA API. The service layer provides property catalogue/detail data, units and plot geometry, locations, documents, Buyer Fit, nearby places, property features and feature-based property matching, the active tenant Instagram reel, tracked property shares, public lead creation, public site-visit booking, anonymous visitor/session identity, favourites, and analytics. Static property records remain a separate source for local property ids and fallback presentation; `ShortlistShare` uses the API property list directly, and is currently unmounted.
 
-The application also exposes one same-origin Next.js route, `/api/layout-image`, which proxies validated presigned S3 layout images for browser/MapLibre use.
+The application also exposes same-origin Next.js routes: `/api/layout-image`, which proxies validated presigned S3 layout images for browser/MapLibre use, and `/api/estates/[id]`, which aggregates property detail and units from the external API.
 
 ## 2. API base URL configuration
 
@@ -290,16 +290,29 @@ No direct `POST /api/events` call was found in the current source; the tracker c
 - **Errors:** a missing `data.property.id`, a failed request, or an aborted request renders the route's in-page unavailable state. Aborted results are ignored.
 - **UNKNOWN — needs verification:** whether the endpoint records the share as viewed as a side effect of being read, which is why the request must not be prefetched or cached; and whether it requires a prior visitor cookie before resolving a token.
 
+### `GET /api/estates/[id]` (same-origin Next.js route)
+
+- **Path parameters:** `id`, the API property UUID.
+- **Query parameters/body:** none.
+- **Required headers:** optional incoming `x-tenant-domain`; when absent the handler falls back to `NEXT_PUBLIC_TENANT_DOMAIN`, then `'192.168.29.7'`. Upstream also sends `ngrok-skip-browser-warning: true`. The browser prefetch client sends `X-Tenant-Domain` via `resolveTenantDomain()`.
+- **Upstream:** concurrently fetches `${NEXT_PUBLIC_API_URL}/api/properties/{id}` and `${NEXT_PUBLIC_API_URL}/api/properties/{id}/units?limit=all` (base URL falls back to `https://realestate.sperow.in`). Upstream headers are `Accept: application/json`, `X-Tenant-Domain: {tenantDomain}`, and `ngrok-skip-browser-warning: true`.
+- **Response:** `{ property: propJson.data, units: unitsJson.data | null }`. Units failure is non-fatal — the route still returns the property with `units: null`.
+- **Errors:** only a failed property detail upstream returns `502`. Missing/failed units are logged and returned as `null`. Pre-warm callers catch and log; a single failing UUID does not block the other warm-ups.
+- **Implementation:** `src/app/api/estates/[id]/route.ts`.
+- **Client cache:** `src/lib/estatePrefetch.ts` stores in-flight/resolved promises in `estateCache` (`prefetchEstate` / `getEstateData` / `clearEstateCache`). Layout assets use `layoutAssetCache` keyed by `getAssetCacheKey(url)` (origin + pathname, no presigned query). When `units.layout_preview_url` is present, it immediately triggers `prefetchLayoutAsset`. `peekLayoutAsset` enables a warm-cache fast path in `attachLayoutImage`.
+
 ### `GET /api/layout-image?url={presignedS3Url}` (same-origin Next.js route)
 
+- **Runtime:** Edge (`export const runtime = "edge"`).
 - **Path parameters:** none.
 - **Query parameters:** required `url`, containing a presigned URL. The handler accepts only HTTPS S3 hosts matching its Amazon S3 hostname pattern.
 - **Request body:** none.
 - **Required headers:** the browser request has no feature-specific required header. The server-side upstream fetch sends `Accept: image/svg+xml,image/png,image/tiff,image/*` and `credentials: omit`.
-- **Response:** successful requests **stream** the upstream image body with `Content-Type`, optional `Content-Length`, and `Cache-Control: private, no-store, no-transform` (no full `arrayBuffer()` buffer in the App Router handler).
-- **Transformation:** the route validates/parses the URL, fetches the S3 object server-side, and returns `upstream.body` directly when `Content-Length` is known and under the cap (max **256 MB**). When length is unknown, bytes pass through a counting TransformStream (no `Content-Length` on that path). `layoutPreview.ts` / `layoutTiff.ts` consume the stream in the browser.
+- **Response:** successful requests **stream** the upstream image body with inferred `Content-Type` (SVG / PNG / TIFF), optional `Content-Length`, `Cache-Control: public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000`, `CDN-Cache-Control: public, s-maxage=604800`, and `Access-Control-Allow-Origin: *`.
+- **Content-Type:** uses the upstream `content-type` when present and not `application/octet-stream`; otherwise infers from the URL extension (`.svg` → `image/svg+xml`, `.png` → `image/png`, `.tif`/`.tiff` → `image/tiff`), falling back to the upstream type or `application/octet-stream`.
+- **Transformation:** the route validates/parses the URL, fetches the S3 object on the edge, and returns `upstream.body` directly when `Content-Length` is known and under the cap (max **256 MB**). When length is unknown, bytes pass through a counting TransformStream (no `Content-Length` on that path). `layoutPreview.ts` / `layoutTiff.ts` consume the stream in the browser.
 - **Consumers:** `loadLayoutPreviewRaster` and `loadLayoutRaster`, used by `MapSection` layout imagery.
-- **Errors:** missing/invalid/non-HTTPS/non-S3 URLs return 400; upstream 403/404 are passed as 403/404 with an error JSON body, other upstream failures return 502; content over 256 MB returns 413 JSON (`layout image too large`) without awaiting body cancel; fetch failures return 502. Expired presigned URLs are identified in the error message where possible.
+- **Errors:** missing/invalid/non-HTTPS/non-S3 URLs return 400; non-OK upstream responses propagate the upstream status with an error JSON body; content over 256 MB returns 413 JSON (`layout image too large`) without awaiting body cancel; fetch failures return 502. Expired presigned URLs are identified in the error message where possible.
 
 ## 17. Service files
 
@@ -345,7 +358,8 @@ Favourites mutations do not expose an `AbortSignal` in their service signatures.
 
 Confirmed API-related variables are:
 
-- `NEXT_PUBLIC_API_URL` — required external API base URL.
+- `NEXT_PUBLIC_API_URL` — required external API base URL. The `/api/estates/[id]` route falls back to `https://realestate.sperow.in` when unset.
+- `NEXT_PUBLIC_TENANT_DOMAIN` — optional tenant hostname fallback used by `/api/estates/[id]` when the incoming `x-tenant-domain` header is absent.
 - `NEXT_PUBLIC_ILA_PROPERTY_ID` — required configured property id used by `ilaUnitsUrl` and related analytics/static configuration.
 - `SITE_DOMAIN` — server-side fallback tenant hostname when `window` is unavailable.
 - `NEXT_PUBLIC_SATELLITE_TILES_URL` — optional map imagery URL; it is not an API request base URL.
@@ -357,7 +371,7 @@ The effective values in the deployment environment are UNKNOWN — needs verific
 
 The external service calls are used primarily from client components/effects because tenant resolution uses the browser hostname. `PropertiesList`, `MapSection`, `GrowthCorridors`, `ApiPropertyView`, the tracked share page route, visitor/session initializers, favourites, and analytics all run from client-side flows. The property detail route page itself is an async Next.js server component, but it only resolves static records before delegating API UUID rendering to the client `ApiPropertyView`. The tracked share route at `/property/[trackingToken]/view` is a client page component for the same tenant-resolution reason.
 
-The `/api/layout-image` handler is server-side and performs its upstream S3 fetch on the application server. No other confirmed Next.js API route handler was found.
+The `/api/layout-image` handler runs on the Edge runtime and streams its upstream S3 fetch with public CDN cache headers. The `/api/estates/[id]` handler is server-side and aggregates external property detail and units responses.
 
 ## 24. API dependencies
 
@@ -399,5 +413,5 @@ The application depends on the external ILA API configured by `NEXT_PUBLIC_API_U
 - Do not emit `ENQUIRY_SUBMIT`; the tracker rejects it as not permitted from the public API. `POST /api/leads` records the submission server-side instead.
 - `apiFetch` sends no `credentials`, so the `visitor_code` cookie is not transmitted to the API. All visitor-scoped calls rely on the explicit `X-Visitor-Code` header instead. If `/api/leads` requires cookie-based identification, `apiFetch` must first gain a `credentials` option.
 - Do not treat API `visibility`, `fit_percentage`, proposed nearby places, presigned URLs, or analytics event names as stronger backend guarantees than the inspected client establishes.
-- The `/api/layout-image` proxy must remain restricted to HTTPS Amazon S3 object hosts, omit browser cookies upstream, enforce the 60 MB limit, and return `Cache-Control: private, no-store` as currently implemented.
+- The `/api/layout-image` proxy must remain restricted to HTTPS Amazon S3 object hosts, omit browser cookies upstream, enforce the 256 MB limit, run on the Edge runtime, infer SVG/PNG/TIFF content types, and return the public CDN cache and CORS headers currently implemented.
 - Do not infer undocumented endpoints, request bodies, authentication guarantees, pagination models, or backend formulas; those items are `UNKNOWN — needs verification` unless confirmed in source.

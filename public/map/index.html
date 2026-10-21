@@ -371,6 +371,14 @@
 
     const GATE = [78.38185, 17.44795]; // plot gate / road entry
 
+    // Site extent (EPSG:4326) — map center is the midpoint of these bounds
+    const WEST = 78.3812;
+    const EAST = 78.3828;
+    const SOUTH = 17.4476;
+    const NORTH = 17.4488;
+    const centerLng = (WEST + EAST) / 2;
+    const centerLat = (SOUTH + NORTH) / 2;
+
     const yearStories = {
       2015: {
         title: 'Greenfield beginnings',
@@ -409,8 +417,7 @@
           id: 'satellite',
           type: 'raster',
           source: 'satellite',
-          minzoom: 0,
-          maxzoom: 22
+
         }
       ]
     };
@@ -419,7 +426,7 @@
       container: 'map',
       // Satellite basemap (Esri World Imagery) — no API key
       style: satelliteStyle,
-      center: [78.3820, 17.4478],
+      center: [centerLng, centerLat],
       zoom: 14.4,
       pitch: 50,
       bearing: -18,
@@ -474,14 +481,13 @@
     };
 
     const availableCells = (() => {
-      const west = 78.3812, east = 78.3828, south = 17.4476, north = 17.4488;
       const cols = 3, rows = 2, gap = 0.00003;
-      const dx = (east - west) / cols, dy = (north - south) / rows;
+      const dx = (EAST - WEST) / cols, dy = (NORTH - SOUTH) / rows;
       const out = [];
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          const x0 = west + c * dx + gap, x1 = west + (c + 1) * dx - gap;
-          const y0 = south + r * dy + gap, y1 = south + (r + 1) * dy - gap;
+          const x0 = WEST + c * dx + gap, x1 = WEST + (c + 1) * dx - gap;
+          const y0 = SOUTH + r * dy + gap, y1 = SOUTH + (r + 1) * dy - gap;
           out.push({
             type: 'Feature',
             properties: {

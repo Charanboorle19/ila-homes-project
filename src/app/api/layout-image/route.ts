@@ -34,7 +34,7 @@ const CACHE_CONTROL =
   "public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000";
 const CDN_CACHE_CONTROL = "public, s-maxage=604800";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 function badRequest(reason: string) {
   return Response.json({ error: reason }, { status: 400 });

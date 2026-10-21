@@ -63,10 +63,19 @@ export async function GET(request: Request, context: RouteContext) {
       });
     }
 
-    return NextResponse.json({
-      property: propJson.data,
-      units,
-    });
+    return NextResponse.json(
+      {
+        property: propJson.data,
+        units,
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Vary": "X-Tenant-Domain",
+        },
+      },
+    );
   } catch (error) {
     console.warn("[api/estates] proxy fetch failed", { id, error });
     return NextResponse.json(

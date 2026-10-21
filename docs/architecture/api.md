@@ -6,7 +6,7 @@ This document describes the API architecture currently implemented in the reposi
 
 The application uses a browser-oriented service layer over an external ILA API. The service layer provides property catalogue/detail data, units and plot geometry, locations, documents, Buyer Fit, nearby places, property features and feature-based property matching, the active tenant Instagram reel, tracked property shares, public lead creation, public site-visit booking, anonymous visitor/session identity, favourites, and analytics. Static property records remain a separate source for local property ids and fallback presentation; `ShortlistShare` uses the API property list directly, and is currently unmounted.
 
-The application also exposes same-origin Next.js routes: `/api/layout-image`, which proxies validated presigned S3 layout images for browser/MapLibre use, and `/api/estates/[id]`, which aggregates property detail and units from the external API.
+The application also exposes same-origin Next.js routes: `/api/properties` (live catalogue proxy with `no-store`), `/api/properties/[id]/units` (live units proxy with `no-store`), `/api/estates/[id]` (live property detail and units aggregator with `no-store`), and `/api/layout-image` (proxies validated presigned S3 layout images with aggressive long-lived CDN cache headers for browser/MapLibre use).
 
 ## 2. API base URL configuration
  

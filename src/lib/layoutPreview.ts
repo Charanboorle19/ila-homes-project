@@ -34,13 +34,13 @@ export type LayoutImageFormat = "svg" | "tiff" | "png";
 /**
  * Unit status palette used for layout rendering.
  * AVAILABLE keeps its vibrant emerald tone while non-available statuses
- * (BOOKED, SOLD, BLOCKED) use pure black/dark shades.
+ * (BOOKED, SOLD, BLOCKED) have no dark shade overlay (transparent).
  */
 export const UNIT_STATUS_COLORS = {
   AVAILABLE: "#10B981", // vibrant, attractive emerald green
-  BOOKED: "#000000",    // black shade
-  SOLD: "#000000",      // black shade
-  BLOCKED: "#000000",   // black shade
+  BOOKED: "transparent",
+  SOLD: "transparent",
+  BLOCKED: "transparent",
 } as const;
 
 export type UnitStatus = keyof typeof UNIT_STATUS_COLORS;
@@ -51,7 +51,7 @@ export function getUnitStatusColor(status?: string | null): string {
   if (normalized === "BOOKED") return UNIT_STATUS_COLORS.BOOKED;
   if (normalized === "SOLD") return UNIT_STATUS_COLORS.SOLD;
   if (normalized === "BLOCKED") return UNIT_STATUS_COLORS.BLOCKED;
-  return UNIT_STATUS_COLORS.BLOCKED; // fallback to black shade for any non-available/unknown status
+  return "transparent";
 }
 
 
@@ -374,14 +374,10 @@ export function prepareSvgMarkup(svgText: string): string {
     return `<svg${next} preserveAspectRatio="none">`;
   });
 
-  // Inject CSS rules to enforce solid black shade on non-available statuses
-  // (BOOKED, SOLD, BLOCKED) while leaving AVAILABLE bright.
+  // Highlight AVAILABLE status with crisp emerald green without darkening non-available plots.
   const statusStyles = `
     <style id="ila-status-shades">
-      .status-available, [data-status="available" i], [data-status="AVAILABLE"], .available { fill: ${UNIT_STATUS_COLORS.AVAILABLE} !important; fill-opacity: 1 !important; stroke: #047857 !important; stroke-width: 1.5px !important; }
-      .status-booked, [data-status="booked" i], [data-status="BOOKED"], .booked { fill: ${UNIT_STATUS_COLORS.BOOKED} !important; fill-opacity: 0.35 !important; }
-      .status-sold, [data-status="sold" i], [data-status="SOLD"], .sold { fill: ${UNIT_STATUS_COLORS.SOLD} !important; fill-opacity: 0.35 !important; }
-      .status-blocked, [data-status="blocked" i], [data-status="BLOCKED"], .blocked { fill: ${UNIT_STATUS_COLORS.BLOCKED} !important; fill-opacity: 0.35 !important; }
+      .status-available, [data-status="available" i], [data-status="AVAILABLE"], .available { fill: ${UNIT_STATUS_COLORS.AVAILABLE} !important; fill-opacity: 1 !important; stroke: none !important; stroke-width: 0 !important; }
     </style>
   `.trim();
 

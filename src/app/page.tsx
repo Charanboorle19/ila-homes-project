@@ -1,93 +1,46 @@
-"use client";
+import HomeClientView from "@/components/HomeClientView";
+import type { PropertyListItem } from "@/services/propertiesService";
 
-import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
-import IlaIntroLoader from "@/components/IlaIntroLoader";
+async function getInitialCatalogue(): Promise<PropertyListItem[]> {
+  const backendBase = (
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLICAPIURL ||
+    "https://realestate.sperow.in"
+  ).replace(/\/+$/, "");
 
-/** Hard cap for the brand splash — never wait on MapLibre tiles / onMapLoaded. */
-const INTRO_MAX_MS = 1400;
-const INTRO_FADE_MS = 300;
-/** Mount WebGL after first paint of the intro; still before splash is fully gone. */
-const MAP_MOUNT_MS = 1200;
+  const tenantDomain =
+    process.env.NEXT_PUBLIC_TENANT_DOMAIN ||
+    process.env.SITE_DOMAIN ||
+    "192.168.29.7";
 
-function MapSkeleton() {
-  return (
-    <div
-      className="absolute inset-0 bg-[#090a0c]"
-      aria-label="Loading map"
-      role="status"
-    >
-      <div className="absolute inset-0 animate-pulse bg-[#12141a]" />
-      <div className="absolute inset-x-0 bottom-0 h-1/3 bg-linear-to-t from-black/50 to-transparent" />
-    </div>
-  );
+  try {
+    const res = await fetch(
+      `${backendBase}/api/properties?status=ALL&page=1&per_page=100`,
+      {
+        headers: {
+          Accept: "application/json",
+          "X-Tenant-Domain": tenantDomain,
+          "ngrok-skip-browser-warning": "true",
+        },
+        cache: "no-store",
+      },
+    );
+
+    if (!res.ok) {
+      console.warn("[page.tsx] initial catalogue upstream error", res.status);
+      return [];
+    }
+
+    const json = await res.json();
+    return Array.isArray(json?.data?.items) ? json.data.items : [];
+  } catch (error) {
+    console.warn("[page.tsx] failed to fetch initial catalogue", error);
+    return [];
+  }
 }
 
-const MapSection = dynamic(() => import("@/components/MapSection"), {
-  ssr: false,
-  loading: () => <MapSkeleton />,
-});
+export default async function HomePage() {
+  const initialProperties = await getInitialCatalogue();
 
-/**
- * Homepage composition.
- *
- * Brand intro runs on a fixed timer and fades out regardless of map readiness,
- * so LCP can register on the splash/placeholder instead of waiting for tiles.
- * MapLibre mounts independently after a short delay.
- */
-export default function Home() {
-  const [shouldMountMap, setShouldMountMap] = useState(false);
-  const [introOpaque, setIntroOpaque] = useState(true);
-  const [loaderVisible, setLoaderVisible] = useState(true);
-
-  useEffect(() => {
-    document.documentElement.classList.add("no-scroll");
-    document.body.classList.add("no-scroll");
-
-    return () => {
-      document.documentElement.classList.remove("no-scroll");
-      document.body.classList.remove("no-scroll");
-    };
-  }, []);
-
-  useEffect(() => {
-    const mountTimer = setTimeout(() => {
-      setShouldMountMap(true);
-    }, MAP_MOUNT_MS);
-
-    const fadeTimer = setTimeout(() => {
-      setIntroOpaque(false);
-    }, INTRO_MAX_MS - INTRO_FADE_MS);
-
-    const hideTimer = setTimeout(() => {
-      setLoaderVisible(false);
-    }, INTRO_MAX_MS);
-
-    return () => {
-      clearTimeout(mountTimer);
-      clearTimeout(fadeTimer);
-      clearTimeout(hideTimer);
-    };
-  }, []);
-
-  return (
-    <div className="relative flex-1 w-full h-[calc(100vh-var(--nav-h))] max-h-[calc(100vh-var(--nav-h))] overflow-hidden">
-      {/* Lightweight shell under the splash — LCP-friendly before WebGL mounts */}
-      {!shouldMountMap ? <MapSkeleton /> : null}
-
-      {shouldMountMap ? (
-        <MapSection className="h-full w-full" hideDetails={true} />
-      ) : null}
-
-      {loaderVisible ? (
-        <IlaIntroLoader
-          className={
-            introOpaque
-              ? "opacity-100"
-              : "opacity-0 pointer-events-none transition-opacity duration-300"
-          }
-        />
-      ) : null}
-    </div>
-  );
+  return <HomeClientView initialProperties={initialProperties} />;
 }

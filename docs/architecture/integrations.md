@@ -94,7 +94,7 @@ Client components perform API calls, MapLibre rendering, OpenFreeMap/Esri tile l
 
 ## 20. Server-side integrations
 
-The confirmed server-side integration is `src/app/api/layout-image/route.ts`. It accepts `GET /api/layout-image?url=...`, validates an HTTPS Amazon S3 hostname, fetches upstream with `credentials: "omit"` and an image Accept header, buffers up to 60 MB, and returns the bytes with content type and `Cache-Control: private, no-store`. No browser cookies are forwarded. Other API calls are not confirmed as server-side application proxies. Exact hosting/runtime behavior is UNKNOWN — needs verification.
+The confirmed server-side integration is `src/app/api/layout-image/route.ts`. It accepts `GET /api/layout-image?url=...`, validates an HTTPS Amazon S3 hostname, fetches upstream with `credentials: "omit"` and an image Accept header, and **streams** the body to the client (`upstream.body` passthrough when Content-Length is known; counting TransformStream only when length is absent; max **256 MB**) with content type and `Cache-Control: private, no-store, no-transform`. No browser cookies are forwarded. Other API calls are not confirmed as server-side application proxies. Exact hosting/runtime behavior is UNKNOWN — needs verification.
 
 ## 21. Data flow between integrations
 
@@ -149,7 +149,7 @@ The integration architecture depends on `NEXT_PUBLIC_API_URL`, tenant hostname r
 - Route all ILA API requests through `apiFetch` to preserve base URL, tenant header, common headers, token behavior, JSON parsing, abort signals, and error conversion.
 - Preserve URL-encoded API UUID ids, current endpoint paths/query names, response envelope handling, and `[longitude, latitude]` coordinate order.
 - Keep visitor cookie identity, optional bearer authentication, tenant identity, session storage, API favourites, Property Details localStorage flags, and `ShortlistShare` in-memory shortlist state distinct.
-- Preserve `/api/layout-image` S3-only HTTPS validation, omitted upstream cookies, 60 MB limit, and private no-store response.
+- Preserve `/api/layout-image` S3-only HTTPS validation, omitted upstream cookies, streamed responses (no full-body buffer), 256 MB limit, and private no-store response.
 - Keep MapLibre’s worker at `/maplibre/maplibre-gl-worker.mjs`; preserve OpenFreeMap Liberty and the configured/default satellite tile behavior.
 - Keep documents, Buyer Fit, nearby places, layout images, and property detail requests independently cancellable and partially failure-tolerant.
 - Do not treat static explanatory content, demo activity values, local recommendations, or default imagery as live external integrations.

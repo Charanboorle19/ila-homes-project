@@ -66,6 +66,28 @@ export const LAYOUT_RASTER_SOURCE_ID = "estate-layout-image";
 export const LAYOUT_RASTER_LAYER_ID = "estate-layout-raster";
 
 /**
+ * Native WebGL paint for PNG/TIFF layout imagery.
+ * - nearest resampling: keeps master-plan linework crisp when zoomed in
+ * - fade-duration 0: no cross-fade stutter while panning
+ * - zoom opacity: slightly stronger when framed on the estate
+ */
+export const LAYOUT_RASTER_PAINT = {
+  "raster-resampling": "nearest" as const,
+  "raster-fade-duration": 0,
+  "raster-opacity": [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    13,
+    0.55,
+    15,
+    0.82,
+    17,
+    0.92,
+  ],
+};
+
+/**
  * Initializes and adds all master-plan GeoJSON sources and design layers to the MapLibre map.
  */
 export function initLayoutLayers(map: MapLibreMap) {
@@ -86,30 +108,33 @@ export function initLayoutLayers(map: MapLibreMap) {
     map.addSource("estate-road-centers", { type: "geojson", data: EMPTY_FC });
   }
 
-  // 2. Add georeferenced master plan raster image source & layer
+  // 2. Native MapLibre image source for PNG/TIFF master plans.
+  // Coordinates are NW → NE → SE → SW (property_layout_cords); replaced on open.
   if (!map.getSource(LAYOUT_RASTER_SOURCE_ID)) {
     map.addSource(LAYOUT_RASTER_SOURCE_ID, {
       type: "image",
       coordinates: [
-        [78.37881930400647, 17.136994933863203], // NW
-        [78.3822802855224, 17.136994933863203], // NE
-        [78.3822802855224, 17.13329363718222], // SE
-        [78.37881930400647, 17.13329363718222], // SW
+        [78.37881930400647, 17.136994933863203], // NW (west, north)
+        [78.3822802855224, 17.136994933863203], // NE (east, north)
+        [78.3822802855224, 17.13329363718222], // SE (east, south)
+        [78.37881930400647, 17.13329363718222], // SW (west, south)
       ],
     });
   }
 
+  // Raster lives in WebGL only — no DOM — so it never steals plot clicks.
+  // Inserted before plot fills so GeoJSON stays on top for hit-testing.
   if (!map.getLayer(LAYOUT_RASTER_LAYER_ID)) {
-    map.addLayer({
-      id: LAYOUT_RASTER_LAYER_ID,
-      type: "raster",
-      source: LAYOUT_RASTER_SOURCE_ID,
-      layout: { visibility: "none" },
-      paint: {
-        "raster-opacity": 0.85,
-        "raster-fade-duration": 0,
+    map.addLayer(
+      {
+        id: LAYOUT_RASTER_LAYER_ID,
+        type: "raster",
+        source: LAYOUT_RASTER_SOURCE_ID,
+        layout: { visibility: "none" },
+        paint: LAYOUT_RASTER_PAINT,
       },
-    });
+      map.getLayer("estate-plots-fill") ? "estate-plots-fill" : undefined,
+    );
   }
 
   // 3. Site Pad (Estate boundary polygon)
@@ -314,9 +339,14 @@ export function setLayoutData(map: MapLibreMap, project: EstateProject | null) {
 }
 
 /**
- * Synchronizes the MapLibre raster master-plan image when a layout is open.
- * Native SVG layouts use the HTML overlay instead (`svgMarkup`) and keep this
- * WebGL raster layer hidden so plots stay sharp and clickable above it.
+ * Synchronizes the MapLibre PNG/TIFF master-plan image when a layout is open.
+ *
+ * Pins the decoded bitmap into the WebGL image source with real-world corners
+ * (NW→NE→SE→SW from `property_layout_cords`). SVG layouts still use the HTML
+ * overlay (`svgMarkup`) and keep this raster layer hidden.
+ *
+ * Layer stack: satellite → layout raster → GeoJSON plots. Raster never receives
+ * click/hover — those hit `estate-plots-*` via map.on('click', layerId, …).
  */
 export function syncLayoutRaster(
   map: MapLibreMap,
@@ -332,17 +362,50 @@ export function syncLayoutRaster(
   const showRaster = Boolean(layoutVisible && raster && !useHtmlSvg);
 
   if (raster && !useHtmlSvg) {
-    if (raster.image) {
-      source.updateImage({
-        image: raster.image,
-        coordinates: raster.coordinates,
-      });
-    } else if (raster.url) {
-      source.updateImage({
-        url: raster.url,
-        coordinates: raster.coordinates,
-      });
+    try {
+      // Native image source: already-decoded PNG/TIFF bitmap + geo corners.
+      if (raster.image) {
+        source.updateImage({
+          image: raster.image,
+          coordinates: raster.coordinates,
+        });
+      } else if (raster.url) {
+        source.updateImage({
+          url: raster.url,
+          coordinates: raster.coordinates,
+        });
+      }
+    } catch (error) {
+      console.warn("[ILA map] estate-layout-image updateImage failed", error);
     }
+
+    // Above satellite, strictly under plot fills for hit-testing.
+    try {
+      if (map.getLayer("estate-plots-fill")) {
+        map.moveLayer(LAYOUT_RASTER_LAYER_ID, "estate-plots-fill");
+      } else if (map.getLayer("estate-site-pad-fill")) {
+        map.moveLayer(LAYOUT_RASTER_LAYER_ID, "estate-site-pad-fill");
+      }
+    } catch {
+      // moveLayer throws if ids are missing mid-teardown — ignore.
+    }
+
+    map.setPaintProperty(
+      LAYOUT_RASTER_LAYER_ID,
+      "raster-resampling",
+      LAYOUT_RASTER_PAINT["raster-resampling"],
+    );
+    map.setPaintProperty(
+      LAYOUT_RASTER_LAYER_ID,
+      "raster-fade-duration",
+      LAYOUT_RASTER_PAINT["raster-fade-duration"],
+    );
+    // Zoom-dependent opacity (bitmap clarity under plots across scales).
+    map.setPaintProperty(
+      LAYOUT_RASTER_LAYER_ID,
+      "raster-opacity",
+      LAYOUT_RASTER_PAINT["raster-opacity"],
+    );
   }
 
   map.setLayoutProperty(
@@ -350,9 +413,6 @@ export function syncLayoutRaster(
     "visibility",
     showRaster ? "visible" : "none",
   );
-  if (showRaster && raster?.opacity !== undefined) {
-    map.setPaintProperty(LAYOUT_RASTER_LAYER_ID, "raster-opacity", raster.opacity);
-  }
 }
 
 

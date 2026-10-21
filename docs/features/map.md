@@ -53,9 +53,9 @@ The project has two MapLibre-based map components:
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\data\projects\fromApi.ts` — units-response-to-estate conversion.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\data\plots.ts` — `Plot` and `PlotStatus` types plus legacy/sample plot data.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\satelliteTiles.ts` — satellite source configuration.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\layoutPreview.ts` — layout preview loading. SVGs stay as native markup for the HTML overlay; PNG/JPEG decode to MapLibre image bitmaps. Georeference corners from `property_layout_cords` (NW→NE→SE→SW).
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\layoutPreview.ts` — layout format detection and priority (`resolveLayoutImageCandidates`: SVG → TIFF → PNG). SVG markup for the HTML overlay; PNG-tier bitmaps for MapLibre. Georeference from `property_layout_cords` (NW→NE→SE→SW).
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\layoutSvgHtmlOverlay.ts` — HTML SVG overlay content + `map.project` position sync.
-- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\layoutTiff.ts` — legacy TIFF layout decode (last resort).
+- `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\lib\layoutTiff.ts` — TIFF layout decode (geotiff.js → ImageBitmap) for the MapLibre `estate-layout-image` source; stacked above satellite and below plot fills.
 - `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\loading.css` — shared loading animation used by both components.
 
 ## 5. Data sources used by the map
@@ -127,7 +127,7 @@ List responses are expected as:
 }
 ```
 
-The units response is unwrapped by `fetchPropertyUnits` and supports a payload containing an array, `units`, `plots`, or `items`, or a GeoJSON `FeatureCollection`. Unit features are normalized with fields such as `plot_no`, `status`, `facing`, `sq_yards`, `sq_ft`, `price`, `per_sq_yard_price`, `per_sq_ft_price`, and optional centroid coordinates. Layout imagery prefers SVG on `layout_preview_url` (also accepted when an `.svg` is supplied on the legacy `tif_url` field): `loadLayoutPreviewRaster` proxies the SVG and returns native markup for the HTML overlay, georeferenced with `property_layout_cords` (NW→NE→SE→SW via `map.project`). True `.tif`/`.tiff` URLs still use client-side TIFF decoding into the MapLibre image source. If `property_layout_cords` is empty or missing, layout bounds are derived directly from unit polygon coordinates (`estate.bounds`). Exact backend response variants beyond this normalization are UNKNOWN — needs verification.
+The units response is unwrapped by `fetchPropertyUnits` and supports a payload containing an array, `units`, `plots`, or `items`, or a GeoJSON `FeatureCollection`. Unit features are normalized with fields such as `plot_no`, `status`, `facing`, `sq_yards`, `sq_ft`, `price`, `per_sq_yard_price`, `per_sq_ft_price`, and optional centroid coordinates. Layout imagery format priority is **SVG → TIFF → PNG** (JPEG/WebP count as PNG-tier). `resolveLayoutImageCandidates` in `layoutPreview.ts` inspects both `layout_preview_url` and `tif_url`, sorts by that priority, and `attachLayoutImage` tries each until one loads. SVG → HTML overlay markup; TIFF → `loadLayoutRaster` (geotiff); PNG-tier → bitmap via `loadLayoutPreviewRaster`. All are georeferenced with `property_layout_cords` (NW→NE→SE→SW). If `property_layout_cords` is empty or missing, layout bounds are derived from unit polygon coordinates (`estate.bounds`). Exact backend response variants beyond this normalization are UNKNOWN — needs verification.
 
 ## 9. Functions and hooks used
 
@@ -172,9 +172,11 @@ The source does not expose a separate documented compass, geolocation, or drawin
 
 The plot fill palette is: available `#1F8A68`, sold `#8A8178`, selected `#D4A84B`, white plot edges, green open areas, beige site pad, and black/white road styling. Plot labels use the normalized `label` field (for example, `Plot 24`).
 
-**Layout SVG (preferred):** `layout_preview_url` SVG is fetched via `/api/layout-image`, kept as native markup (`LayoutRaster.svgMarkup`), and drawn in an HTML overlay (`.ila-layout-html-root` / `.ila-layout-svg-box`) georeferenced from `property_layout_cords` with `map.project` on every move/zoom/resize. The overlay uses `pointer-events: none` so GeoJSON plot layers stay clickable. Helpers live in `src/lib/layoutSvgHtmlOverlay.ts` and `src/lib/layoutPreview.ts`.
+**Layout SVG (preferred):** fetched via `/api/layout-image`, kept as native markup (`LayoutRaster.svgMarkup`), drawn in an HTML overlay (`.ila-layout-html-root`) georeferenced from `property_layout_cords` with `map.project`. `pointer-events: none` so plot GeoJSON stays clickable.
 
-**Layout raster (legacy TIFF / PNG):** MapLibre image source id `estate-layout-image` and layer id `estate-layout-raster` (hidden when an HTML SVG overlay is active). Satellite imagery uses source id `satellite-imagery` and layer id `satellite-imagery-layer`.
+**Layout PNG / TIFF (native WebGL):** decoded to `ImageBitmap` and registered on MapLibre image source `estate-layout-image` / raster layer `estate-layout-raster` with corners NW→NE→SE→SW from `property_layout_cords`. Decode preserves native resolution up to the GPU `MAX_TEXTURE_SIZE` (hard cap 8192px on the long edge) so zoomed-in estates stay sharp; paint uses `raster-resampling: nearest`, `raster-fade-duration: 0`, and zoom-interpolated `raster-opacity`. Stack: satellite → layout raster → GeoJSON plots — the raster is visual-only and does not intercept clicks (`map.on('click', 'estate-plots-fill', …)` hits plots directly). Hidden when an HTML SVG overlay is active.
+
+Satellite imagery uses source id `satellite-imagery` and layer id `satellite-imagery-layer`.
 
 `GrowthCorridors` uses one `Marker` for the active location and does not render polygons or estate layers.
 
@@ -317,7 +319,7 @@ Direct map-relevant dependencies are `maplibre-gl`, `geotiff` (layout TIFF suppo
   - *Startup waterfall*: Property list and map tiles are prioritized on first load. Visitor/session/analytics POSTs are idle-deferred via `TelemetryBootstrap`; `GET /api/features` for bottom chips waits until `mapReady` + 800 ms. Wishlist no longer calls `fetchProperties` / `fetchFavorites` on mount. Mount-time silent units warm-up has been eliminated.
   - *Heavy bundle*: MapLibre is statically imported on subpages, but dynamically imported on `/` (`ssr: false`).
   - *Giant component*: `MapSection.tsx` spans ~3,000 lines with ~20 `useState` and ~17 `useEffect` hooks, increasing coupling and regression risks during changes.
-  - *No cache / Proxy buffering*: The image proxy sends `no-store`, buffers up to 120MB, and performs no image resizing, leading to slow repeated layout image loads.
+  - *No cache / Proxy streaming*: The image proxy sends `no-store, no-transform` and streams `upstream.body` (max **256 MB**; counting TransformStream only when Content-Length is absent). Oversized objects return 413 immediately without awaiting body cancel. No server-side image resizing — large TIFFs are still heavy on the client decode path.
 
 ## 25. Important constraints
 

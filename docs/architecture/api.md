@@ -296,10 +296,10 @@ No direct `POST /api/events` call was found in the current source; the tracker c
 - **Query parameters:** required `url`, containing a presigned URL. The handler accepts only HTTPS S3 hosts matching its Amazon S3 hostname pattern.
 - **Request body:** none.
 - **Required headers:** the browser request has no feature-specific required header. The server-side upstream fetch sends `Accept: image/svg+xml,image/png,image/tiff,image/*` and `credentials: omit`.
-- **Response:** successful requests return the upstream image bytes with `Content-Type`, `Content-Length`, and `Cache-Control: private, no-store`.
-- **Transformation:** the route validates/parses the URL, fetches the S3 object server-side, buffers it, and returns it. `layoutPreview.ts` rasterizes SVG (or decodes raster previews) for MapLibre; `layoutTiff.ts` may decode a legacy TIFF into a canvas.
-- **Consumers:** `loadLayoutPreviewRaster` and `decodeTiffToPngDataUrl`, used by `MapSection` layout imagery.
-- **Errors:** missing/invalid/non-HTTPS/non-S3 URLs return 400; upstream 403/404 are passed as 403/404 with an error JSON body, other upstream failures return 502; content over 60 MB returns 413; fetch failures return 502. Expired presigned URLs are identified in the error message where possible.
+- **Response:** successful requests **stream** the upstream image body with `Content-Type`, optional `Content-Length`, and `Cache-Control: private, no-store, no-transform` (no full `arrayBuffer()` buffer in the App Router handler).
+- **Transformation:** the route validates/parses the URL, fetches the S3 object server-side, and returns `upstream.body` directly when `Content-Length` is known and under the cap (max **256 MB**). When length is unknown, bytes pass through a counting TransformStream (no `Content-Length` on that path). `layoutPreview.ts` / `layoutTiff.ts` consume the stream in the browser.
+- **Consumers:** `loadLayoutPreviewRaster` and `loadLayoutRaster`, used by `MapSection` layout imagery.
+- **Errors:** missing/invalid/non-HTTPS/non-S3 URLs return 400; upstream 403/404 are passed as 403/404 with an error JSON body, other upstream failures return 502; content over 256 MB returns 413 JSON (`layout image too large`) without awaiting body cancel; fetch failures return 502. Expired presigned URLs are identified in the error message where possible.
 
 ## 17. Service files
 

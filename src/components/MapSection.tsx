@@ -77,7 +77,10 @@ const PriceEmiFuture = dynamic(
 );
 import { allowAnalyticsFlush, trackEvent } from "@/services/analytics/tracker";
 import { formatInr } from "@/lib/propertyUtils";
-import { loadLayoutPreviewRaster } from "@/lib/layoutPreview";
+import {
+  loadLayoutPreviewRaster,
+  resolveLayoutImageCandidates,
+} from "@/lib/layoutPreview";
 import {
   setLayoutSvgOverlayContent,
   syncLayoutSvgOverlayPosition,
@@ -1123,17 +1126,14 @@ export default function MapSection({
   /**
    * Attaches the master plan to the open estate.
    *
-   * Layout images are SVG (served on `layout_preview_url`, or occasionally on
-   * `tif_url` when that field carries an `.svg`). They are fetched through the
-   * same-origin proxy and kept as native SVG markup for an HTML overlay
-   * georeferenced with `property_layout_cords`. A true `.tif`/`.tiff` URL is
-   * only decoded as a last resort when no SVG/preview is available.
+   * Format priority (from `resolveLayoutImageCandidates` in layoutPreview):
+   *   1. SVG  — HTML overlay
+   *   2. TIFF — MapLibre image via geotiff decode
+   *   3. PNG  — (also JPEG/WebP) MapLibre image bitmap
    *
-   * Both are presigned S3 links that die an hour after they are minted, so a
-   * cached units payload can hand back a URL that is already expired (S3
-   * answers 403 "Request has expired") while the plot geometry — which never
-   * expires — still draws. On that failure the units payload is fetched once
-   * more to obtain a freshly signed URL, and only then is the layout given up on.
+   * Both `layout_preview_url` and `tif_url` are scanned; URLs are tried in that
+   * order until one loads. Presigned links expire (~1h); on total failure the
+   * units payload is refreshed once for fresh signatures, then we give up.
    */
   const attachLayoutImage = useCallback(
     async (input: {
@@ -1145,73 +1145,52 @@ export default function MapSection({
     }) => {
       let { layoutPreviewUrl, tifUrl, cords } = input;
 
-      const resolveLayoutUrls = (preview: string | null, tiffField: string | null) => {
-        const previewIsTiff = Boolean(preview && /\.tiff?(?:$|\?)/i.test(preview));
-        const previewIsSvg = Boolean(preview && /\.svg(?:$|\?)/i.test(preview));
-        const fieldIsTiff = Boolean(tiffField && /\.tiff?(?:$|\?)/i.test(tiffField));
-        const fieldIsSvg = Boolean(tiffField && /\.svg(?:$|\?)/i.test(tiffField));
+      const tryCandidates = async () => {
+        const candidates = resolveLayoutImageCandidates(layoutPreviewUrl, tifUrl);
+        if (candidates.length === 0) return undefined;
 
-        // Screen-ready layout (SVG / PNG / non-TIFF preview). Prefer SVG when
-        // the API still parks it on the legacy `tif_url` field.
-        const effectivePreviewUrl =
-          (preview && !previewIsTiff ? preview : null) ??
-          (fieldIsSvg ? tiffField : null);
+        console.log("[ILA map] layout image candidates (SVG → TIFF → PNG)", {
+          propertyId: input.propertyId,
+          candidates: candidates.map((c) => ({ format: c.format, loader: c.loader })),
+        });
 
-        const effectiveTifUrl =
-          (fieldIsTiff ? tiffField : null) ??
-          (previewIsTiff ? preview : null);
+        for (const candidate of candidates) {
+          if (input.signal.aborted) return undefined;
 
-        // SVG/preview first; geotiff only when that is all we have.
-        const imageUrl = effectivePreviewUrl ?? effectiveTifUrl;
-        const useTiff = Boolean(
-          effectiveTifUrl && imageUrl === effectiveTifUrl,
-        );
-        return { effectivePreviewUrl, effectiveTifUrl, imageUrl, useTiff, previewIsSvg };
-      };
+          const raster =
+            candidate.loader === "tiff"
+              ? await loadLayoutRaster({
+                  propertyId: input.propertyId,
+                  tifUrl: candidate.url,
+                  cords,
+                  signal: input.signal,
+                })
+              : await loadLayoutPreviewRaster({
+                  propertyId: input.propertyId,
+                  previewUrl: candidate.url,
+                  cords,
+                  signal: input.signal,
+                });
 
-      let { imageUrl, useTiff, effectivePreviewUrl } = resolveLayoutUrls(
-        layoutPreviewUrl,
-        tifUrl,
-      );
-      if (!imageUrl) return;
-
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
-        const currentImageUrl: string | null = imageUrl;
-        if (!currentImageUrl) return;
-        let raster = useTiff
-          ? await loadLayoutRaster({
+          if (raster) {
+            console.log("[ILA map] layout image loaded", {
               propertyId: input.propertyId,
-              tifUrl: currentImageUrl,
-              cords,
-              signal: input.signal,
-            })
-          : await loadLayoutPreviewRaster({
-              propertyId: input.propertyId,
-              previewUrl: currentImageUrl,
-              cords,
-              signal: input.signal,
+              format: candidate.format,
+              loader: candidate.loader,
             });
+            return raster;
+          }
 
-        // If the rare TIFF path fails but an SVG/preview URL exists, use that.
-        if (
-          !raster &&
-          useTiff &&
-          effectivePreviewUrl &&
-          effectivePreviewUrl !== currentImageUrl
-        ) {
-          console.warn(
-            "[ILA map] layout TIFF decode failed, falling back to layout preview/SVG",
-          );
-          useTiff = false;
-          imageUrl = effectivePreviewUrl;
-          raster = await loadLayoutPreviewRaster({
+          console.warn("[ILA map] layout candidate failed, trying next format", {
             propertyId: input.propertyId,
-            previewUrl: effectivePreviewUrl,
-            cords,
-            signal: input.signal,
+            format: candidate.format,
           });
         }
+        return undefined;
+      };
 
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const raster = await tryCandidates();
         if (input.signal.aborted) return;
 
         if (raster) {
@@ -1239,10 +1218,6 @@ export default function MapSection({
         layoutPreviewUrl = refreshed.layoutPreviewUrl ?? layoutPreviewUrl;
         tifUrl = refreshed.tifUrl ?? tifUrl;
         if (refreshed.layoutCords) cords = refreshed.layoutCords;
-        ({ imageUrl, useTiff, effectivePreviewUrl } = resolveLayoutUrls(
-          layoutPreviewUrl,
-          tifUrl,
-        ));
       }
     },
     [],

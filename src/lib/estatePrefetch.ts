@@ -105,9 +105,14 @@ export function prefetchLayoutAsset(url: string): Promise<LayoutAssetPayload> {
   if (cached) return cached;
 
   const promise = (async (): Promise<LayoutAssetPayload> => {
+    const cleanUrl = url.split("?")[0];
+    const query = url.includes("?") ? url.split("?")[1] : "";
+    const headers = new Headers(tenantHeaders());
+    if (query) headers.set("x-s3-query", query);
+
     const res = await fetch(
-      `/api/layout-image?url=${encodeURIComponent(url)}`,
-      { headers: tenantHeaders() },
+      `/api/layout-image?url=${encodeURIComponent(cleanUrl)}`,
+      { headers },
     );
     if (!res.ok) {
       layoutAssetCache.delete(key);

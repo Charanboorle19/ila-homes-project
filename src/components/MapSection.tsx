@@ -906,6 +906,7 @@ export type MapSectionProps = {
   hideDetails?: boolean;
   hideSearch?: boolean;
   highlightAvailable?: boolean;
+  initialProperties?: PropertyListItem[];
   onMapLoaded?: () => void;
 };
 
@@ -915,6 +916,7 @@ export default function MapSection({
   hideDetails = false,
   hideSearch = false,
   highlightAvailable = false,
+  initialProperties,
   onMapLoaded,
 }: MapSectionProps = {}) {
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -946,6 +948,8 @@ export default function MapSection({
   const [filter, setFilter] = useState<FilterKey>("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
   const [selectedProjectId, setSelectedProjectId] = useState<ProjectId | null>(null);
   const [mobilePlotExpanded, setMobilePlotExpanded] = useState(false);
   const [propertySheetExpanded, setPropertySheetExpanded] = useState(false);
@@ -1026,9 +1030,10 @@ export default function MapSection({
   //  2. click a property           GET /api/properties/{id}
   //  3. draw its plots             GET /api/properties/{id}/units?limit=all
   //
-  // All browser-side: the tenant is identified by a header the server
-  // cannot send.
-  const [propertyList, setPropertyList] = useState<PropertyListItem[]>([]);
+  // Seeded directly from server-passed initialProperties when available.
+  const [propertyList, setPropertyList] = useState<PropertyListItem[]>(() =>
+    Array.isArray(initialProperties) ? initialProperties : [],
+  );
   const [activePropertyId, setActivePropertyId] = useState<string | null>(null);
   const [activePropertyDetail, setActivePropertyDetail] = useState<ApiProperty | null>(
     null,
@@ -1037,7 +1042,15 @@ export default function MapSection({
   // Coordinates for every listed property, so all of them can be pinned.
   const [propertyAnchors, setPropertyAnchors] = useState<
     Record<string, PropertyAnchor>
-  >({});
+  >(() => {
+    if (!Array.isArray(initialProperties) || initialProperties.length === 0) return {};
+    const seeded: Record<string, PropertyAnchor> = {};
+    for (const item of initialProperties) {
+      const anchor = propertyAnchor(item);
+      if (anchor) seeded[item.id] = anchor;
+    }
+    return seeded;
+  });
 
   // Feature preferences (Find Your Plot tags)
   const [features, setFeatures] = useState<PropertyFeature[]>([]);
@@ -1701,6 +1714,18 @@ export default function MapSection({
 
   // Step 1: list every property — one shared controller/promise per fetch key.
   useEffect(() => {
+    // If initialProperties was already provided by the server and we are not retrying,
+    // we already seeded the state synchronously, so skip the redundant network call.
+    if (
+      Array.isArray(initialProperties) &&
+      initialProperties.length > 0 &&
+      propertiesRetryCount === 0 &&
+      !singlePropertyId
+    ) {
+      setRemoteStatus("ready");
+      return;
+    }
+
     const fetchKey = `${singlePropertyId ?? ""}:${propertiesRetryCount}`;
     let ignore = false;
 
@@ -2148,20 +2173,24 @@ export default function MapSection({
     [activeProject, hoveredPlotId],
   );
 
-  // Floating tags: display compact floating tags ONLY for available plots when zoomed in.
-  // Booked, sold, or blocked plots show no tag when clicked/hovered (they only show the popup).
+  // Floating tags: display compact floating tags for available plots when zoomed in,
+  // and ALWAYS display the tag for whichever plot is clicked/selected (available, booked, sold, or blocked).
   const displayPlotsForTags = useMemo(() => {
     if (!activeProject?.plots) return [];
     const list: typeof activeProject.plots = [];
+    const seen = new Set<string>();
 
     for (const p of activeProject.plots) {
-      if (p.status === "available" && Number.isFinite(p.lng) && Number.isFinite(p.lat)) {
+      if (!Number.isFinite(p.lng) || !Number.isFinite(p.lat)) continue;
+
+      if (p.status === "available" || p.id === selectedId) {
         list.push(p);
+        seen.add(p.id);
       }
     }
 
     return list;
-  }, [activeProject]);
+  }, [activeProject, selectedId]);
 
   const [plotTagPositions, setPlotTagPositions] = useState<Record<string, { x: number; y: number }>>({});
 
@@ -2699,6 +2728,15 @@ export default function MapSection({
           );
           if (!project) return;
 
+          const clickedPlot = project.plots.find((plot) => plot.id === id);
+
+          // If clicked again and it is NOT an available plot (e.g. booked, sold, or blocked),
+          // toggle/unselect it rather than keeping it selected.
+          if (selectedIdRef.current === id && clickedPlot?.status !== "available") {
+            setSelectedId(null);
+            return;
+          }
+
           openProject(project.id, id);
 
           trackEvent({
@@ -2955,48 +2993,45 @@ export default function MapSection({
     const active = selectedId || "";
     const scale = activeProject?.layoutRaster ? 0.5 : 1;
 
-    // Selected plot: translucent emerald green fill (#10B981 at 0.55) with green outline (#047857).
-    // Available plots: solid green (#10B981); booked/sold/blocked: muted dark fill (0.32).
+    // Selected plot:
+    // - If available: translucent emerald green fill (#10B981 at 0.55) with green outline (#047857)
+    // - If booked/sold/blocked: dark shade fill (#1f1f1f at 0.65) with dark outline (#111111)
+    // Unselected plots:
+    // - Available: solid green (#10B981 at 1.0)
+    // - Booked/sold/blocked: 0 fill (transparent, no dark shade obscuring layout)
     map.setPaintProperty("estate-plots-fill", "fill-color", [
       "case",
       ["==", ["get", "id"], active],
-      "#10B981",
+      [
+        "match",
+        ["get", "statusNorm"],
+        "available",
+        "#10B981",
+        "#1f1f1f", // dark shade when booked/sold/blocked plot is clicked
+      ],
       PLOT_STATUS_FILL_COLOR,
     ]);
     map.setPaintProperty("estate-plots-fill", "fill-opacity", [
       "case",
       ["==", ["get", "id"], active],
-      0.55,
+      [
+        "match",
+        ["get", "statusNorm"],
+        "available",
+        0.55,
+        0.65, // noticeable dark fill on the clicked booked/sold plot
+      ],
       [
         "match",
         ["get", "statusNorm"],
         "available",
         1.0,
-        "booked",
-        0.32,
-        "blocked",
-        0.32,
-        0.32, // sold / fallback
+        0, // transparent when unclicked
       ],
     ]);
-    map.setPaintProperty("estate-plots-outline", "line-color", [
-      "case",
-      ["==", ["get", "id"], active],
-      "#047857",
-      PLOT_STATUS_EDGE_COLOR,
-    ]);
-    map.setPaintProperty("estate-plots-outline", "line-width", [
-      "case",
-      ["==", ["get", "id"], active],
-      3.0,
-      [
-        "match",
-        ["get", "statusNorm"],
-        "available",
-        2.0,
-        1.15,
-      ],
-    ]);
+    map.setPaintProperty("estate-plots-outline", "line-color", "transparent");
+    map.setPaintProperty("estate-plots-outline", "line-width", 0);
+    map.setPaintProperty("estate-plots-outline", "line-opacity", 0);
 
     // Hide labels inside plots — info is displayed in the floating tag instead
     if (map.getLayer("estate-plots-label")) {
@@ -3300,34 +3335,46 @@ export default function MapSection({
                   transform: "translate(-50%, -100%) translateY(-8px)",
                 }}
               >
-                <div
-                  className={`relative flex items-center gap-1.5 rounded-md border px-2 py-0.5 shadow-[0_4px_12px_rgba(0,0,0,0.15)] ${
-                    isSelected
-                      ? "border-[#047857] bg-white ring-2 ring-[#10B981]/50"
-                      : "border-black/10 bg-white/98"
-                  }`}
-                >
-                  {/* Plot Number: e.g. Plot 24 */}
-                  <span className="text-[10px] font-bold text-neutral-900 tracking-tight whitespace-nowrap">
-                    Plot {plot.title.replace(/^Plot\s*/i, "")}
-                  </span>
-
-                  {/* Area e.g. 240 sq yd */}
-                  {plot.area && plot.area !== "Area TBA" ? (
-                    <>
-                      <span className="text-neutral-300 text-[9px] leading-none">·</span>
-                      <span className="text-[9.5px] font-semibold text-neutral-600 whitespace-nowrap">
-                        {plot.area.replace(/\s*sq\.?yd/i, " sq yd")}
-                      </span>
-                    </>
-                  ) : null}
-
-                  {/* Minimal bottom pointer stem */}
+                {plot.status === "available" ? (
+                  /* Original tag design for Available plots: Plot No · Size */
                   <div
-                    className="absolute left-1/2 top-full -translate-x-1/2 -mt-px h-0 w-0 border-x-[3.5px] border-x-transparent border-t-[4px] border-t-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)]"
-                    aria-hidden
-                  />
-                </div>
+                    className={`relative flex items-center gap-1.5 rounded-md border px-2 py-0.5 shadow-[0_4px_12px_rgba(0,0,0,0.15)] ${
+                      isSelected
+                        ? "border-[#047857] bg-white ring-2 ring-[#10B981]/50"
+                        : "border-black/10 bg-white/98"
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold text-neutral-900 tracking-tight whitespace-nowrap">
+                      Plot {plot.title.replace(/^Plot\s*/i, "")}
+                    </span>
+
+                    {plot.area && plot.area !== "Area TBA" ? (
+                      <>
+                        <span className="text-neutral-300 text-[9px] leading-none">·</span>
+                        <span className="text-[9.5px] font-semibold text-neutral-600 whitespace-nowrap">
+                          {plot.area.replace(/\s*sq\.?yd/i, " sq yd")}
+                        </span>
+                      </>
+                    ) : null}
+
+                    {/* Minimal bottom pointer stem */}
+                    <div
+                      className="absolute left-1/2 top-full -translate-x-1/2 -mt-px h-0 w-0 border-x-[3.5px] border-x-transparent border-t-[4px] border-t-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)]"
+                      aria-hidden
+                    />
+                  </div>
+                ) : (
+                  /* Booked / Sold / Blocked: Status indication only */
+                  <div className="relative flex items-center rounded-full bg-[#171717] text-white border border-black/30 px-2 py-0.5 shadow-[0_4px_12px_rgba(0,0,0,0.25)] ring-1 ring-black/40">
+                    <span className="text-[9px] font-bold tracking-wider uppercase whitespace-nowrap px-0.5">
+                      {plotStatusDisplayLabel(plot.status)}
+                    </span>
+                    <div
+                      className="absolute left-1/2 top-full -translate-x-1/2 -mt-px h-0 w-0 border-x-[3.5px] border-x-transparent border-t-[4px] border-t-[#171717] drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]"
+                      aria-hidden
+                    />
+                  </div>
+                )}
               </div>
             );
           })}

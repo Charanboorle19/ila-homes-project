@@ -29,15 +29,15 @@ export const LAYOUT_DESIGN = {
 
   // Plot status fills
   available: "#10B981", // vibrant, attractive emerald green
-  booked: "#000000",
-  sold: "#000000",
-  blocked: "#000000",
+  booked: "transparent",
+  sold: "transparent",
+  blocked: "transparent",
 
   // Status edge accents (when not selected)
   availableEdge: "#047857",
-  bookedEdge: "#1A1A1A",
-  soldEdge: "#1A1A1A",
-  blockedEdge: "#1A1A1A",
+  bookedEdge: "rgba(255, 255, 255, 0.4)",
+  soldEdge: "rgba(255, 255, 255, 0.4)",
+  blockedEdge: "rgba(255, 255, 255, 0.4)",
 
   // Plot borders / outlines
   plotEdge: "#FFFFFF",
@@ -249,27 +249,23 @@ export function initLayoutLayers(map: MapLibreMap) {
           ["get", "statusNorm"],
           "available",
           1.0,
-          "booked",
-          0.32,
-          "blocked",
-          0.32,
-          0.32, // sold
+          0, // no dark shade for booked, blocked, sold
         ],
       },
     });
   }
 
-  // 6. Plots Outlines (status-tinted edges so meaning is not fill-only)
+  // 6. Plots Outlines (disabled: no strokes for plots, just color fill)
   if (!map.getLayer("estate-plots-outline")) {
     map.addLayer({
       id: "estate-plots-outline",
       type: "line",
       source: "estate-plots",
-      layout: { visibility: "none", "line-join": "miter" },
+      layout: { visibility: "none" },
       paint: {
-        "line-color": PLOT_STATUS_EDGE_COLOR,
-        "line-width": LAYOUT_DESIGN.plotOutlineWidth,
-        "line-opacity": LAYOUT_DESIGN.plotOutlineOpacity,
+        "line-color": "transparent",
+        "line-width": 0,
+        "line-opacity": 0,
       },
     });
   }

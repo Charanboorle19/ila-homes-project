@@ -10,7 +10,7 @@ The application also exposes same-origin Next.js routes: `/api/layout-image`, wh
 
 ## 2. API base URL configuration
  
-External API requests are joined to `ILA_API_BASE_URL`, loaded from `NEXT_PUBLIC_API_URL` (or `NEXT_PUBLICAPIURL`) by `src/lib/ilaApiConfig.ts`. Trailing slashes are removed. There is no fallback; a missing value throws `Missing required environment variable NEXT_PUBLIC_API_URL or NEXT_PUBLICAPIURL` during module initialization.
+External API requests are joined to `ILA_API_BASE_URL`, loaded from `NEXT_PUBLIC_API_URL` or `NEXT_PUBLICAPIURL` by `src/lib/ilaApiConfig.ts` with fallback to `https://realestate.sperow.in`. Trailing slashes are removed.
  
 The external request form is `${ILA_API_BASE_URL}${path}`, where `path` is an `/api/...` path. The same-origin layout proxy uses the application origin and is not joined to the external base URL.
 

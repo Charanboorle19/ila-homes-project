@@ -10,27 +10,20 @@
  * via a variable (process.env[name]) yields undefined in the browser bundle.
  */
 
-function requireValue(name: string, value: string | undefined): string {
-  if (!value) {
-    throw new Error(
-      `Missing required environment variable ${name}. ` +
-      "Set it in .env.local for local dev, or under Environment Variables in your hosting platform (e.g. Vercel Project Settings).",
-    );
-  }
+// Default fallback matches the project's production backend endpoint & estate ID
+const DEFAULT_API_BASE_URL = "https://realestate.sperow.in";
+const DEFAULT_PROPERTY_ID = "18f431a4-e5cd-46b9-a8a9-1db57ac32ea6";
 
-  // Strip trailing slashes so `${base}${path}` never produces "//api/...".
-  return value.replace(/\/+$/, "");
-}
+export const ILA_API_BASE_URL = (
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLICAPIURL ||
+  DEFAULT_API_BASE_URL
+).replace(/\/+$/, "");
 
-export const ILA_API_BASE_URL = requireValue(
-  "NEXT_PUBLIC_API_URL or NEXT_PUBLICAPIURL",
-  process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLICAPIURL,
-);
-
-export const ILA_PROPERTY_ID = requireValue(
-  "NEXT_PUBLIC_ILA_PROPERTY_ID or NEXT_PUBLICILAPROPERTYID",
-  process.env.NEXT_PUBLIC_ILA_PROPERTY_ID ?? process.env.NEXT_PUBLICILAPROPERTYID,
-);
+export const ILA_PROPERTY_ID =
+  process.env.NEXT_PUBLIC_ILA_PROPERTY_ID ||
+  process.env.NEXT_PUBLICILAPROPERTYID ||
+  DEFAULT_PROPERTY_ID;
 
 export function ilaUnitsUrl(propertyId: string = ILA_PROPERTY_ID): string {
   return `${ILA_API_BASE_URL}/api/properties/${encodeURIComponent(propertyId)}/units?limit=all`;

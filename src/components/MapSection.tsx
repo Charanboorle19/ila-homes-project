@@ -3822,18 +3822,6 @@ export default function MapSection({
               </button>
             )}
 
-            {/* Maximize map button positioned cleanly above the right arrow - hidden when maximized */}
-            {!mapFullscreen ? (
-              <button
-                type="button"
-                aria-label="Maximize map to full screen"
-                title="Maximize map"
-                onClick={toggleNativeFullscreen}
-                className="pointer-events-auto absolute -top-10 right-0 flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-[#171717]/90 text-white/90 shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur-md transition hover:border-[#c6a46c]/60 hover:bg-[#202020] hover:text-[#c6a46c] active:scale-95"
-              >
-                <ExpandIcon className="h-3.5 w-3.5" />
-              </button>
-            ) : null}
 
             {/* Right arrow (mobile/touch only) - exactly in original position */}
             <button

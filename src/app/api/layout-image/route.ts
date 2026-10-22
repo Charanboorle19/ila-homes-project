@@ -45,6 +45,7 @@ function contentTypeFromUrl(url: URL): string | null {
   const path = url.pathname.toLowerCase();
   if (path.endsWith(".svg")) return "image/svg+xml";
   if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".webp")) return "image/webp";
   if (path.endsWith(".tif") || path.endsWith(".tiff")) return "image/tiff";
   return null;
 }
@@ -107,7 +108,7 @@ export async function GET(request: Request) {
 
   try {
     const upstream = await fetch(parsed, {
-      headers: { Accept: "image/svg+xml,image/png,image/tiff,image/*" },
+      headers: { Accept: "image/svg+xml,image/png,image/webp,image/tiff,image/*" },
       credentials: "omit",
       signal: request.signal,
     });

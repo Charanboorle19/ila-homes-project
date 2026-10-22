@@ -149,7 +149,7 @@ The integration architecture depends on `NEXT_PUBLICAPIURL`, tenant hostname res
 - Route all ILA API requests through `apiFetch` to preserve base URL, tenant header, common headers, token behavior, JSON parsing, abort signals, and error conversion.
 - Preserve URL-encoded API UUID ids, current endpoint paths/query names, response envelope handling, and `[longitude, latitude]` coordinate order.
 - Keep visitor cookie identity, optional bearer authentication, tenant identity, session storage, API favourites, Property Details localStorage flags, and `ShortlistShare` in-memory shortlist state distinct.
-- Preserve `/api/layout-image` S3-only HTTPS validation, omitted upstream cookies, streamed Edge responses (no full-body buffer), 256 MB limit, SVG/PNG/TIFF content-type inference, and public CDN cache / CORS headers.
+- Preserve `/api/layout-image` S3-only HTTPS validation, omitted upstream cookies, streamed Edge responses (no full-body buffer), 256 MB limit, SVG/PNG/WebP/TIFF content-type inference, and public CDN cache / CORS headers.
 - Keep MapLibre’s worker at `/maplibre/maplibre-gl-worker.mjs`; preserve OpenFreeMap Liberty and the configured/default satellite tile behavior.
 - Keep documents, Buyer Fit, nearby places, layout images, and property detail requests independently cancellable and partially failure-tolerant.
 - Do not treat static explanatory content, demo activity values, local recommendations, or default imagery as live external integrations.

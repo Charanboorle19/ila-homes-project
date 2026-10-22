@@ -5,11 +5,15 @@ import dynamic from "next/dynamic";
 import IlaIntroLoader from "@/components/IlaIntroLoader";
 import type { PropertyListItem } from "@/services/propertiesService";
 
-/** Hard cap for the brand splash — never wait on MapLibre tiles / onMapLoaded. */
-const INTRO_MAX_MS = 1400;
-const INTRO_FADE_MS = 300;
-/** Mount WebGL after first paint of the intro; still before splash is fully gone. */
-const MAP_MOUNT_MS = 1200;
+/**
+ * Duration for the luxury architectural reveal animation from into-ila-homes.html:
+ * The keyframe sequences run up to 3.75s (masterGlow + progressRun 2.8s + settle).
+ * We keep the loader visible until the reveal completes, then smoothly fade out.
+ */
+const INTRO_MAX_MS = 3800;
+const INTRO_FADE_MS = 500;
+/** Mount WebGL in the background so the map is warm and ready when the loader fades. */
+const MAP_MOUNT_MS = 1800;
 
 function MapSkeleton() {
   return (
@@ -86,7 +90,7 @@ export default function HomeClientView({
           className={
             introOpaque
               ? "opacity-100"
-              : "opacity-0 pointer-events-none transition-opacity duration-300"
+              : "opacity-0 pointer-events-none transition-opacity duration-500 ease-out"
           }
         />
       ) : null}

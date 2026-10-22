@@ -10,16 +10,16 @@ type IlaIntroLoaderProps = {
 export default function IlaIntroLoader({ className = "" }: IlaIntroLoaderProps) {
   return (
     <div
-      className={`ila-intro-overlay fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#090a0c] text-white transition-opacity duration-700 ${className}`}
+      className={`ila-intro-overlay fixed inset-0 z-[100] ${className}`}
       aria-label="Loading ILA Homes..."
       role="status"
     >
-      <div className="ila-intro-stage relative flex w-[92%] max-w-[680px] flex-col items-center">
+      <div className="ila-intro-stage">
         <div className="ila-intro-ambient" aria-hidden />
 
         <svg
-          className="ila-intro-canvas w-full h-auto overflow-visible"
-          viewBox="20 0 546 190"
+          className="ila-intro-canvas"
+          viewBox="0 0 640 190"
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
@@ -89,6 +89,11 @@ export default function IlaIntroLoader({ className = "" }: IlaIntroLoaderProps) 
             </g>
           </g>
         </svg>
+
+        {/* Minimalist Progress Scrubber */}
+        <div className="intro-progress-track">
+          <div className="intro-progress-fill" />
+        </div>
       </div>
     </div>
   );

@@ -396,5 +396,5 @@ Three decisions in that shape:
 - Do not treat internal API request paths as browser page routes.
 - Do not infer a redirect, middleware, route-level 404, route-level error boundary, or route-level loading UI where none is present.
 - Preserve the current client/server split: route files compose pages, while client components own browser interactions and most data loading.
-- Preserve the `/api/layout-image?url=` validation boundary if documenting or relying on the current route handler: HTTPS S3 hosts only, no forwarded cookies, Edge runtime, 256 MB maximum, SVG/PNG/TIFF content-type inference, and public CDN cache / CORS headers.
+- Preserve the `/api/layout-image?url=` validation boundary if documenting or relying on the current route handler: HTTPS S3 hosts only, no forwarded cookies, Edge runtime, 256 MB maximum, SVG/PNG/WebP/TIFF content-type inference, and public CDN cache / CORS headers.
 - If a behavior cannot be confirmed from source, retain the exact wording `UNKNOWN — needs verification` rather than inferring it.

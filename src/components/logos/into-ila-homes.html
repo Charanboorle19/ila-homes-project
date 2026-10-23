@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -70,7 +71,7 @@
       opacity: 0;
       transform: translateY(26px);
       fill: var(--gold-muted);
-      animation: 
+      animation:
         charRise 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards,
         charSolidWhite 0.9s cubic-bezier(0.22, 1, 0.36, 1) 2.25s forwards;
     }
@@ -80,14 +81,37 @@
       fill: var(--gold-primary);
     }
 
-    .c-1 { animation-delay: 0.10s, 2.25s; }
-    .c-2 { animation-delay: 0.16s, 2.25s; }
-    .c-3 { animation-delay: 0.22s, 2.25s; }
-    .c-4 { animation-delay: 0.30s, 2.25s; }
-    .c-5 { animation-delay: 0.36s, 2.25s; }
-    .c-6 { animation-delay: 0.42s, 2.25s; }
-    .c-7 { animation-delay: 0.48s, 2.25s; }
-    .c-8 { animation-delay: 0.54s, 2.25s; }
+    .c-1 {
+      animation-delay: 0.10s, 2.25s;
+    }
+
+    .c-2 {
+      animation-delay: 0.16s, 2.25s;
+    }
+
+    .c-3 {
+      animation-delay: 0.22s, 2.25s;
+    }
+
+    .c-4 {
+      animation-delay: 0.30s, 2.25s;
+    }
+
+    .c-5 {
+      animation-delay: 0.36s, 2.25s;
+    }
+
+    .c-6 {
+      animation-delay: 0.42s, 2.25s;
+    }
+
+    .c-7 {
+      animation-delay: 0.48s, 2.25s;
+    }
+
+    .c-8 {
+      animation-delay: 0.54s, 2.25s;
+    }
 
     /* Subtle golden baseline laser that sweeps under ILA in Step 1 */
     .baseline-laser {
@@ -119,7 +143,7 @@
       stroke-dasharray: 240;
       stroke-dashoffset: 240;
       filter: drop-shadow(0 0 8px rgba(212, 175, 122, 0.4));
-      animation: 
+      animation:
         roofDraw 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.85s forwards,
         strokeToWhite 0.9s ease 2.25s forwards;
     }
@@ -182,6 +206,7 @@
         opacity: 0;
         transform: translateY(26px);
       }
+
       100% {
         opacity: 1;
         transform: translateY(0);
@@ -192,10 +217,12 @@
       0% {
         fill: var(--gold-primary);
       }
+
       40% {
         fill: var(--white);
         filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.65));
       }
+
       100% {
         fill: var(--white);
         filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.25));
@@ -203,20 +230,45 @@
     }
 
     @keyframes laserSweep {
-      0% { opacity: 0; stroke-dashoffset: 140; }
-      30% { opacity: 1; }
-      100% { opacity: 0; stroke-dashoffset: -140; }
+      0% {
+        opacity: 0;
+        stroke-dashoffset: 140;
+      }
+
+      30% {
+        opacity: 1;
+      }
+
+      100% {
+        opacity: 0;
+        stroke-dashoffset: -140;
+      }
     }
 
     @keyframes roofGlide {
-      0% { transform: translateY(18px); }
-      100% { transform: translateY(0); }
+      0% {
+        transform: translateY(18px);
+      }
+
+      100% {
+        transform: translateY(0);
+      }
     }
 
     @keyframes roofDraw {
-      0% { stroke-dashoffset: 240; opacity: 0; }
-      20% { opacity: 1; }
-      100% { stroke-dashoffset: 0; opacity: 1; }
+      0% {
+        stroke-dashoffset: 240;
+        opacity: 0;
+      }
+
+      20% {
+        opacity: 1;
+      }
+
+      100% {
+        stroke-dashoffset: 0;
+        opacity: 1;
+      }
     }
 
     @keyframes pillarLock {
@@ -224,10 +276,13 @@
         opacity: 0;
         transform: translateY(-24px);
       }
+
       70% {
         opacity: 1;
-        transform: translateY(1.5px); /* Crisp mechanical settle */
+        transform: translateY(1.5px);
+        /* Crisp mechanical settle */
       }
+
       100% {
         opacity: 1;
         transform: translateY(0);
@@ -238,10 +293,12 @@
       0% {
         stroke: var(--gold-primary);
       }
+
       40% {
         stroke: var(--white);
         filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.7));
       }
+
       100% {
         stroke: var(--white);
         filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.25));
@@ -249,19 +306,40 @@
     }
 
     @keyframes sheenSweep {
-      0% { transform: translateX(-180px) skewX(-25deg); }
-      100% { transform: translateX(780px) skewX(-25deg); }
+      0% {
+        transform: translateX(-180px) skewX(-25deg);
+      }
+
+      100% {
+        transform: translateX(780px) skewX(-25deg);
+      }
     }
 
     @keyframes ambientPulse {
-      0% { opacity: 0; transform: translate(-50%, -55%) scale(0.8); }
-      45% { opacity: 1; transform: translate(-50%, -55%) scale(1.15); }
-      100% { opacity: 0.45; transform: translate(-50%, -55%) scale(1); }
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -55%) scale(0.8);
+      }
+
+      45% {
+        opacity: 1;
+        transform: translate(-50%, -55%) scale(1.15);
+      }
+
+      100% {
+        opacity: 0.45;
+        transform: translate(-50%, -55%) scale(1);
+      }
     }
 
     @keyframes progressRun {
-      0% { transform: translateX(-100%); }
-      100% { transform: translateX(0%); }
+      0% {
+        transform: translateX(-100%);
+      }
+
+      100% {
+        transform: translateX(0%);
+      }
     }
 
     /* Replay Button */
@@ -285,6 +363,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <div class="stage" id="animation-stage">
@@ -317,10 +396,12 @@
           <path d="M 62 94 H 72 V 136 H 104 V 146 H 68 Q 62 146 62 140 Z" />
           <path d="M 118 94 H 132 L 158 138 H 145 L 139 128 H 111 L 105 138 H 92 Z M 116 119 H 134 L 125 103 Z" />
           <path d="M 184 94 H 195 V 111 H 222 V 94 H 233 V 138 H 222 V 121 H 195 V 138 H 184 Z" />
-          <path d="M 254 94 H 284 Q 296 94 296 106 V 126 Q 296 138 284 138 H 254 Q 242 138 242 126 V 106 Q 242 94 254 94 Z" />
+          <path
+            d="M 254 94 H 284 Q 296 94 296 106 V 126 Q 296 138 284 138 H 254 Q 242 138 242 126 V 106 Q 242 94 254 94 Z" />
           <path d="M 306 94 H 320 L 336 118 L 352 94 H 366 V 138 H 355 V 109 L 336 136 L 317 109 V 138 H 306 Z" />
           <path d="M 378 94 H 426 V 103 H 389 V 111 H 422 V 120 H 389 V 129 H 426 V 138 H 378 Z" />
-          <path d="M 446 94 H 484 Q 492 94 492 102 V 105 H 481 V 103 H 447 V 111 H 483 Q 492 111 492 120 V 129 Q 492 138 483 138 H 444 Q 435 138 435 129 V 125 H 446 V 129 H 481 V 120 H 445 Q 436 120 436 111 V 102 Q 436 94 446 94 Z" />
+          <path
+            d="M 446 94 H 484 Q 492 94 492 102 V 105 H 481 V 103 H 447 V 111 H 483 Q 492 111 492 120 V 129 Q 492 138 483 138 H 444 Q 435 138 435 129 V 125 H 446 V 129 H 481 V 120 H 445 Q 436 120 436 111 V 102 Q 436 94 446 94 Z" />
         </clipPath>
       </defs>
 
@@ -344,17 +425,21 @@
           <!-- L -->
           <path class="char char-ila c-2" d="M 62 94 H 72 V 136 H 104 V 146 H 68 Q 62 146 62 140 Z" />
           <!-- A -->
-          <path class="char char-ila c-3" d="M 118 94 H 132 L 158 138 H 145 L 139 128 H 111 L 105 138 H 92 Z M 116 119 H 134 L 125 103 Z" />
+          <path class="char char-ila c-3"
+            d="M 118 94 H 132 L 158 138 H 145 L 139 128 H 111 L 105 138 H 92 Z M 116 119 H 134 L 125 103 Z" />
           <!-- H -->
           <path class="char c-4" d="M 184 94 H 195 V 111 H 222 V 94 H 233 V 138 H 222 V 121 H 195 V 138 H 184 Z" />
           <!-- O -->
-          <path class="char c-5" d="M 254 94 H 284 Q 296 94 296 106 V 126 Q 296 138 284 138 H 254 Q 242 138 242 126 V 106 Q 242 94 254 94 Z M 253 106 V 126 Q 253 128 256 128 H 282 Q 285 128 285 126 V 106 Q 285 104 282 104 H 256 Q 253 104 253 106 Z" />
+          <path class="char c-5"
+            d="M 254 94 H 284 Q 296 94 296 106 V 126 Q 296 138 284 138 H 254 Q 242 138 242 126 V 106 Q 242 94 254 94 Z M 253 106 V 126 Q 253 128 256 128 H 282 Q 285 128 285 126 V 106 Q 285 104 282 104 H 256 Q 253 104 253 106 Z" />
           <!-- M -->
-          <path class="char c-6" d="M 306 94 H 320 L 336 118 L 352 94 H 366 V 138 H 355 V 109 L 336 136 L 317 109 V 138 H 306 Z" />
+          <path class="char c-6"
+            d="M 306 94 H 320 L 336 118 L 352 94 H 366 V 138 H 355 V 109 L 336 136 L 317 109 V 138 H 306 Z" />
           <!-- E -->
           <path class="char c-7" d="M 378 94 H 426 V 103 H 389 V 111 H 422 V 120 H 389 V 129 H 426 V 138 H 378 Z" />
           <!-- S -->
-          <path class="char c-8" d="M 446 94 H 484 Q 492 94 492 102 V 105 H 481 V 103 H 447 V 111 H 483 Q 492 111 492 120 V 129 Q 492 138 483 138 H 444 Q 435 138 435 129 V 125 H 446 V 129 H 481 V 120 H 445 Q 436 120 436 111 V 102 Q 436 94 446 94 Z" />
+          <path class="char c-8"
+            d="M 446 94 H 484 Q 492 94 492 102 V 105 H 481 V 103 H 447 V 111 H 483 Q 492 111 492 120 V 129 Q 492 138 483 138 H 444 Q 435 138 435 129 V 125 H 446 V 129 H 481 V 120 H 445 Q 436 120 436 111 V 102 Q 436 94 446 94 Z" />
         </g>
       </g>
     </svg>
@@ -370,4 +455,5 @@
     }
   </script>
 </body>
+
 </html>

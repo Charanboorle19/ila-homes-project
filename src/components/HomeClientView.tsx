@@ -6,8 +6,8 @@ import IlaIntroLoader from "@/components/IlaIntroLoader";
 import type { PropertyListItem } from "@/services/propertiesService";
 
 /**
- * Duration for the luxury architectural reveal animation from into-ila-homes.html:
- * The keyframe sequences run up to 3.75s (masterGlow + progressRun 2.8s + settle).
+ * Duration for the luxury architectural reveal animation from ila-logo-redesigned.html:
+ * The keyframe sequences run up to 3.3s (roof glide + staggered letter rise + sheen sweep).
  * We keep the loader visible until the reveal completes, then smoothly fade out.
  */
 const INTRO_MAX_MS = 3800;

@@ -1,7 +1,6 @@
 :root {
   --bg: #000000;
   --gold-primary: #d4af7a;
-  --gold-muted: #5e503f;
   --white: #ffffff;
   --ease-lux: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -9,8 +8,6 @@
 .ila-intro-overlay {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
   z-index: 9999;
   background-color: var(--bg);
   display: flex;
@@ -30,7 +27,6 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2.5rem;
 }
 
 svg.ila-intro-canvas {
@@ -46,46 +42,46 @@ svg.ila-intro-canvas {
   transform: translateY(24px);
   fill: var(--gold-primary);
   animation: 
-    roofGlide 0.95s var(--ease-lux) 0.3s forwards,
-    toSolidWhite 0.9s var(--ease-lux) 2.25s forwards;
+    roofGlide 0.95s var(--ease-lux) 0.25s forwards,
+    toSolidWhite 0.85s var(--ease-lux) 2.1s forwards;
 }
 
-/* PHASE 2: TYPOGRAPHY BASELINE RISE */
+/* PHASE 2: UNIFIED TYPOGRAPHY BASELINE RISE */
 .char {
   opacity: 0;
   transform: translateY(35px);
-  fill: var(--gold-muted);
+  fill: var(--gold-primary);
   animation: 
     charRise 0.85s var(--ease-lux) forwards,
-    toSolidWhite 0.9s var(--ease-lux) 2.25s forwards;
+    toSolidWhite 0.85s var(--ease-lux) 2.1s forwards;
 }
 
-.char-ila {
-  fill: var(--gold-primary);
-}
-
-.c-i { animation-delay: 0.60s, 2.25s; }
-.c-l { animation-delay: 0.67s, 2.25s; }
-.c-a { animation-delay: 0.74s, 2.25s; }
-.c-h { animation-delay: 0.83s, 2.25s; }
-.c-o { animation-delay: 0.90s, 2.25s; }
-.c-m { animation-delay: 0.97s, 2.25s; }
-.c-e { animation-delay: 1.04s, 2.25s; }
-.c-s { animation-delay: 1.11s, 2.25s; }
+/* Perfectly synced continuous wave (60ms step across all letters) */
+.c-i { animation-delay: 0.50s, 2.10s; }
+.c-l { animation-delay: 0.56s, 2.10s; }
+.c-a { animation-delay: 0.62s, 2.10s; }
+.c-h { animation-delay: 0.68s, 2.10s; }
+.c-o { animation-delay: 0.74s, 2.10s; }
+.c-m { animation-delay: 0.80s, 2.10s; }
+.c-e { animation-delay: 0.86s, 2.10s; }
+.c-s { animation-delay: 0.92s, 2.10s; }
 
 /* PHASE 3: SPECULAR SHEEN SWEEP */
 .sheen-runner {
   transform: translateX(-400px) skewX(-24deg);
-  animation: sheenSweep 1.15s var(--ease-lux) 2.35s forwards;
+  animation: sheenSweep 1.1s var(--ease-lux) 2.2s forwards;
 }
 
 .progress-track {
-  width: 140px;
+  position: absolute;
+  top: calc(100% + 1.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
   height: 1.5px;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 2px;
   overflow: hidden;
-  position: relative;
 }
 
 .progress-fill {
@@ -93,7 +89,7 @@ svg.ila-intro-canvas {
   height: 100%;
   background: linear-gradient(90deg, transparent, var(--gold-primary), var(--white));
   transform: translateX(-100%);
-  animation: progressRun 2.8s var(--ease-lux) 0.1s forwards;
+  animation: progressRun 2.6s var(--ease-lux) 0.1s forwards;
 }
 
 @keyframes roofGlide {
@@ -107,14 +103,14 @@ svg.ila-intro-canvas {
 }
 
 @keyframes toSolidWhite {
-  0% { fill: var(--gold-primary); }
-  40% { fill: var(--white); filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.65)); }
+  0% { fill: var(--gold-primary); filter: drop-shadow(0 0 0px transparent); }
+  45% { fill: var(--white); filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.5)); }
   100% { fill: var(--white); filter: drop-shadow(0 0 0px transparent); }
 }
 
 @keyframes sheenSweep {
   0% { transform: translateX(-400px) skewX(-24deg); opacity: 0; }
-  25% { opacity: 1; }
+  20% { opacity: 1; }
   100% { transform: translateX(1200px) skewX(-24deg); opacity: 0; }
 }
 

@@ -139,9 +139,9 @@ export default function IlaIntroLoader({ className = "" }: IlaIntroLoaderProps) 
 
           {/* TYPOGRAPHY BASELINE RISE */}
           <g clipPath="url(#baseline-clip)">
-            <use href="#char-i" className="char char-ila c-i" />
-            <use href="#char-l" className="char char-ila c-l" />
-            <use href="#char-a" className="char char-ila c-a" />
+            <use href="#char-i" className="char c-i" />
+            <use href="#char-l" className="char c-l" />
+            <use href="#char-a" className="char c-a" />
             <use href="#char-h" className="char c-h" />
             <use href="#char-o" className="char c-o" />
             <use href="#char-m" className="char c-m" />

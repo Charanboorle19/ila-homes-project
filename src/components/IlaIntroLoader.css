@@ -1,9 +1,9 @@
 :root {
-  --ila-intro-bg: #000000;
-  --ila-intro-gold-primary: #d4af7a;
-  --ila-intro-gold-muted: #5e503f;
-  --ila-intro-white: #ffffff;
-  --ila-intro-ease-lux: cubic-bezier(0.16, 1, 0.3, 1);
+  --bg: #000000;
+  --gold-primary: #d4af7a;
+  --gold-muted: #5e503f;
+  --white: #ffffff;
+  --ease-lux: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .ila-intro-overlay {
@@ -12,7 +12,7 @@
   width: 100vw;
   height: 100vh;
   z-index: 9999;
-  background-color: var(--ila-intro-bg);
+  background-color: var(--bg);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -40,53 +40,46 @@ svg.ila-intro-canvas {
   display: block;
 }
 
-/* ========================================================
-   PHASE 1: EXACT ROOF & PILLAR (0.7s – 1.8s)
-   ======================================================== */
-.ila-intro-roof-structure {
+/* PHASE 1: EXACT ROOF & PILLAR GLIDE */
+.roof-structure {
   opacity: 0;
   transform: translateY(24px);
-  fill: var(--ila-intro-gold-primary);
+  fill: var(--gold-primary);
   animation: 
-    ilaRoofGlide 0.95s var(--ila-intro-ease-lux) 0.3s forwards,
-    ilaToSolidWhite 0.9s var(--ila-intro-ease-lux) 2.25s forwards;
+    roofGlide 0.95s var(--ease-lux) 0.3s forwards,
+    toSolidWhite 0.9s var(--ease-lux) 2.25s forwards;
 }
 
-/* ========================================================
-   PHASE 2: TYPOGRAPHY BASELINE RISE (0.6s – 1.6s)
-   ======================================================== */
-.ila-intro-char {
+/* PHASE 2: TYPOGRAPHY BASELINE RISE */
+.char {
   opacity: 0;
   transform: translateY(35px);
-  fill: var(--ila-intro-gold-muted);
+  fill: var(--gold-muted);
   animation: 
-    ilaCharRise 0.85s var(--ila-intro-ease-lux) forwards,
-    ilaToSolidWhite 0.9s var(--ila-intro-ease-lux) 2.25s forwards;
+    charRise 0.85s var(--ease-lux) forwards,
+    toSolidWhite 0.9s var(--ease-lux) 2.25s forwards;
 }
 
-.ila-intro-char-ila {
-  fill: var(--ila-intro-gold-primary);
+.char-ila {
+  fill: var(--gold-primary);
 }
 
-.ila-intro-c-i { animation-delay: 0.60s, 2.25s; }
-.ila-intro-c-l { animation-delay: 0.67s, 2.25s; }
-.ila-intro-c-a { animation-delay: 0.74s, 2.25s; }
-.ila-intro-c-h { animation-delay: 0.83s, 2.25s; }
-.ila-intro-c-o { animation-delay: 0.90s, 2.25s; }
-.ila-intro-c-m { animation-delay: 0.97s, 2.25s; }
-.ila-intro-c-e { animation-delay: 1.04s, 2.25s; }
-.ila-intro-c-s { animation-delay: 1.11s, 2.25s; }
+.c-i { animation-delay: 0.60s, 2.25s; }
+.c-l { animation-delay: 0.67s, 2.25s; }
+.c-a { animation-delay: 0.74s, 2.25s; }
+.c-h { animation-delay: 0.83s, 2.25s; }
+.c-o { animation-delay: 0.90s, 2.25s; }
+.c-m { animation-delay: 0.97s, 2.25s; }
+.c-e { animation-delay: 1.04s, 2.25s; }
+.c-s { animation-delay: 1.11s, 2.25s; }
 
-/* ========================================================
-   PHASE 3: SPECULAR SHEEN SWEEP (2.3s – 3.3s)
-   ======================================================== */
-.ila-intro-sheen-runner {
+/* PHASE 3: SPECULAR SHEEN SWEEP */
+.sheen-runner {
   transform: translateX(-400px) skewX(-24deg);
-  animation: ilaSheenSweep 1.15s var(--ila-intro-ease-lux) 2.35s forwards;
+  animation: sheenSweep 1.15s var(--ease-lux) 2.35s forwards;
 }
 
-/* Minimal Progress Line */
-.ila-intro-progress-track {
+.progress-track {
   width: 140px;
   height: 1.5px;
   background: rgba(255, 255, 255, 0.08);
@@ -95,38 +88,37 @@ svg.ila-intro-canvas {
   position: relative;
 }
 
-.ila-intro-progress-fill {
+.progress-fill {
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, var(--ila-intro-gold-primary), var(--ila-intro-white));
+  background: linear-gradient(90deg, transparent, var(--gold-primary), var(--white));
   transform: translateX(-100%);
-  animation: ilaProgressRun 2.8s var(--ila-intro-ease-lux) 0.1s forwards;
+  animation: progressRun 2.8s var(--ease-lux) 0.1s forwards;
 }
 
-/* Keyframes */
-@keyframes ilaRoofGlide {
+@keyframes roofGlide {
   0% { opacity: 0; transform: translateY(24px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes ilaCharRise {
+@keyframes charRise {
   0% { opacity: 0; transform: translateY(35px); }
   100% { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes ilaToSolidWhite {
-  0% { fill: var(--ila-intro-gold-primary); }
-  40% { fill: var(--ila-intro-white); filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.65)); }
-  100% { fill: var(--ila-intro-white); filter: drop-shadow(0 0 0px transparent); }
+@keyframes toSolidWhite {
+  0% { fill: var(--gold-primary); }
+  40% { fill: var(--white); filter: drop-shadow(0 0 14px rgba(255, 255, 255, 0.65)); }
+  100% { fill: var(--white); filter: drop-shadow(0 0 0px transparent); }
 }
 
-@keyframes ilaSheenSweep {
+@keyframes sheenSweep {
   0% { transform: translateX(-400px) skewX(-24deg); opacity: 0; }
   25% { opacity: 1; }
   100% { transform: translateX(1200px) skewX(-24deg); opacity: 0; }
 }
 
-@keyframes ilaProgressRun {
+@keyframes progressRun {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(0%); }
 }

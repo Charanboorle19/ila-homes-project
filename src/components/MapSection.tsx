@@ -2159,11 +2159,6 @@ export default function MapSection({
 
     const updatePositions = () => {
       try {
-        if (map.getZoom() < 16.5) {
-          setPlotTagPositions({});
-          return;
-        }
-
         const bounds = map.getBounds();
         const nextPositions: Record<string, { x: number; y: number }> = {};
 
@@ -4155,19 +4150,19 @@ export default function MapSection({
               className="relative flex w-full sm:max-w-4xl max-h-[92vh] flex-col rounded-t-3xl sm:rounded-2xl border-t border-x-0 sm:border border-white/15 bg-[#17191d] text-[#f2f0ea] shadow-2xl overflow-hidden ila-modal-content"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 sm:px-6">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#c6a46c]">
+              <div className="flex shrink-0 items-start sm:items-center justify-between border-b border-white/10 px-4 py-3.5 sm:px-6 gap-3">
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#c6a46c]">
                     <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <rect x="4" y="2" width="16" height="20" rx="3" />
                       <line x1="8" y1="6" x2="16" y2="6" strokeLinecap="round" />
                     </svg>
                   </span>
-                  <div>
-                    <h3 className="text-base font-bold text-white">
-                      EMI &amp; Appreciation: {emiSelectedProperty?.name || activeProject?.name || activePropertyDetail?.name || "Selected Property"}
+                  <div className="min-w-0 pr-1">
+                    <h3 className="text-sm sm:text-base font-bold text-white truncate">
+                      EMI Calculator: {emiSelectedProperty?.name || activeProject?.name || activePropertyDetail?.name || "Selected Property"}
                     </h3>
-                    <p className="text-xs text-[#9a9388]">
+                    <p className="text-xs text-[#9a9388] truncate mt-0.5">
                       {emiSelectedProperty?.location || activePropertyDetail?.locality || activePropertyDetail?.city || "Hyderabad"} · {formatPrice(emiSelectedProperty?.price || activePropertyDetail?.price || 5000000)}
                     </p>
                   </div>
@@ -4176,9 +4171,9 @@ export default function MapSection({
                   type="button"
                   aria-label="Close EMI calculator"
                   onClick={() => setEmiOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:bg-white/20 hover:text-white"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white active:scale-95"
                 >
-                  <CloseIcon className="h-4 w-4" />
+                  <CloseIcon className="h-4.5 w-4.5" />
                 </button>
               </div>
 
@@ -4189,6 +4184,7 @@ export default function MapSection({
                     price: emiSelectedProperty?.price || activePropertyDetail?.price || 5000000,
                   }}
                   showAmortizationSchedule={true}
+                  showActions={false}
                 />
               </div>
             </div>

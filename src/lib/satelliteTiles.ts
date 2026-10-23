@@ -25,5 +25,16 @@ export const SATELLITE_TILES_URL =
 export const SATELLITE_ATTRIBUTION =
   "Imagery © Esri, Maxar, Earthstar Geographics";
 
+/**
+ * Highest zoom with real imagery across the project's service area.
+ *
+ * The default World Imagery service returns a uniform grey "Map data not
+ * available" tile at z19 for several localities (for example Akshita Golden
+ * Breeze Phase 2 and Song of the South), while z18 still has real imagery.
+ * Capping the raster source here keeps MapLibre from requesting those tiles;
+ * MapSection also uses it as the satellite camera ceiling.
+ */
+export const SATELLITE_MAX_ZOOM = 18;
+
 export const SATELLITE_SOURCE_ID = "satellite-imagery";
 export const SATELLITE_LAYER_ID = "satellite-imagery-layer";

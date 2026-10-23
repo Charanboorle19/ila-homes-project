@@ -49,6 +49,7 @@ import { loadLayoutRaster } from "@/lib/layoutTiff";
 import {
   SATELLITE_ATTRIBUTION,
   SATELLITE_LAYER_ID,
+  SATELLITE_MAX_ZOOM,
   SATELLITE_SOURCE_ID,
   SATELLITE_TILES_URL,
 } from "@/lib/satelliteTiles";
@@ -911,7 +912,7 @@ export default function GrowthCorridors() {
         type: "raster",
         tiles: [SATELLITE_TILES_URL],
         tileSize: 256,
-        maxzoom: 19,
+        maxzoom: SATELLITE_MAX_ZOOM,
         attribution: SATELLITE_ATTRIBUTION,
       });
       map.addLayer({

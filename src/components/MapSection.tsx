@@ -102,6 +102,7 @@ import {
 import {
   SATELLITE_ATTRIBUTION,
   SATELLITE_LAYER_ID,
+  SATELLITE_MAX_ZOOM,
   SATELLITE_SOURCE_ID,
   SATELLITE_TILES_URL,
 } from "@/lib/satelliteTiles";
@@ -210,6 +211,9 @@ const SHOW_ESTATE_GEOJSON = true;
 
 /** Ceiling for the layout fit, so an estate always fills the frame. */
 const LAYOUT_MAX_ZOOM = 17.2;
+
+/** Normal camera ceiling; satellite mode uses `SATELLITE_MAX_ZOOM` instead. */
+const MAP_MAX_ZOOM = 18.5;
 
 
 
@@ -2354,7 +2358,7 @@ export default function MapSection({
           center: [78.42, 17.17],
           zoom: 11.4,
           pitch: 0,
-          maxZoom: 18.5,
+          maxZoom: MAP_MAX_ZOOM,
           // Cap offscreen tile retention and skip wrapped world copies so OpenFreeMap
           // sprites/glyphs compete less with the first viewport's tile decode.
           maxTileCacheSize: 15,
@@ -2533,7 +2537,10 @@ export default function MapSection({
           mapContainerRef.current.classList.remove("map--zoomed-in");
         }
 
-        if (currentZoom >= 18.2) {
+        const satelliteVisible =
+          Boolean(liveMap.getLayer(SATELLITE_LAYER_ID)) &&
+          liveMap.getLayoutProperty(SATELLITE_LAYER_ID, "visibility") !== "none";
+        if (satelliteVisible && currentZoom >= SATELLITE_MAX_ZOOM - 0.05) {
           setMaxZoomNotice(true);
           if (maxZoomNoticeTimerRef.current) clearTimeout(maxZoomNoticeTimerRef.current);
           maxZoomNoticeTimerRef.current = setTimeout(() => {
@@ -2584,7 +2591,7 @@ export default function MapSection({
         type: "raster",
         tiles: [SATELLITE_TILES_URL],
         tileSize: 256,
-        maxzoom: 19,
+        maxzoom: SATELLITE_MAX_ZOOM,
         attribution: SATELLITE_ATTRIBUTION,
       });
       liveMap.addLayer({
@@ -2930,6 +2937,11 @@ export default function MapSection({
       "visibility",
       showSatellite ? "visible" : "none",
     );
+
+    // z19 has no imagery in parts of the service area, so the camera stops at
+    // the last level with real tiles. `setMaxZoom` clamps the current camera if
+    // the visitor switches modes while already zoomed in.
+    map.setMaxZoom(showSatellite ? SATELLITE_MAX_ZOOM : MAP_MAX_ZOOM);
   }, [layoutOpen, mapReady, userMapViewMode]);
 
   // Highlight selected plot + status hierarchy (available strongest)

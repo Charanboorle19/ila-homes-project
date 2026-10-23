@@ -303,14 +303,14 @@ No direct `POST /api/events` call was found in the current source; the tracker c
 
 ### `GET /api/layout-image?url={presignedS3Url}` (same-origin Next.js route)
 
-- **Runtime:** Edge (`export const runtime = "edge"`).
+- **Runtime:** Node.js (`export const runtime = "nodejs"`) because the handler uses native `sharp` image processing.
 - **Path parameters:** none.
 - **Query parameters:** required `url`, containing a presigned URL. The handler accepts only HTTPS S3 hosts matching its Amazon S3 hostname pattern.
 - **Request body:** none.
-- **Required headers:** the browser request has no feature-specific required header. The server-side upstream fetch sends `Accept: image/svg+xml,image/png,image/tiff,image/*` and `credentials: omit`.
-- **Response:** successful requests **stream** the upstream image body with inferred `Content-Type` (SVG / PNG / TIFF), optional `Content-Length`, `Cache-Control: public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000`, `CDN-Cache-Control: public, s-maxage=604800`, and `Access-Control-Allow-Origin: *`.
-- **Content-Type:** uses the upstream `content-type` when present and not `application/octet-stream`; otherwise infers from the URL extension (`.svg` → `image/svg+xml`, `.png` → `image/png`, `.tif`/`.tiff` → `image/tiff`), falling back to the upstream type or `application/octet-stream`.
-- **Transformation:** the route validates/parses the URL, fetches the S3 object on the edge, and returns `upstream.body` directly when `Content-Length` is known and under the cap (max **256 MB**). When length is unknown, bytes pass through a counting TransformStream (no `Content-Length` on that path). `layoutPreview.ts` / `layoutTiff.ts` consume the stream in the browser.
+- **Required headers:** the browser request has no feature-specific required header. The server-side upstream fetch sends `Accept: image/svg+xml,image/png,image/webp,image/tiff,image/*` and `credentials: omit`.
+- **Response:** successful requests return the buffered asset with inferred or transformed `Content-Type`, `Content-Length`, `Cache-Control: public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000`, `CDN-Cache-Control: public, s-maxage=604800`, and `Access-Control-Allow-Origin: *`.
+- **Content-Type:** uses the upstream `content-type` when present and not `application/octet-stream`; otherwise infers from the URL extension (`.svg` → `image/svg+xml`, `.png` → `image/png`, `.jpg`/`.jpeg` → `image/jpeg`, `.webp` → `image/webp`, `.tif`/`.tiff` → `image/tiff`), falling back to the upstream type or `application/octet-stream`. PNG, JPEG, and WebP raster inputs are converted to WebP; resize failure preserves the original bytes and type.
+- **Transformation:** the route validates/parses the URL, fetches and buffers the S3 object (max **256 MB**), then resizes PNG/JPEG/WebP to fit within **4096 × 4096** without enlargement and encodes WebP at quality 85. SVG and TIFF remain unchanged for their client-side loaders. The response’s `Content-Length` describes the transformed bytes. `layoutPreview.ts` / `layoutTiff.ts` consume the response in the browser.
 - **Consumers:** `loadLayoutPreviewRaster` and `loadLayoutRaster`, used by `MapSection` layout imagery.
 - **Errors:** missing/invalid/non-HTTPS/non-S3 URLs return 400; non-OK upstream responses propagate the upstream status with an error JSON body; content over 256 MB returns 413 JSON (`layout image too large`) without awaiting body cancel; fetch failures return 502. Expired presigned URLs are identified in the error message where possible.
 
@@ -413,5 +413,5 @@ The application depends on the external ILA API configured by `NEXT_PUBLICAPIURL
 - Do not emit `ENQUIRY_SUBMIT`; the tracker rejects it as not permitted from the public API. `POST /api/leads` records the submission server-side instead.
 - `apiFetch` sends no `credentials`, so the `visitor_code` cookie is not transmitted to the API. All visitor-scoped calls rely on the explicit `X-Visitor-Code` header instead. If `/api/leads` requires cookie-based identification, `apiFetch` must first gain a `credentials` option.
 - Do not treat API `visibility`, `fit_percentage`, proposed nearby places, presigned URLs, or analytics event names as stronger backend guarantees than the inspected client establishes.
-- The `/api/layout-image` proxy must remain restricted to HTTPS Amazon S3 object hosts, omit browser cookies upstream, enforce the 256 MB limit, run on the Edge runtime, infer SVG/PNG/WebP/TIFF content types, and return the public CDN cache and CORS headers currently implemented.
+- The `/api/layout-image` proxy must remain restricted to HTTPS Amazon S3 object hosts, omit browser cookies upstream, enforce the 256 MB limit, run on the Node.js runtime for `sharp`, infer SVG/PNG/JPEG/WebP/TIFF content types, preserve SVG/TIFF, resize PNG/JPEG/WebP to bounded WebP output, and return the public CDN cache and CORS headers currently implemented.
 - Do not infer undocumented endpoints, request bodies, authentication guarantees, pagination models, or backend formulas; those items are `UNKNOWN — needs verification` unless confirmed in source.

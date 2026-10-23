@@ -73,10 +73,6 @@ export async function loadLayoutRaster(options: {
 
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
     image = cached.image;
-    console.log("[ILA map] reusing cached layout TIFF", {
-      propertyId,
-      size: `${image.width}x${image.height}`,
-    });
   } else {
     const decoded = await decodeTiffToDisplayImage(tifUrl, signal);
     if (!decoded) return undefined;
@@ -201,7 +197,6 @@ export async function decodeTiffPageToCanvas(
     if (query) headers["x-s3-query"] = query;
 
     const proxied = `${LAYOUT_IMAGE_PROXY}?url=${encodeURIComponent(cleanUrl)}`;
-    console.log("[ILA map] fetching layout TIFF via proxy…");
     const response = await fetch(proxied, { headers, signal });
     if (!response.ok) {
       let detail = "";
@@ -218,13 +213,8 @@ export async function decodeTiffPageToCanvas(
       );
       return null;
     }
-    const declared = Number(response.headers.get("content-length") ?? 0);
-    console.log(
-      `[ILA map] layout TIFF download started${declared > 0 ? ` — ${Math.round(declared / (1024 * 1024))} MB declared` : ""}`,
-    );
     const buffer = await response.arrayBuffer();
     if (signal?.aborted) return null;
-    console.log(`[ILA map] layout TIFF bytes received — ${buffer.byteLength} bytes`);
     return decodeTiffBufferToCanvas(buffer, pageIndex, signal);
   } catch (error) {
     console.warn("[ILA map] layout TIFF page decode failed", error);
@@ -270,14 +260,6 @@ export async function decodeTiffBufferToCanvas(
     const outH = Math.max(1, Math.round(height * scale));
     const resample = outW !== width || outH !== height;
 
-    console.log("[ILA map] decoding layout TIFF", {
-      native: `${width}x${height}`,
-      target: `${outW}x${outH}`,
-      maxEdge,
-      downscaled: resample,
-      pages: totalPages,
-      samplesPerPixel: image.getSamplesPerPixel?.() ?? "?",
-    });
 
     const pixels = await readTiffPixels(image, {
       signal,
@@ -309,10 +291,6 @@ export async function decodeTiffBufferToCanvas(
     const imageData = ctx.createImageData(outW, outH);
     imageData.data.set(rgba);
     ctx.putImageData(imageData, 0, 0);
-
-    console.info(
-      `[ILA map] layout TIFF decoded successfully: ${outW}x${outH} (page ${targetIndex + 1}/${totalPages})`,
-    );
 
     return {
       canvas,

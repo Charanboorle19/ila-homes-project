@@ -46,7 +46,10 @@ import {
   estatePlaceholderFromProperty,
   propertyAnchor,
 } from "@/data/projects/fromApi";
-import { layoutCordsToBounds } from "@/data/projects/layoutRasters";
+import {
+  layoutCordsToBounds,
+  layoutCordsToCoordinates,
+} from "@/data/projects/layoutRasters";
 import { getPropertyById, type PropertyRecord } from "@/data/properties";
 import {
   fetchProperties,
@@ -785,11 +788,7 @@ async function ensurePropertyPinLayers(map: MapLibreMap) {
     "text-allow-overlap": false,
     "text-ignore-placement": false,
     "text-padding": 2,
-    "text-font": [
-      "Open Sans Bold",
-      "Open Sans Regular",
-      "Arial Unicode MS Regular",
-    ],
+    "text-font": ["Noto Sans Regular"],
     "text-letter-spacing": 0.015,
     "text-max-width": 14,
     // Lower sort key places first and wins collisions (compare / highlight first).
@@ -1272,28 +1271,58 @@ export default function MapSection({
     }) => {
       let { layoutPreviewUrl, tifUrl, cords } = input;
 
+      // A pre-shrunk local preview can avoid the network and full-size decode.
+      try {
+        const response = await fetch(`/layouts/${input.propertyId}.webp`, {
+          signal: input.signal,
+        });
+        const contentType = response.headers.get("content-type") ?? "";
+        if (response.ok && contentType.startsWith("image/")) {
+          const image = await createImageBitmap(await response.blob());
+          if (input.signal.aborted) {
+            image.close();
+            return;
+          }
+          const localRaster: LayoutRaster = {
+            id: `${input.propertyId}-layout`,
+            image,
+            opacity: 0.9,
+            coordinates: layoutCordsToCoordinates(cords),
+            bounds: layoutCordsToBounds(cords),
+          };
+          applyLayoutRaster(input.propertyId, localRaster);
+          return;
+        }
+      } catch {
+        if (input.signal.aborted) return;
+        // No local file: continue through the existing prefetched/S3 path.
+      }
+
       const decodeAsset = async (
         candidateUrl: string,
         loader: "tiff" | "svg-html" | "raster",
         assetData: string | ArrayBuffer,
         contentType: string,
       ): Promise<LayoutRaster | undefined> => {
+        let raster: LayoutRaster | undefined;
         if (loader === "tiff" && assetData instanceof ArrayBuffer) {
-          return loadLayoutRasterFromBuffer({
+          raster = await loadLayoutRasterFromBuffer({
             propertyId: input.propertyId,
             buffer: assetData,
             cords,
             signal: input.signal,
           });
+        } else {
+          raster = await loadLayoutPreviewFromPrefetch({
+            propertyId: input.propertyId,
+            previewUrl: candidateUrl,
+            cords,
+            data: assetData,
+            contentType,
+            signal: input.signal,
+          });
         }
-        return loadLayoutPreviewFromPrefetch({
-          propertyId: input.propertyId,
-          previewUrl: candidateUrl,
-          cords,
-          data: assetData,
-          contentType,
-          signal: input.signal,
-        });
+        return raster;
       };
 
       // Fast path: warm layoutAssetCache hit → decode and apply, skip refresh loop.
@@ -1316,11 +1345,6 @@ export default function MapSection({
               contentType,
             );
             if (raster) {
-              console.log("[ILA map] layout image fast-path (warm cache)", {
-                propertyId: input.propertyId,
-                format: candidate.format,
-                loader: candidate.loader,
-              });
               applyLayoutRaster(input.propertyId, raster);
               return;
             }
@@ -1333,11 +1357,6 @@ export default function MapSection({
       const tryCandidates = async () => {
         const candidates = resolveLayoutImageCandidates(layoutPreviewUrl, tifUrl);
         if (candidates.length === 0) return undefined;
-
-        console.log("[ILA map] layout image candidates (SVG → TIFF → PNG)", {
-          propertyId: input.propertyId,
-          candidates: candidates.map((c) => ({ format: c.format, loader: c.loader })),
-        });
 
         for (const candidate of candidates) {
           if (input.signal.aborted) return undefined;
@@ -1380,17 +1399,12 @@ export default function MapSection({
           }
 
           if (raster) {
-            console.log("[ILA map] layout image loaded", {
-              propertyId: input.propertyId,
-              format: candidate.format,
-              loader: candidate.loader,
-            });
             return raster;
           }
 
           console.warn("[ILA map] layout candidate failed, trying next format", {
             propertyId: input.propertyId,
-            format: candidate.format,
+            priorityTier: candidate.format === "png" ? "raster" : candidate.format,
           });
         }
         return undefined;
@@ -1491,10 +1505,6 @@ export default function MapSection({
           if (options.openSheet) setSelectedProjectId(staticProject.id);
           if (options.openDesktopCard) setDesktopPropertyCardOpen(true);
 
-          console.info(
-            `[ILA Static] loaded ${staticProject.plots.length} plots`,
-            staticProject.name,
-          );
           return;
         }
 
@@ -1502,12 +1512,6 @@ export default function MapSection({
         const { property: propDetail, units: unitsData } =
           await getEstateData(propertyId);
         if (controller.signal.aborted) return;
-
-        console.log("[ILA API] property click — response", {
-          propertyId,
-          property: propDetail,
-          units: unitsData,
-        });
 
         const detail = propDetail as ApiProperty;
         setActivePropertyDetail(detail);
@@ -1593,10 +1597,6 @@ export default function MapSection({
           setFilter("all");
           if (options.openSheet) setSelectedProjectId(propertyId);
           if (options.openDesktopCard) setDesktopPropertyCardOpen(true);
-          console.info(
-            "[ILA API] property has no units and no coordinates",
-            detail.name,
-          );
           return;
         }
 
@@ -1652,10 +1652,6 @@ export default function MapSection({
         if (options.openSheet) setSelectedProjectId(estate.id);
         if (options.openDesktopCard) setDesktopPropertyCardOpen(true);
 
-        console.info(
-          `[ILA API] loaded ${estate.plots.length} plots`,
-          estate.name,
-        );
       } catch (error) {
         if (controller.signal.aborted) return;
         // A failed warm-up is not a failed map: the list and its pins are
@@ -1690,28 +1686,6 @@ export default function MapSection({
   const selectPropertyRef = useRef(selectProperty);
   selectPropertyRef.current = selectProperty;
 
-  // Pre-warm the first few catalogue estates (and their layout assets) after list load.
-  useEffect(() => {
-    if (!propertyList || propertyList.length === 0) return;
-
-    console.log(
-      "⚡ [MapSection] Triggering pre-warm for:",
-      propertyList.slice(0, 4).map((p) => p.id),
-    );
-
-    const timer = setTimeout(() => {
-      propertyList.slice(0, 4).forEach((prop) => {
-        void prefetchEstate(prop.id).catch((err) => {
-          // Background warm-up is best-effort; one bad estate must not surface
-          // as an uncaught rejection (e.g. upstream 502 for a single UUID).
-          console.warn("[MapSection] estate pre-warm failed", prop.id, err);
-        });
-      });
-    }, 1200);
-
-    return () => clearTimeout(timer);
-  }, [propertyList]);
-
   // Step 1: list every property — one shared controller/promise per fetch key.
   useEffect(() => {
     // If initialProperties was already provided by the server and we are not retrying,
@@ -1732,9 +1706,6 @@ export default function MapSection({
     if (!sharedPropertiesListFetch || sharedPropertiesListFetch.key !== fetchKey) {
       sharedPropertiesListFetch?.controller.abort();
       const controller = new AbortController();
-      console.log(
-        `[ILA API] GET ${ILA_API_BASE_URL}/api/properties?status=ALL&page=1&per_page=100`,
-      );
       sharedPropertiesListFetch = {
         key: fetchKey,
         controller,
@@ -1754,13 +1725,6 @@ export default function MapSection({
       .then((result) => {
         if (ignore || controller.signal.aborted) return;
         setRemoteStatus("ready");
-
-        console.log("[ILA API] properties list — response", {
-          returned: result.items.length,
-          total: result.total,
-          totalPages: result.totalPages,
-          items: result.items,
-        });
 
         setPropertyList(result.items);
 
@@ -1964,16 +1928,6 @@ export default function MapSection({
         )
       : resultPins;
 
-    if (filteredPins.length > 0) {
-      console.info(
-        "[ILA map] Pointers placed from API coordinates:",
-        filteredPins.map((p) => ({
-          name: p.name,
-          latitude: p.center[1],
-          longitude: p.center[0],
-        })),
-      );
-    }
     return filteredPins;
   }, [propertyAnchors, propertyList, projects, singlePropertyId]);
 

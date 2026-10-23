@@ -28,6 +28,8 @@ const ALLOWED_HOST =
 const CACHE_TTL_MS = 45 * 60 * 1000;
 /** Align with TIFF path — MapLibre texture upload (see resolveLayoutMaxDecodedEdge). */
 const HARD_MAX_DECODED_EDGE = 8192;
+/** Smaller WebP previews avoid multi-second decode of oversized source layouts. */
+const WEBP_MAX_DECODED_EDGE = 4096;
 
 export type LayoutImageFormat = "svg" | "tiff" | "png";
 
@@ -67,6 +69,10 @@ export type LayoutImageCandidate = {
 type CacheEntry = { kind: "image"; image: LayoutRasterImage; cachedAt: number };
 
 const previewCache = new Map<string, CacheEntry>();
+
+function getPreviewCacheKey(propertyId: string, previewUrl: string): string {
+  return `${propertyId}:${previewUrl}`;
+}
 
 export function isProxyableLayoutUrl(url: string): boolean {
   try {
@@ -180,6 +186,7 @@ export async function loadLayoutPreviewRaster(options: {
     coordinates: layoutCordsToCoordinates(cords),
     bounds: layoutCordsToBounds(cords),
   };
+  const cacheKey = getPreviewCacheKey(propertyId, previewUrl);
 
   if (!isProxyableLayoutUrl(previewUrl)) {
     console.warn("[ILA map] layout preview url is not an S3 object", previewUrl);
@@ -195,13 +202,8 @@ export async function loadLayoutPreviewRaster(options: {
     return undefined;
   }
 
-  const cached = previewCache.get(propertyId);
+  const cached = previewCache.get(cacheKey);
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-    console.log("[ILA map] reusing the cached layout preview", {
-      propertyId,
-      kind: cached.kind,
-      coordinates: geometry.coordinates,
-    });
     return {
       id: `${propertyId}-layout`,
       image: cached.image,
@@ -215,15 +217,10 @@ export async function loadLayoutPreviewRaster(options: {
   if (signal?.aborted) return undefined;
 
   const image = fetched.image;
-  previewCache.set(propertyId, {
+  previewCache.set(cacheKey, {
     kind: "image",
     image,
     cachedAt: Date.now(),
-  });
-  console.log("[ILA map] layout preview registered for MapLibre image source", {
-    propertyId,
-    size: `${image.width}x${image.height}`,
-    coordinates: geometry.coordinates,
   });
   return {
     id: `${propertyId}-layout`,
@@ -234,62 +231,6 @@ export async function loadLayoutPreviewRaster(options: {
 }
 
 type FetchedPreview = { kind: "image"; image: LayoutRasterImage };
-
-/**
- * Prints the S3 layout asset itself in DevTools (image thumbnail + metadata).
- * Uses a blob object URL so Chrome/Edge show the picture inline in the console.
- */
-function logS3LayoutImageToConsole(
-  label: string,
-  data: Blob | ArrayBuffer | string,
-  meta: { previewUrl?: string; contentType?: string },
-): void {
-  const contentType =
-    meta.contentType ||
-    (data instanceof Blob ? data.type : "") ||
-    (typeof data === "string" ? "image/svg+xml" : "application/octet-stream");
-
-  const blob =
-    data instanceof Blob
-      ? data
-      : new Blob([typeof data === "string" ? data : data], { type: contentType });
-
-  const objectUrl = URL.createObjectURL(blob);
-  const img = new Image();
-  img.onload = () => {
-    const previewH = Math.min(160, img.naturalHeight || 160);
-    const previewW =
-      img.naturalWidth && img.naturalHeight
-        ? Math.max(40, Math.round((previewH * img.naturalWidth) / img.naturalHeight))
-        : 160;
-    console.log(`[ILA map] ${label}`, {
-      previewUrl: meta.previewUrl,
-      contentType: blob.type || contentType,
-      sizeBytes: blob.size,
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-      objectUrl,
-    });
-    console.log(
-      `%c `,
-      `font-size:1px;padding:${previewH}px ${previewW}px;background:url(${JSON.stringify(objectUrl)}) center / contain no-repeat;`,
-    );
-    console.log("[ILA map] S3 layout <img>", img);
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-  };
-  img.onerror = () => {
-    // TIFF / odd types often fail in <img>; still expose the blob for inspection.
-    console.log(`[ILA map] ${label} (blob — browser could not preview as <img>)`, {
-      previewUrl: meta.previewUrl,
-      contentType: blob.type || contentType,
-      sizeBytes: blob.size,
-      objectUrl,
-      blob,
-    });
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-  };
-  img.src = objectUrl;
-}
 
 async function fetchLayoutPreview(
   previewUrl: string,
@@ -313,10 +254,6 @@ async function fetchLayoutPreview(
 
     const blob = await response.blob();
     if (signal?.aborted) return null;
-    logS3LayoutImageToConsole("S3 layout image (cold fetch)", blob, {
-      previewUrl,
-      contentType: blob.type,
-    });
 
     const preferSvg =
       mimeLooksLikeSvg(blob.type) || urlLooksLikeSvg(previewUrl);
@@ -450,24 +387,88 @@ function resolvePngMaxDecodedEdge(): number {
   return Math.min(gpuMax, HARD_MAX_DECODED_EDGE);
 }
 
-async function decodeRasterPreview(blob: Blob): Promise<LayoutRasterImage> {
-  if (typeof createImageBitmap !== "function") {
-    return loadHtmlImage(URL.createObjectURL(blob));
+async function readWebpDimensions(
+  blob: Blob,
+): Promise<{ width: number; height: number } | undefined> {
+  if (!/image\/webp/i.test(blob.type)) return undefined;
+
+  const header = new Uint8Array(await blob.slice(0, 30).arrayBuffer());
+  const readAscii = (start: number, length: number) =>
+    String.fromCharCode(...header.slice(start, start + length));
+  if (
+    header.length < 30 ||
+    readAscii(0, 4) !== "RIFF" ||
+    readAscii(8, 4) !== "WEBP"
+  ) {
+    return undefined;
   }
 
-  const full = await createImageBitmap(blob);
-  const maxEdge = resolvePngMaxDecodedEdge();
-  const longEdge = Math.max(full.width, full.height);
-  if (longEdge <= maxEdge) return full;
+  const chunk = readAscii(12, 4);
+  let width = 0;
+  let height = 0;
+  if (chunk === "VP8X") {
+    width = 1 + header[24] + (header[25] << 8) + (header[26] << 16);
+    height = 1 + header[27] + (header[28] << 8) + (header[29] << 16);
+  } else if (chunk === "VP8L" && header[20] === 0x2f) {
+    width = 1 + header[21] + ((header[22] & 0x3f) << 8);
+    height =
+      1 +
+      ((header[22] & 0xc0) >> 6) +
+      (header[23] << 2) +
+      ((header[24] & 0x0f) << 10);
+  } else if (
+    chunk === "VP8 " &&
+    header[23] === 0x9d &&
+    header[24] === 0x01 &&
+    header[25] === 0x2a
+  ) {
+    width = (header[26] | (header[27] << 8)) & 0x3fff;
+    height = (header[28] | (header[29] << 8)) & 0x3fff;
+  }
 
-  const scale = maxEdge / longEdge;
-  const resized = await createImageBitmap(full, {
-    resizeWidth: Math.max(1, Math.round(full.width * scale)),
-    resizeHeight: Math.max(1, Math.round(full.height * scale)),
-    resizeQuality: "high",
-  });
-  full.close();
-  return resized;
+  return width > 0 && height > 0 ? { width, height } : undefined;
+}
+
+async function decodeRasterPreview(blob: Blob): Promise<LayoutRasterImage> {
+  const maxEdge = resolvePngMaxDecodedEdge();
+  if (typeof createImageBitmap === "function") {
+    const webpDimensions = await readWebpDimensions(blob);
+    if (webpDimensions) {
+      const longEdge = Math.max(webpDimensions.width, webpDimensions.height);
+      const webpMaxEdge = Math.min(maxEdge, WEBP_MAX_DECODED_EDGE);
+      if (longEdge > webpMaxEdge) {
+        const scale = webpMaxEdge / longEdge;
+        const resizeWidth = Math.max(1, Math.round(webpDimensions.width * scale));
+        const resizeHeight = Math.max(1, Math.round(webpDimensions.height * scale));
+        const resized = await createImageBitmap(blob, {
+          resizeWidth,
+          resizeHeight,
+          resizeQuality: "high",
+        });
+        return resized;
+      }
+    }
+
+    const image = await createImageBitmap(blob);
+    const longEdge = Math.max(image.width, image.height);
+    if (longEdge <= maxEdge) return image;
+
+    const scale = maxEdge / longEdge;
+    const resized = await createImageBitmap(image, {
+      resizeWidth: Math.max(1, Math.round(image.width * scale)),
+      resizeHeight: Math.max(1, Math.round(image.height * scale)),
+      resizeQuality: "high",
+    });
+    image.close();
+    return resized;
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    return await loadHtmlImage(objectUrl);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 /**
@@ -507,11 +508,22 @@ export async function loadLayoutPreviewFromPrefetch(options: {
     coordinates: layoutCordsToCoordinates(cords),
     bounds: layoutCordsToBounds(cords),
   };
+  const cacheKey = getPreviewCacheKey(propertyId, previewUrl);
 
-  logS3LayoutImageToConsole("S3 layout image (prefetch)", data, {
-    previewUrl,
-    contentType,
-  });
+  const cached = previewCache.get(cacheKey);
+  if (
+    cached &&
+    Date.now() - cached.cachedAt < CACHE_TTL_MS &&
+    !signal?.aborted
+  ) {
+    return {
+      id: `${propertyId}-layout`,
+      image: cached.image,
+      opacity,
+      ...geometry,
+    };
+  }
+
 
   const preferSvg =
     typeof data === "string" ||
@@ -530,7 +542,7 @@ export async function loadLayoutPreviewFromPrefetch(options: {
     try {
       const image = await rasterizeSvgToImageBitmap(text);
       if (signal?.aborted) return undefined;
-      previewCache.set(propertyId, {
+      previewCache.set(cacheKey, {
         kind: "image",
         image,
         cachedAt: Date.now(),
@@ -555,7 +567,7 @@ export async function loadLayoutPreviewFromPrefetch(options: {
     );
     const image = await decodeRasterPreview(blob);
     if (signal?.aborted) return undefined;
-    previewCache.set(propertyId, {
+    previewCache.set(cacheKey, {
       kind: "image",
       image,
       cachedAt: Date.now(),

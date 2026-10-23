@@ -610,36 +610,49 @@ type PinVisualState = {
 };
 
 /**
- * Candidate chip sides for `text-variable-anchor-offset`.
+ * Candidate tag sides for `text-variable-anchor-offset`.
+ * `buildPinLabelPlacement` scores these and emits exactly one per pin, so the
+ * side never changes between zoom levels.
  * Anchor name follows MapLibre: "left" places the label to the *right* of the point.
  *
- * Pin tip is at the geographic point (`icon-anchor: bottom`); the circular head sits
- * ~5.2em above it at default icon-size. Offsets are from the tip and must clear:
- *   - head radius (~1.6em at icon-size 0.82)
- *   - pill overhang left of the text (~1.5em: stretchable content inset + icon-text-fit-padding)
- *   - a small visual gap (~0.5em)
- * → side chips need ~3.45em horizontal, not just head radius.
- * dir is the geographic direction the label occupies (for neighbor scoring).
+ * Geometry at the default pin icon-size 0.82 (11px tag text):
+ *   - the branded head is ~17px wide and its top edge sits ~37px above the tip
+ *     (icon-anchor: bottom, so the drawing's empty lower canvas is part of the icon);
+ *   - the stretchable tag adds ~20px of fixed inset left/right of its text
+ *     (`icon-text-fit-padding` 7px + sprite content inset 13px) and is ~31px tall.
+ * Side slots therefore keep the tag's left/right edge ~3px clear of the head,
+ * and above-head slots keep the tag's bottom edge ~3px clear of the head's top
+ * edge. That is still closer than the old pill offsets while never covering the
+ * pin head or needle.
+ * dir is the geographic direction the label occupies (for neighbor scoring):
+ * +y is north because the above-head slots extend upward.
  */
 const PIN_LABEL_ANCHORS = [
-  { anchor: "left", offset: [3.45, -5.2], dirX: 1, dirY: 0 },
-  { anchor: "right", offset: [-3.45, -5.2], dirX: -1, dirY: 0 },
-  { anchor: "top-left", offset: [2.85, -6.8], dirX: 0.7, dirY: -0.7 },
-  { anchor: "top-right", offset: [-2.85, -6.8], dirX: -0.7, dirY: -0.7 },
-  { anchor: "bottom", offset: [0, -8.6], dirX: 0, dirY: -1 },
+  { anchor: "left", offset: [2.9, -2.5], dirX: 1, dirY: 0 },
+  { anchor: "right", offset: [-2.9, -2.5], dirX: -1, dirY: 0 },
+  { anchor: "top-left", offset: [2.0, -5.6], dirX: 0.7, dirY: 0.7 },
+  { anchor: "top-right", offset: [-2.0, -5.6], dirX: -0.7, dirY: 0.7 },
+  { anchor: "bottom", offset: [0, -4.5], dirX: 0, dirY: 1 },
 ] as const;
 
-/** Neighbors farther apart than this (degrees) do not influence chip side. */
+/** Neighbors farther apart than this (degrees) do not influence tag side. */
 const PIN_LABEL_NEIGHBOR_DEG = 0.045;
 
 /**
- * Prefer chip sides away from nearby pins so labels do not sit on top of
- * another pin. Returns a flat [anchor, [x, y], ...] list for MapLibre.
+ * Prefer the tag side away from nearby pins so tags do not sit on top of
+ * another pin.
+ *
+ * Only the single best side is emitted. Passing every candidate to
+ * `text-variable-anchor-offset` let MapLibre fall back to a different side
+ * whenever a zoom level changed the collision result, so tags visibly jumped
+ * around while zooming. One fixed side per pin keeps the tag in place; collision
+ * now only hides or reveals it.
+ * Returns [anchor, [x, y]] for MapLibre.
  */
 function buildPinLabelPlacement(
   pin: MapPin,
   pins: MapPin[],
-): Array<string | [number, number]> {
+): [string, [number, number]] {
   const scores = PIN_LABEL_ANCHORS.map((slot) => {
     let blocked = 0;
     for (const other of pins) {
@@ -659,11 +672,8 @@ function buildPinLabelPlacement(
 
   scores.sort((a, b) => a.blocked - b.blocked);
 
-  const placement: Array<string | [number, number]> = [];
-  for (const { slot } of scores) {
-    placement.push(slot.anchor, [slot.offset[0], slot.offset[1]]);
-  }
-  return placement;
+  const best = scores[0].slot;
+  return [best.anchor, [best.offset[0], best.offset[1]]];
 }
 
 /** Builds a GeoJSON FeatureCollection for GPU circle/symbol pin layers. */
@@ -720,12 +730,12 @@ function pinsToGeoJSON(
 async function ensurePropertyPinLayers(map: MapLibreMap) {
   const images = await loadIlaPinImages();
   const imageOpts = { pixelRatio: ILA_PIN_PIXEL_RATIO } as const;
-  // Label chips stretch around text. Coords are in raw image pixels (64×28 @ 2× = 128×56).
+  // Price tags stretch around the text. Coords are in raw image pixels (76×36 @ 2× = 152×72).
   const labelBgOpts = {
     pixelRatio: ILA_PIN_PIXEL_RATIO,
-    stretchX: [[28, 100]] as [number, number][],
-    stretchY: [[20, 36]] as [number, number][],
-    content: [16, 10, 112, 46] as [number, number, number, number],
+    stretchX: [[40, 112]] as [number, number][],
+    stretchY: [[18, 56]] as [number, number][],
+    content: [26, 14, 126, 62] as [number, number, number, number],
   };
 
   if (!map.hasImage(ILA_PIN_IMAGE_ID)) {
@@ -749,11 +759,11 @@ async function ensurePropertyPinLayers(map: MapLibreMap) {
   const visibleFilter: FilterSpecification = ["!=", ["get", "hidden"], 1];
 
   /**
-   * Price chips use per-feature `labelPlacement` (neighbor-aware side order).
-   * Collision is on: when chips would overlap (common when zoomed out), MapLibre
-   * keeps one in front and hides the rest — no mixed unreadable stack. Pin icons
-   * stay fully visible on their own layer. Zooming in frees space and more chips
-   * appear. Do not set icon-offset with icon-text-fit or the pill drifts off text.
+   * Price tags use a per-feature, single `labelPlacement` side (neighbor-aware).
+   * A tag therefore never switches sides as zoom changes collision results; it
+   * is either visible or hidden. Pin icons stay fully visible on their own layer.
+   * Zooming in frees space and reveals more tags. Do not set icon-offset with
+   * icon-text-fit or the tag drifts off text.
    */
   const labelLayout = {
     "icon-image": [

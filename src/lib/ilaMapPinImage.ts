@@ -72,17 +72,31 @@ export function buildIlaPinSvg(variant: PinVariant = "default"): string {
 }
 
 /**
- * Rounded pill sprite for MapLibre `icon-text-fit: both`.
- * Drawn large enough that stretch keeps corner radii readable.
+ * Rounded price-tag sprite for MapLibre `icon-text-fit: both`.
+ *
+ * A warm ivory card with a gold hairline, a short gold accent rule on the left
+ * and a soft baked drop shadow, so tags stay legible over satellite imagery
+ * without looking like a generic white pill. The 76×36 canvas leaves room for
+ * the shadow; `MapSection` maps the `[26, 14, 126, 62]` content box to the text.
  */
 export function buildIlaPinLabelBgSvg(variant: LabelBgVariant = "default"): string {
-  const fill = variant === "compare" ? "#c6a46c" : "#ffffff";
-  const stroke = variant === "compare" ? "#111111" : "#d4cfc4";
-  const strokeOpacity = variant === "compare" ? 0.35 : 1;
-  const w = 64 * PIXEL_RATIO;
-  const h = 28 * PIXEL_RATIO;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 64 28">
-  <rect x="1" y="1" width="62" height="26" rx="13" ry="13" fill="${fill}" fill-opacity="0.98" stroke="${stroke}" stroke-opacity="${strokeOpacity}" stroke-width="1.5"/>
+  const isCompare = variant === "compare";
+  const fill = isCompare ? "#c6a46c" : "#fffdf8";
+  const stroke = isCompare ? "#111111" : "#c6a46c";
+  const strokeOpacity = isCompare ? 0.35 : 1;
+  const w = 76 * PIXEL_RATIO;
+  const h = 36 * PIXEL_RATIO;
+  const accent = isCompare
+    ? ""
+    : `<rect x="11" y="13.5" width="2.5" height="11" rx="1.25" fill="#c6a46c"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 76 36">
+  <defs>
+    <filter id="ilaPinTagShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="1.2" stdDeviation="1.3" flood-color="#0b0d0c" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <rect x="6" y="4" width="64" height="28" rx="5" ry="5" fill="${fill}" fill-opacity="0.98" stroke="${stroke}" stroke-opacity="${strokeOpacity}" stroke-width="1.25" filter="url(#ilaPinTagShadow)"/>
+  ${accent}
 </svg>`;
 }
 

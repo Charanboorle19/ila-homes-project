@@ -63,7 +63,7 @@ export function futureValue(price: number, years: number, annualRate = 0.11): nu
   return price * (1 + annualRate) ** years;
 }
 
-export const DEFAULT_WHATSAPP_PHONE = "917893815371";
+export const DEFAULT_WHATSAPP_PHONE = "919160464809";
 
 export function whatsappUrl(text: string, phone: string = DEFAULT_WHATSAPP_PHONE): string {
   const normalizedPhone = phone.replace(/\D/g, "");

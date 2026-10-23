@@ -54,7 +54,7 @@ Application-wide route boundaries:
 **Main page:** `src/app/page.tsx`, default export `Home`
 **Layout:** Root layout from `src/app/layout.tsx`
 
-The page is a client component that paints `IlaIntroLoader` over a lightweight map skeleton. The splash fades out on a fixed **1,400 ms** timer (not tied to MapLibre `onMapLoaded`). Dynamically imported `MapSection` mounts after **1,200 ms** (`shouldMountMap`) on its own schedule. The components `Hero`, `WhoWeAre`, `GrowthCorridors`, `FindYourPlot`, `CompareProperties`, `BuyingJourney`, `ShortlistShare`, `EmiAppreciation`, `FromTheField`, `PlotsWithPulse`, `Faq`, and `HomeReadyToVisit` still exist under `src/components` but are no longer imported or rendered by this route.
+The page is a client component that paints `IlaIntroLoader` over a lightweight map skeleton. The splash fades out on a fixed **3,800 ms** timer, with the fade beginning at **3,300 ms** (not tied to MapLibre `onMapLoaded`). Dynamically imported `MapSection` mounts after **1,800 ms** (`shouldMountMap`) on its own schedule. The components `Hero`, `WhoWeAre`, `GrowthCorridors`, `FindYourPlot`, `CompareProperties`, `BuyingJourney`, `ShortlistShare`, `EmiAppreciation`, `FromTheField`, `PlotsWithPulse`, `Faq`, and `HomeReadyToVisit` still exist under `src/components` but are no longer imported or rendered by this route.
 
 - **Dynamic parameters:** None.
 - **Query parameters:** None are read or written by the page implementation.

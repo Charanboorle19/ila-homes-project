@@ -458,6 +458,7 @@ export default function EmiAppreciation() {
                 <PriceEmiFuture
                   property={{ name: selected.name, price: selected.price ?? 0 }}
                   showAmortizationSchedule={false}
+                  showActions={false}
                 />
 
                 {/* Trailing padding lives on a block inside the scroll area, so

@@ -266,7 +266,7 @@ export function addEstateLayers(map: MapLibreMap): void {
         19.0,
         10,
       ],
-      "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+      "text-font": ["Noto Sans Regular"],
       "text-allow-overlap": false,
       "text-padding": 3,
       "symbol-placement": "point",

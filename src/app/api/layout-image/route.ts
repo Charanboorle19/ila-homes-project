@@ -1,3 +1,5 @@
+import sharp from "sharp";
+
 /**
  * Same-origin proxy for the estate master-plan image.
  *
@@ -9,8 +11,8 @@
  *
  *   GET /api/layout-image?url=<presigned s3 url>
  *
- * Edge runtime: streams the upstream body and sets long-lived CDN cache
- * headers so repeat layout loads hit the edge rather than S3.
+ * Node.js runtime: raster images are resized with sharp before returning, and
+ * long-lived CDN cache headers let repeat layout loads avoid another S3 fetch.
  *
  * Only https S3 / CDN hosts are accepted so this cannot become an open proxy.
  */
@@ -29,6 +31,7 @@ const ALLOWED_HOST =
  * mid-stream past this size.
  */
 const MAX_BYTES = 256 * 1024 * 1024;
+const MAX_EDGE = 4096;
 
 const CACHE_CONTROL =
   "public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000";
@@ -46,6 +49,7 @@ function contentTypeFromUrl(url: URL): string | null {
   if (path.endsWith(".svg")) return "image/svg+xml";
   if (path.endsWith(".png")) return "image/png";
   if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
   if (path.endsWith(".tif") || path.endsWith(".tiff")) return "image/tiff";
   return null;
 }
@@ -150,20 +154,45 @@ export async function GET(request: Request) {
       return Response.json({ error: "upstream had no body" }, { status: 502 });
     }
 
-    // Buffer the payload so Vercel's Edge CDN can store it in cache (not chunked/streaming)
-    const arrayBuffer = await upstream.arrayBuffer();
+    // Buffer the payload for optional raster resizing and CDN caching.
+    let body: Uint8Array = new Uint8Array(await upstream.arrayBuffer());
+    let contentType = resolveContentType(
+      upstream.headers.get("content-type"),
+      parsed,
+    );
+
+    // Resize common raster layouts before the browser decodes them. Preserve
+    // SVG and TIFF bytes because their client-side loaders need the originals.
+    if (/^image\/(webp|png|jpeg)$/i.test(contentType)) {
+      try {
+        body = new Uint8Array(
+          await sharp(body, { limitInputPixels: false })
+            .resize({
+              width: MAX_EDGE,
+              height: MAX_EDGE,
+              fit: "inside",
+              withoutEnlargement: true,
+            })
+            .webp({ quality: 85 })
+            .toBuffer(),
+        );
+        contentType = "image/webp";
+      } catch (resizeErr) {
+        console.warn(
+          "[ILA API] layout image resize failed, sending original",
+          resizeErr,
+        );
+      }
+    }
 
     const headers = new Headers();
-    headers.set(
-      "Content-Type",
-      resolveContentType(upstream.headers.get("content-type"), parsed),
-    );
+    headers.set("Content-Type", contentType);
     headers.set("Cache-Control", CACHE_CONTROL);
     headers.set("CDN-Cache-Control", CDN_CACHE_CONTROL);
     headers.set("Access-Control-Allow-Origin", "*");
-    headers.set("Content-Length", String(arrayBuffer.byteLength));
+    headers.set("Content-Length", String(body.byteLength));
 
-    return new Response(arrayBuffer, {
+    return new Response(body as BodyInit, {
       status: 200,
       headers,
     });

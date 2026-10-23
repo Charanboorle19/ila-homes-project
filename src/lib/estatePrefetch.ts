@@ -57,8 +57,6 @@ function tenantHeaders(): HeadersInit {
  * layout asset prefetch without blocking the estate promise.
  */
 export function prefetchEstate(id: string): Promise<EstatePayload> {
-  console.log("🚀 [estatePrefetch] Calling prefetch for:", id);
-
   const cached = estateCache.get(id);
   if (cached) return cached;
 
@@ -102,7 +100,9 @@ export function prefetchEstate(id: string): Promise<EstatePayload> {
 export function prefetchLayoutAsset(url: string): Promise<LayoutAssetPayload> {
   const key = getAssetCacheKey(url);
   const cached = layoutAssetCache.get(key);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   const promise = (async (): Promise<LayoutAssetPayload> => {
     const cleanUrl = url.split("?")[0];
@@ -116,6 +116,10 @@ export function prefetchLayoutAsset(url: string): Promise<LayoutAssetPayload> {
     );
     if (!res.ok) {
       layoutAssetCache.delete(key);
+      console.warn("[ILA map] layout asset request failed", {
+        key,
+        status: res.status,
+      });
       throw new Error(`Failed to fetch layout asset: ${res.status}`);
     }
 
@@ -123,10 +127,13 @@ export function prefetchLayoutAsset(url: string): Promise<LayoutAssetPayload> {
     const data = isSvgOrXmlContentType(contentType)
       ? await res.text()
       : await res.arrayBuffer();
-
     return { data, contentType };
   })().catch((error) => {
     layoutAssetCache.delete(key);
+    console.warn("[ILA map] layout asset fetch errored", {
+      key,
+      error,
+    });
     throw error;
   });
 

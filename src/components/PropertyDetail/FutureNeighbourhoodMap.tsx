@@ -823,7 +823,7 @@ export default function FutureNeighbourhoodMap({
         layout: {
           "text-field": ["to-string", ["get", "number"]],
           "text-size": isDesktop ? 10 : 8.5,
-          "text-font": ["Open Sans Bold"],
+          "text-font": ["Noto Sans Regular"],
           "text-allow-overlap": true,
         },
         paint: {

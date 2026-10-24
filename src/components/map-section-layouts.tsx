@@ -77,6 +77,41 @@ export const PLOT_STATUS_FILL_COLOR: ExpressionSpecification = [
   LAYOUT_DESIGN.sold,
 ];
 
+/**
+ * Per-property plot fills rendered translucent so the master-plan artwork
+ * underneath stays legible. Add a property UUID here to opt its layout in.
+ */
+export const TRANSLUCENT_PLOT_FILL_PROPERTY_IDS = new Set<string>([
+  "d37ee42d-a758-4627-b4ea-507dd9138438",
+]);
+
+/** Status colours kept as-is, only the fill alpha drops for opted-in layouts. */
+export const TRANSLUCENT_PLOT_STATUS_FILL_COLOR: ExpressionSpecification = [
+  "match",
+  ["get", "statusNorm"],
+  "available",
+  "#10B981",
+  "booked",
+  "#F59E0B",
+  "blocked",
+  "#F97316",
+  "sold",
+  "#EF4444",
+  "#8A8178",
+];
+
+export const TRANSLUCENT_PLOT_STATUS_FILL_OPACITY: ExpressionSpecification = [
+  "match",
+  ["get", "statusNorm"],
+  "available",
+  1.0,
+  "booked",
+  1.0,
+  "blocked",
+  1.0,
+  1.0,
+];
+
 /** MapLibre match expression for status → outline accent. */
 export const PLOT_STATUS_EDGE_COLOR: ExpressionSpecification = [
   "match",
@@ -255,7 +290,7 @@ export function initLayoutLayers(map: MapLibreMap) {
     });
   }
 
-  // 6. Plots Outlines (disabled: no strokes for plots, just color fill)
+  // 6. Plots Outlines (thin black stroke)
   if (!map.getLayer("estate-plots-outline")) {
     map.addLayer({
       id: "estate-plots-outline",
@@ -263,9 +298,9 @@ export function initLayoutLayers(map: MapLibreMap) {
       source: "estate-plots",
       layout: { visibility: "none" },
       paint: {
-        "line-color": "transparent",
-        "line-width": 0,
-        "line-opacity": 0,
+        "line-color": "#000000",
+        "line-width": 0.5,
+        "line-opacity": 0.8,
       },
     });
   }
@@ -283,6 +318,52 @@ export function initLayoutLayers(map: MapLibreMap) {
         "line-width": 3.2,
         "line-opacity": 0.55,
         "line-blur": 1.2,
+      },
+    });
+  }
+
+  // 7b. Plot Number Labels for specific layout (d37ee42d-a758-4627-b4ea-507dd9138438)
+  // Shows just the plot number on all plots for this estate
+  if (!map.getLayer("estate-plots-plotno-label")) {
+    map.addLayer({
+      id: "estate-plots-plotno-label",
+      type: "symbol",
+      source: "estate-plots",
+      layout: {
+        visibility: "none",
+        "text-field": ["to-string", ["get", "plotNo"]],
+        "text-justify": "center",
+        "text-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          16.0,
+          8,
+          17.0,
+          10,
+          18.0,
+          12,
+          19.0,
+          14,
+        ],
+        "text-font": ["Noto Sans Regular"],
+        "text-allow-overlap": true,
+        "text-padding": 2,
+        "symbol-placement": "point",
+      },
+      paint: {
+        "text-color": "#000000",
+        "text-halo-color": "#FFFFFF",
+        "text-halo-width": 0,
+        "text-opacity": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          15.5,
+          0,
+          16.5,
+          1,
+        ],
       },
     });
   }

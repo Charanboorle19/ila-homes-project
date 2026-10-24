@@ -123,6 +123,9 @@ import {
   LAYOUT_LAYER_IDS,
   PLOT_STATUS_EDGE_COLOR,
   PLOT_STATUS_FILL_COLOR,
+  TRANSLUCENT_PLOT_FILL_PROPERTY_IDS,
+  TRANSLUCENT_PLOT_STATUS_FILL_COLOR,
+  TRANSLUCENT_PLOT_STATUS_FILL_OPACITY,
   initLayoutLayers,
   setLayoutData,
   syncLayoutRaster,
@@ -2963,6 +2966,10 @@ export default function MapSection({
 
     const active = selectedId || "";
     const scale = activeProject?.layoutRaster ? 0.5 : 1;
+    const translucent =
+      activeProject != null &&
+      (TRANSLUCENT_PLOT_FILL_PROPERTY_IDS.has(activeProject.id) ||
+        activeProject.layoutRaster?.id?.startsWith("d37ee42d-a758-4627-b4ea-507dd9138438"));
 
     // Selected plot:
     // - If available: translucent emerald green fill (#10B981 at 0.55) with green outline (#047857)
@@ -2970,6 +2977,8 @@ export default function MapSection({
     // Unselected plots:
     // - Available: solid green (#10B981 at 1.0)
     // - Booked/sold/blocked: 0 fill (transparent, no dark shade obscuring layout)
+    // Opted-in layouts (TRANSLUCENT_PLOT_FILL_PROPERTY_IDS) keep the status
+    // colours but paint every unselected plot at reduced alpha instead.
     map.setPaintProperty("estate-plots-fill", "fill-color", [
       "case",
       ["==", ["get", "id"], active],
@@ -2980,7 +2989,7 @@ export default function MapSection({
         "#10B981",
         "#1f1f1f", // dark shade when booked/sold/blocked plot is clicked
       ],
-      PLOT_STATUS_FILL_COLOR,
+      translucent ? TRANSLUCENT_PLOT_STATUS_FILL_COLOR : PLOT_STATUS_FILL_COLOR,
     ]);
     map.setPaintProperty("estate-plots-fill", "fill-opacity", [
       "case",
@@ -2992,18 +3001,33 @@ export default function MapSection({
         0.55,
         0.65, // noticeable dark fill on the clicked booked/sold plot
       ],
-      [
-        "match",
-        ["get", "statusNorm"],
-        "available",
-        1.0,
-        0, // transparent when unclicked
-      ],
+      translucent
+        ? TRANSLUCENT_PLOT_STATUS_FILL_OPACITY
+        : [
+            "match",
+            ["get", "statusNorm"],
+            "available",
+            1.0,
+            0, // transparent when unclicked
+          ],
     ]);
-    map.setPaintProperty("estate-plots-outline", "line-color", "transparent");
-    map.setPaintProperty("estate-plots-outline", "line-width", 0);
-    map.setPaintProperty("estate-plots-outline", "line-opacity", 0);
+    // Keep thin black outlines for all plots
+    map.setPaintProperty("estate-plots-outline", "line-color", "#000000");
+    map.setPaintProperty("estate-plots-outline", "line-width", 0.5);
+    map.setPaintProperty("estate-plots-outline", "line-opacity", 0.8);
 
+    const isTargetLayout =
+      activeProject?.id === "d37ee42d-a758-4627-b4ea-507dd9138438" ||
+      activeProject?.layoutRaster?.id?.startsWith("d37ee42d-a758-4627-b4ea-507dd9138438");
+
+    // Show plot number labels for the target layout, hide default labels
+    if (map.getLayer("estate-plots-plotno-label")) {
+      map.setLayoutProperty(
+        "estate-plots-plotno-label",
+        "visibility",
+        isTargetLayout ? "visible" : "none",
+      );
+    }
     // Hide labels inside plots — info is displayed in the floating tag instead
     if (map.getLayer("estate-plots-label")) {
       map.setLayoutProperty("estate-plots-label", "visibility", "none");

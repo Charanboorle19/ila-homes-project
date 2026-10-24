@@ -3354,7 +3354,7 @@ export default function MapSection({
 
                     {/* Minimal bottom pointer stem */}
                     <div
-                      className="absolute left-1/2 top-full -translate-x-1/2 -mt-px h-0 w-0 border-x-[3.5px] border-x-transparent border-t-[4px] border-t-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)]"
+                      className="absolute left-1/2 top-full -translate-x-1/2 -mt-px h-0 w-0 border-x-[3.5px] border-x-transparent border-t-4 border-t-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)]"
                       aria-hidden
                     />
                   </div>
@@ -3365,7 +3365,7 @@ export default function MapSection({
                       {plotStatusDisplayLabel(plot.status)}
                     </span>
                     <div
-                      className="absolute left-1/2 top-full -translate-x-1/2 -mt-px h-0 w-0 border-x-[3.5px] border-x-transparent border-t-[4px] border-t-[#171717] drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]"
+                      className="absolute left-1/2 top-full -translate-x-1/2 -mt-px h-0 w-0 border-x-[3.5px] border-x-transparent border-t-4 border-t-[#171717] drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]"
                       aria-hidden
                     />
                   </div>
@@ -3538,7 +3538,7 @@ export default function MapSection({
         {selectedPlot ? (
           <>
             {/* Mobile Bottom Popup */}
-            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[200] flex flex-col items-center justify-end md:hidden">
+            <div className="pointer-events-none fixed inset-x-0 bottom-0 z-200 flex flex-col items-center justify-end md:hidden">
               <div className="pointer-events-auto flex w-full max-h-[85vh] max-w-lg flex-col overflow-hidden rounded-t-[1.75rem] border-x border-t border-[#ded9cf] bg-[#f9f7f2] px-4 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-12px_36px_rgba(36,35,31,0.22)] animate-in fade-in slide-in-from-bottom-6 duration-200">
                 {/* Top Controls Row */}
                 <div className="flex shrink-0 items-center justify-between gap-2 pb-1">
@@ -3594,11 +3594,11 @@ export default function MapSection({
                     <span className="rounded-lg bg-[#c6a46c]/15 px-2.5 py-1 text-xs font-black text-[#876527]">
                       {selectedPlot.price}
                     </span>
-                    <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
+                    <span className="rounded-lg bg-black/5 border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
                       {selectedPlot.area}
                     </span>
                     {selectedPlot.facing ? (
-                      <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
+                      <span className="rounded-lg bg-black/5 border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
                         {selectedPlot.facing}
                       </span>
                     ) : null}
@@ -3609,7 +3609,7 @@ export default function MapSection({
                     <button
                       type="button"
                       onClick={() => setPlotEnquiryModalOpen(true)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-xs font-black tracking-wider uppercase text-[#141414] shadow-xs transition hover:brightness-105 active:scale-[0.98] cursor-pointer"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-linear-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-xs font-black tracking-wider uppercase text-[#141414] shadow-xs transition hover:brightness-105 active:scale-[0.98] cursor-pointer"
                     >
                       Enquiry
                     </button>
@@ -3628,7 +3628,7 @@ export default function MapSection({
 
             {/* Desktop Bottom-Left Popup Card */}
             <div
-              className="pointer-events-auto absolute bottom-4 z-30 hidden w-[340px] max-w-[calc(100%-2rem)] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-2xl border border-[#ded9cf] bg-[#f9f7f2] p-4 shadow-[0_16px_40px_rgba(36,35,31,0.18)] animate-in fade-in zoom-in-95 md:block"
+              className="pointer-events-auto absolute bottom-4 z-30 hidden w-85 max-w-[calc(100%-2rem)] max-h-[calc(100vh-6rem)] overflow-y-auto rounded-2xl border border-[#ded9cf] bg-[#f9f7f2] p-4 shadow-[0_16px_40px_rgba(36,35,31,0.18)] animate-in fade-in zoom-in-95 md:block"
               style={{
                 left: panelOpen ? `min(calc(100% - 356px), ${DESKTOP_PANEL_RESERVED + 12}px)` : 16,
                 maxHeight: "calc(100% - 2rem)",
@@ -3679,11 +3679,11 @@ export default function MapSection({
                   <span className="rounded-lg bg-[#c6a46c]/15 px-2.5 py-1 text-xs font-black text-[#876527]">
                     {selectedPlot.price}
                   </span>
-                  <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
+                  <span className="rounded-lg bg-black/5 border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
                     {selectedPlot.area}
                   </span>
                   {selectedPlot.facing ? (
-                    <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
+                    <span className="rounded-lg bg-black/5 border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
                       {selectedPlot.facing}
                     </span>
                   ) : null}
@@ -3694,7 +3694,7 @@ export default function MapSection({
                   <button
                     type="button"
                     onClick={() => setPlotEnquiryModalOpen(true)}
-                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-xs font-black tracking-wider uppercase text-[#141414] shadow-xs transition hover:brightness-105 active:scale-[0.98] cursor-pointer"
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-linear-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-2.5 text-xs font-black tracking-wider uppercase text-[#141414] shadow-xs transition hover:brightness-105 active:scale-[0.98] cursor-pointer"
                   >
                     Enquiry
                   </button>

@@ -85,7 +85,7 @@ const PriceEmiFuture = dynamic(
   },
 );
 import { allowAnalyticsFlush, trackEvent } from "@/services/analytics/tracker";
-import { formatInr } from "@/lib/propertyUtils";
+import { formatInr, propertyDetailPath } from "@/lib/propertyUtils";
 import {
   loadLayoutPreviewFromPrefetch,
   loadLayoutPreviewRaster,
@@ -2056,22 +2056,31 @@ export default function MapSection({
   const layoutOpen = Boolean(activeProject);
 
   /**
-   * Detail-page target for the sidebar CTA. `PropertySheet` resolves its own
-   * "View Project" link the same way (local record first, API UUID second); the
-   * sidebar footer reads it from here so both point at the same property.
+   * Detail-page target for the sidebar CTA. Prefer the public name slug so
+   * the address bar shows `/properties/sark-green` rather than a UUID.
+   * `PropertyBlock` builds the same href via `propertyDetailPath`.
    */
   const activePropertyHref = useMemo(() => {
-    const id =
-      activeProperty?.id ??
-      activePopupApiProperty?.id ??
-      activePropertyDetail?.id ??
-      activePropertyId;
-    return id ? `/properties/${id}` : null;
+    if (activeProperty) return propertyDetailPath(activeProperty);
+    if (activePopupApiProperty) {
+      return propertyDetailPath(activePopupApiProperty);
+    }
+    if (activePropertyDetail) {
+      return propertyDetailPath(activePropertyDetail);
+    }
+    const listItem = activePropertyId
+      ? propertyList.find((item) => item.id === activePropertyId)
+      : undefined;
+    if (listItem) return propertyDetailPath(listItem);
+    return activePropertyId
+      ? propertyDetailPath({ id: activePropertyId })
+      : null;
   }, [
-    activePopupApiProperty?.id,
-    activeProperty?.id,
-    activePropertyDetail?.id,
+    activePopupApiProperty,
+    activeProperty,
+    activePropertyDetail,
     activePropertyId,
+    propertyList,
   ]);
 
   const counts = useMemo(() => {

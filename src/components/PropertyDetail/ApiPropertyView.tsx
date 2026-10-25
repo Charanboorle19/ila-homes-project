@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import PropertyPageView from "@/components/PropertyDetail/PropertyPageView";
-import type { PropertyRecord } from "@/data/properties";
 import {
   fetchPropertyById,
   fetchPropertyDocuments,
   fetchPropertyLifeStageFit,
   fetchPropertyMedia,
   isPropertyUuid,
+  resolvePropertyId,
   type ApiProperty,
   type ApiPropertyMediaItem,
 } from "@/services/propertiesService";
@@ -18,48 +18,84 @@ import {
   apiPropertyToRecord,
   type LifeStageSource,
 } from "@/services/propertyMapper";
+import { propertyDetailPath } from "@/lib/propertyUtils";
 import { useTrackPropertyView } from "@/services/analytics/usePropertyView";
 
 /**
  * Detail view for properties served by the API.
  *
- * The existing /properties/[propertyId] page resolves against local static
- * data, so API properties (UUID ids) have no local record. This fetches from
- * GET /api/properties/{id} and renders the same PropertyPageView template, so
- * the design matches /properties/{slug} exactly.
- *
- * GET /api/properties/{id}/life-stage-fit is fetched separately and never
- * blocks the page: the property renders as soon as it arrives, and the buyer-fit
- * section fills in when (or if) the scores do.
+ * The route param may be a public name slug (`/properties/sark-green`) or a
+ * legacy UUID. Detail/documents/media APIs still need the UUID, so a slug is
+ * resolved through the catalogue first. When a UUID deep link loads a property
+ * that has a slug, the address bar is rewritten to the slug without remounting.
  */
 
 export default function ApiPropertyView({ id }: { id: string }) {
+  const [resolvedId, setResolvedId] = useState<string | null>(
+    isPropertyUuid(id) ? id : null,
+  );
   const [property, setProperty] = useState<ApiProperty | null>(null);
   const [media, setMedia] = useState<ApiPropertyMediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(true);
   const [lifeStage, setLifeStage] = useState<LifeStageSource>({
     status: "pending",
   });
-  const [documents, setDocuments] = useState<
-    { status: "loading" | "ready" | "error"; items: ReturnType<typeof apiDocumentsToRecords> }
-  >({ status: "loading", items: [] });
-  const [state, setState] = useState<"loading" | "ready" | "error">(
-    isPropertyUuid(id) ? "loading" : "error",
-  );
+  const [documents, setDocuments] = useState<{
+    status: "loading" | "ready" | "error";
+    items: ReturnType<typeof apiDocumentsToRecords>;
+  }>({ status: "loading", items: [] });
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
-  useTrackPropertyView(isPropertyUuid(id) ? id : undefined);
+  useTrackPropertyView(resolvedId ?? undefined);
+
+  // Resolve slug → UUID (or accept a UUID as-is).
+  useEffect(() => {
+    const controller = new AbortController();
+    setState("loading");
+    setProperty(null);
+    setResolvedId(isPropertyUuid(id) ? id : null);
+
+    resolvePropertyId(id, controller.signal)
+      .then((uuid) => {
+        if (controller.signal.aborted) return;
+        if (!uuid) {
+          setState("error");
+          return;
+        }
+        setResolvedId(uuid);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.warn("[property] slug resolve failed", error);
+        setState("error");
+      });
+
+    return () => controller.abort();
+  }, [id]);
 
   useEffect(() => {
-    if (!isPropertyUuid(id)) return;
+    if (!resolvedId) return;
 
     const controller = new AbortController();
 
-    fetchPropertyById(id, controller.signal)
+    fetchPropertyById(resolvedId, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
-        console.log("=== [TOP SECTION API RESPONSE] GET /api/properties/{id} ===", result);
+        console.log(
+          "=== [TOP SECTION API RESPONSE] GET /api/properties/{id} ===",
+          result,
+        );
         setProperty(result);
         setState("ready");
+
+        // Keep the public slug in the address bar without remounting the page.
+        const desired = propertyDetailPath(result);
+        if (
+          typeof window !== "undefined" &&
+          window.location.pathname !== desired
+        ) {
+          window.history.replaceState(null, "", desired);
+        }
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -68,17 +104,21 @@ export default function ApiPropertyView({ id }: { id: string }) {
       });
 
     return () => controller.abort();
-  }, [id]);
+  }, [resolvedId]);
 
   useEffect(() => {
-    if (!isPropertyUuid(id)) return;
+    if (!resolvedId) return;
 
     const controller = new AbortController();
+    setMediaLoading(true);
 
-    fetchPropertyMedia(id, controller.signal)
+    fetchPropertyMedia(resolvedId, controller.signal)
       .then((items) => {
         if (controller.signal.aborted) return;
-        console.log("=== [TOP SECTION API RESPONSE] GET /api/properties/{id}/media ===", items);
+        console.log(
+          "=== [TOP SECTION API RESPONSE] GET /api/properties/{id}/media ===",
+          items,
+        );
         setMedia(items);
         setMediaLoading(false);
       })
@@ -89,14 +129,15 @@ export default function ApiPropertyView({ id }: { id: string }) {
       });
 
     return () => controller.abort();
-  }, [id]);
+  }, [resolvedId]);
 
   useEffect(() => {
-    if (!isPropertyUuid(id)) return;
+    if (!resolvedId) return;
 
     const controller = new AbortController();
+    setDocuments({ status: "loading", items: [] });
 
-    fetchPropertyDocuments(id, controller.signal)
+    fetchPropertyDocuments(resolvedId, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
         setDocuments({
@@ -111,17 +152,18 @@ export default function ApiPropertyView({ id }: { id: string }) {
       });
 
     return () => controller.abort();
-  }, [id]);
+  }, [resolvedId]);
 
   // Buyer fit. Independent of the property request, so a failure here leaves
   // the rest of the page intact. A failure is reported as "unavailable" rather
   // than left pending, so the section never sits on a spinner forever.
   useEffect(() => {
-    if (!isPropertyUuid(id)) return;
+    if (!resolvedId) return;
 
     const controller = new AbortController();
+    setLifeStage({ status: "pending" });
 
-    fetchPropertyLifeStageFit(id, controller.signal)
+    fetchPropertyLifeStageFit(resolvedId, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
         setLifeStage({ status: "ready", fit: result });
@@ -133,13 +175,11 @@ export default function ApiPropertyView({ id }: { id: string }) {
       });
 
     return () => controller.abort();
-  }, [id]);
+  }, [resolvedId]);
 
   if (state === "loading") {
     return (
-      <div
-        className="property-page flex min-h-[70vh] items-center justify-center pt-8 sm:pt-[calc(var(--nav-h)+2rem)]"
-      >
+      <div className="property-page flex min-h-[70vh] items-center justify-center pt-8 sm:pt-[calc(var(--nav-h)+2rem)]">
         <p
           className="inline-flex items-center gap-2 text-sm text-[#5c5852]"
           role="status"
@@ -153,9 +193,7 @@ export default function ApiPropertyView({ id }: { id: string }) {
 
   if (state === "error" || !property) {
     return (
-      <div
-        className="property-page pt-8 sm:pt-[calc(var(--nav-h)+2rem)]"
-      >
+      <div className="property-page pt-8 sm:pt-[calc(var(--nav-h)+2rem)]">
         <div className="pd-section">
           <div className="pd-section__inner">
             <p className="pd-kicker">Not found</p>

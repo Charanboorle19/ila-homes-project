@@ -276,6 +276,7 @@ export default function FutureNeighbourhoodMap({
   const [nearByStatus, setNearByStatus] = useState<NearByStatus>("idle");
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [mapFailed, setMapFailed] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   const [apiPlaces, setApiPlaces] = useState<ApiNearbyPlace[] | null>(null);
   const [isLoadingApi, setIsLoadingApi] = useState(false);
   const [mapHint, setMapHint] = useState<"touch" | "desktop">("touch");
@@ -398,6 +399,10 @@ export default function FutureNeighbourhoodMap({
     () => buildGeoJson(items, origin, horizon),
     [items, origin, horizon],
   );
+  const geoRef = useRef(geo);
+  useEffect(() => {
+    geoRef.current = geo;
+  }, [geo]);
 
   const fromGachibowli = useMemo(
     () => distanceFromGachibowliKm(property),
@@ -545,12 +550,9 @@ export default function FutureNeighbourhoodMap({
     setActiveItem(item);
     popupRef.current?.remove();
 
-    if (!isFullView) {
-      document.querySelector(".pd-future__map")?.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }
+    // Do not scrollIntoView the map. On desktop `.pd-future__map` is
+    // `position: sticky`, so scrolling it into view moves the whole page
+    // while the map stays put — every section jumps except the map.
 
     // Highlight the selected item & line, reduce opacity of other connected items on the map
     updateMapFeatureHighlights(item.id);
@@ -604,347 +606,445 @@ export default function FutureNeighbourhoodMap({
     });
   };
 
-  // Create the map once.
+  // Create the map once the canvas has a real size, then keep it measured.
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    const node = containerRef.current;
+    if (!node || mapRef.current) return;
 
-    let map: MapLibreMap;
+    let cancelled = false;
+    let map: MapLibreMap | undefined;
     let plotLabelMarker: Marker | null = null;
     let hintTimer: number | undefined;
-    try {
-      map = new MapLibre({
-        container: containerRef.current,
-        style: MAP_STYLE,
-        center: origin,
-        zoom: mapZoom,
-        pitch: 0,
-        attributionControl: { compact: true },
-        dragRotate: false,
-        pitchWithRotate: false,
-        touchPitch: false,
-        cooperativeGestures:
-          typeof window !== "undefined" &&
-          !window.matchMedia("(min-width: 760px)").matches,
+    let initialResizeTimer: number | undefined;
+    let created = false;
+
+    const resizeMap = () => {
+      mapRef.current?.resize();
+    };
+
+    const createMap = () => {
+      if (cancelled || created || mapRef.current || !containerRef.current) return;
+      const container = containerRef.current;
+      // MapLibre freezes the first measured pixel size. Building into a 0×0
+      // box (common on client navigations before the sticky/aspect frame
+      // settles) leaves a blank canvas until a hard refresh.
+      if (container.clientWidth < 2 || container.clientHeight < 2) return;
+
+      created = true;
+      setWorkerUrl(
+        new URL(
+          "/maplibre/maplibre-gl-worker.mjs",
+          window.location.origin,
+        ).toString(),
+      );
+
+      try {
+        map = new MapLibre({
+          container,
+          style: MAP_STYLE,
+          center: origin,
+          zoom: mapZoom,
+          pitch: 0,
+          attributionControl: { compact: true },
+          dragRotate: false,
+          pitchWithRotate: false,
+          touchPitch: false,
+          cooperativeGestures: !window.matchMedia("(min-width: 760px)").matches,
+        });
+      } catch (error) {
+        console.error("Unable to initialise the neighbourhood map", error);
+        queueMicrotask(() => setMapFailed(true));
+        return;
+      }
+
+      if (cancelled || !map) {
+        map?.remove();
+        return;
+      }
+
+      mapRef.current = map;
+      const isDesktop = window.matchMedia("(min-width: 760px)").matches;
+      setMapHint(isDesktop ? "desktop" : "touch");
+      if (isDesktop) map.scrollZoom.disable();
+      if (isDesktop) {
+        hintTimer = window.setTimeout(() => setShowMapHint(false), 3000);
+      }
+      map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+
+      const resetControl = document.createElement("button");
+      resetControl.type = "button";
+      resetControl.className = "pd-future__reset-control";
+      resetControl.setAttribute("aria-label", "Reset map view to plot");
+      resetControl.textContent = "Reset view";
+      resetControl.addEventListener("click", resetMapView);
+      const resetControlGroup = document.createElement("div");
+      resetControlGroup.className =
+        "maplibregl-ctrl maplibregl-ctrl-group pd-future__reset-group";
+      resetControlGroup.appendChild(resetControl);
+      map.addControl(
+        {
+          onAdd: () => resetControlGroup,
+          onRemove: () =>
+            resetControl.removeEventListener("click", resetMapView),
+          getDefaultPosition: () => "top-right",
+        },
+        "top-right",
+      );
+
+      map.on("error", (event) => {
+        console.warn("Neighbourhood map non-fatal warning/error", event.error);
       });
-    } catch (error) {
-      console.error("Unable to initialise the neighbourhood map", error);
-      queueMicrotask(() => setMapFailed(true));
-      return;
-    }
 
-    mapRef.current = map;
-    const isDesktop = window.matchMedia("(min-width: 760px)").matches;
-    setMapHint(isDesktop ? "desktop" : "touch");
-    if (isDesktop) map.scrollZoom.disable();
-    if (isDesktop) {
-      hintTimer = window.setTimeout(() => setShowMapHint(false), 3000);
-    }
-    map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+      map.on("load", () => {
+        if (cancelled || mapRef.current !== map) return;
+        readyRef.current = true;
+        resizeMap();
+        window.requestAnimationFrame(resizeMap);
+        initialResizeTimer = window.setTimeout(() => {
+          resizeMap();
+          window.requestAnimationFrame(resizeMap);
+        }, 200);
 
-    const resetControl = document.createElement("button");
-    resetControl.type = "button";
-    resetControl.className = "pd-future__reset-control";
-    resetControl.setAttribute("aria-label", "Reset map view to plot");
-    resetControl.textContent = "Reset view";
-    resetControl.addEventListener("click", resetMapView);
-    const resetControlGroup = document.createElement("div");
-    resetControlGroup.className = "maplibregl-ctrl maplibregl-ctrl-group pd-future__reset-group";
-    resetControlGroup.appendChild(resetControl);
-    map.addControl({
-      onAdd: () => resetControlGroup,
-      onRemove: () => resetControl.removeEventListener("click", resetMapView),
-      getDefaultPosition: () => "top-right",
-    }, "top-right");
+        const latestGeo = geoRef.current;
 
-    map.on("error", (event) => {
-      console.warn("Neighbourhood map non-fatal warning/error", event.error);
-    });
+        map.addSource(ORIGIN_SOURCE, {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                geometry: { type: "Point", coordinates: origin },
+                properties: { label: property.neighbourhood.mapLabel },
+              },
+            ],
+          },
+        });
 
-    map.on("load", () => {
-      readyRef.current = true;
-      map.resize();
-      setTimeout(() => map.resize(), 200);
+        map.addSource(ITEMS_SOURCE, {
+          type: "geojson",
+          data: latestGeo.points,
+          promoteId: "id",
+        });
 
-      map.addSource(ORIGIN_SOURCE, {
-        type: "geojson",
-        data: {
-          type: "FeatureCollection",
-          features: [
-            {
-              type: "Feature",
-              geometry: { type: "Point", coordinates: origin },
-              properties: { label: property.neighbourhood.mapLabel },
+        map.addSource(LINKS_SOURCE, {
+          type: "geojson",
+          data: latestGeo.links,
+          promoteId: "id",
+        });
+
+        map.addLayer({
+          id: "future-link-line",
+          type: "line",
+          source: LINKS_SOURCE,
+          layout: {
+            "line-cap": "round",
+            "line-join": "round",
+          },
+          paint: {
+            "line-color": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              "#dc2626",
+              "#b9a47c",
+            ],
+            "line-width": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              3.0,
+              1.5,
+            ],
+            "line-opacity": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              0.95,
+              ["boolean", ["feature-state", "dimmed"], false],
+              0.12,
+              0.4,
+            ],
+            "line-dasharray": [2, 2],
+          },
+        });
+
+        map.addLayer({
+          id: "future-item-halo",
+          type: "circle",
+          source: ITEMS_SOURCE,
+          paint: {
+            /* Selected wins over hovered, so a click does not get undone by the
+               pointer still being over the card. Hover is 13 x 1.25 rounded. */
+            "circle-radius": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              18,
+              ["boolean", ["feature-state", "hover"], false],
+              14,
+              10,
+            ],
+            "circle-color": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              "#dc2626",
+              ["==", ["get", "horizon"], "2029"],
+              "#c6a46c",
+              "#1f5c45",
+            ],
+            "circle-opacity": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              0.4,
+              ["boolean", ["feature-state", "dimmed"], false],
+              0.06,
+              ["boolean", ["feature-state", "hover"], false],
+              0.32,
+              0.2,
+            ],
+          },
+        });
+
+        map.addLayer({
+          id: "future-item-dot",
+          type: "circle",
+          source: ITEMS_SOURCE,
+          paint: {
+            "circle-radius": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              isDesktop ? 13 : 11,
+              ["boolean", ["feature-state", "hover"], false],
+              isDesktop ? 11 : 9,
+              isDesktop ? 9 : 7.5,
+            ],
+            "circle-color": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              "#dc2626",
+              ["==", ["get", "horizon"], "2029"],
+              "#c6a46c",
+              "#1f5c45",
+            ],
+            "circle-opacity": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              1.0,
+              ["boolean", ["feature-state", "dimmed"], false],
+              0.22,
+              1.0,
+            ],
+            "circle-stroke-color": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              "#ffffff",
+              ["boolean", ["feature-state", "hover"], false],
+              "#dc2626",
+              "#ffffff",
+            ],
+            "circle-stroke-width": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              2.5,
+              ["boolean", ["feature-state", "hover"], false],
+              2,
+              1.5,
+            ],
+            "circle-stroke-opacity": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              1.0,
+              ["boolean", ["feature-state", "dimmed"], false],
+              0.22,
+              1.0,
+            ],
+          },
+        });
+
+        map.addLayer({
+          id: "future-item-number",
+          type: "symbol",
+          source: ITEMS_SOURCE,
+          layout: {
+            "text-field": ["to-string", ["get", "number"]],
+            "text-size": isDesktop ? 10 : 8.5,
+            "text-font": ["Noto Sans Regular"],
+            "text-allow-overlap": true,
+          },
+          paint: {
+            "text-color": "#ffffff",
+            "text-halo-color": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              "#b91c1c",
+              "#1f5c45",
+            ],
+            "text-halo-width": 0.8,
+            "text-opacity": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              1.0,
+              ["boolean", ["feature-state", "dimmed"], false],
+              0.22,
+              1.0,
+            ],
+          },
+        });
+
+        map.addLayer({
+          id: "future-origin-halo",
+          type: "circle",
+          source: ORIGIN_SOURCE,
+          paint: {
+            "circle-radius": 16,
+            "circle-color": "#1f5c45",
+            "circle-opacity": 0.2,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#1f5c45",
+          },
+        });
+
+        // Plot origin marker pill with green dot indicator
+        const plotLabel = document.createElement("div");
+        plotLabel.className = "pd-future__plot-label";
+        const plotDot = document.createElement("span");
+        plotDot.className = "pd-future__plot-badge";
+        plotDot.setAttribute("aria-hidden", "true");
+        const plotText = document.createElement("span");
+        plotText.textContent = "Your plot";
+        plotLabel.appendChild(plotDot);
+        plotLabel.appendChild(plotText);
+
+        plotLabelMarker = new Marker({
+          element: plotLabel,
+          anchor: "bottom",
+          offset: [0, -14],
+        })
+          .setLngLat(origin)
+          .addTo(map);
+
+        plotLabelMarkerRef.current = plotLabelMarker;
+
+        map.addLayer({
+          id: "future-origin-dot",
+          type: "circle",
+          source: ORIGIN_SOURCE,
+          paint: {
+            "circle-radius": 8.5,
+            "circle-color": "#1f5c45",
+            "circle-stroke-width": 2.5,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+
+        const showPopup = (event: MapMouseEvent) => {
+          const feature = map.queryRenderedFeatures(event.point, {
+            layers: ["future-item-dot", "future-origin-dot"],
+          })[0];
+          if (!feature) return;
+
+          if (feature.layer.id === "future-origin-dot") {
+            map.flyTo({
+              center: origin,
+              zoom: 15.5,
+              essential: true,
+              duration: 800,
+            });
+            openPopup(
+              origin,
+              property.neighbourhood.mapLabel,
+              "Project Location",
+            );
+            return;
+          }
+
+          const featureId = feature.properties?.id ?? feature.id;
+          const matchedItem = itemsRef.current.find((it) => it.id === featureId);
+          if (matchedItem) {
+            focusMapItem(matchedItem);
+          } else {
+            const properties = feature.properties as {
+              name?: string;
+              meta?: string;
+              label?: string;
+            };
+            openPopup(
+              [event.lngLat.lng, event.lngLat.lat],
+              properties.name ?? properties.label ?? "Landmark",
+              properties.meta,
+            );
+          }
+        };
+        map.on("click", "future-item-dot", showPopup);
+        map.on("click", "future-origin-dot", showPopup);
+        map.on("click", () => {
+          if (!isDesktop || map.scrollZoom.isEnabled()) return;
+          map.scrollZoom.enable();
+          setShowMapHint(false);
+        });
+        map.on("mouseenter", "future-item-dot", () => {
+          map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", "future-item-dot", () => {
+          map.getCanvas().style.cursor = "";
+        });
+
+        setMapReady(true);
+      });
+    };
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            if (!mapRef.current) {
+              createMap();
+              return;
+            }
+            resizeMap();
+          })
+        : null;
+    resizeObserver?.observe(node);
+
+    // Below-the-fold section: re-measure when it first enters the viewport
+    // after the full-height MapSection above finishes laying out.
+    const intersectionObserver =
+      typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(
+            (entries) => {
+              if (!entries.some((entry) => entry.isIntersecting)) return;
+              createMap();
+              resizeMap();
+              window.requestAnimationFrame(resizeMap);
             },
-          ],
-        },
-      });
+            { threshold: 0.01 },
+          )
+        : null;
+    intersectionObserver?.observe(node);
 
-      map.addSource(ITEMS_SOURCE, {
-        type: "geojson",
-        data: geo.points,
-        promoteId: "id",
-      });
-
-      map.addSource(LINKS_SOURCE, {
-        type: "geojson",
-        data: geo.links,
-        promoteId: "id",
-      });
-
-      map.addLayer({
-        id: "future-link-line",
-        type: "line",
-        source: LINKS_SOURCE,
-        layout: {
-          "line-cap": "round",
-          "line-join": "round",
-        },
-        paint: {
-          "line-color": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            "#dc2626",
-            "#b9a47c",
-          ],
-          "line-width": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            3.0,
-            1.5,
-          ],
-          "line-opacity": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            0.95,
-            ["boolean", ["feature-state", "dimmed"], false],
-            0.12,
-            0.4,
-          ],
-          "line-dasharray": [2, 2],
-        },
-      });
-
-      map.addLayer({
-        id: "future-item-halo",
-        type: "circle",
-        source: ITEMS_SOURCE,
-        paint: {
-          /* Selected wins over hovered, so a click does not get undone by the
-             pointer still being over the card. Hover is 13 x 1.25 rounded. */
-          "circle-radius": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            18,
-            ["boolean", ["feature-state", "hover"], false],
-            14,
-            10,
-          ],
-          "circle-color": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            "#dc2626",
-            ["==", ["get", "horizon"], "2029"],
-            "#c6a46c",
-            "#1f5c45",
-          ],
-          "circle-opacity": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            0.4,
-            ["boolean", ["feature-state", "dimmed"], false],
-            0.06,
-            ["boolean", ["feature-state", "hover"], false],
-            0.32,
-            0.2,
-          ],
-        },
-      });
-
-      map.addLayer({
-        id: "future-item-dot",
-        type: "circle",
-        source: ITEMS_SOURCE,
-        paint: {
-          "circle-radius": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            isDesktop ? 13 : 11,
-            ["boolean", ["feature-state", "hover"], false],
-            isDesktop ? 11 : 9,
-            isDesktop ? 9 : 7.5,
-          ],
-          "circle-color": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            "#dc2626",
-            ["==", ["get", "horizon"], "2029"],
-            "#c6a46c",
-            "#1f5c45",
-          ],
-          "circle-opacity": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            1.0,
-            ["boolean", ["feature-state", "dimmed"], false],
-            0.22,
-            1.0,
-          ],
-          "circle-stroke-color": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            "#ffffff",
-            ["boolean", ["feature-state", "hover"], false],
-            "#dc2626",
-            "#ffffff",
-          ],
-          "circle-stroke-width": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            2.5,
-            ["boolean", ["feature-state", "hover"], false],
-            2,
-            1.5,
-          ],
-          "circle-stroke-opacity": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            1.0,
-            ["boolean", ["feature-state", "dimmed"], false],
-            0.22,
-            1.0,
-          ],
-        },
-      });
-
-      map.addLayer({
-        id: "future-item-number",
-        type: "symbol",
-        source: ITEMS_SOURCE,
-        layout: {
-          "text-field": ["to-string", ["get", "number"]],
-          "text-size": isDesktop ? 10 : 8.5,
-          "text-font": ["Noto Sans Regular"],
-          "text-allow-overlap": true,
-        },
-        paint: {
-          "text-color": "#ffffff",
-          "text-halo-color": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            "#b91c1c",
-            "#1f5c45",
-          ],
-          "text-halo-width": 0.8,
-          "text-opacity": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            1.0,
-            ["boolean", ["feature-state", "dimmed"], false],
-            0.22,
-            1.0,
-          ],
-        },
-      });
-
-      map.addLayer({
-        id: "future-origin-halo",
-        type: "circle",
-        source: ORIGIN_SOURCE,
-        paint: {
-          "circle-radius": 16,
-          "circle-color": "#1f5c45",
-          "circle-opacity": 0.2,
-          "circle-stroke-width": 2,
-          "circle-stroke-color": "#1f5c45",
-        },
-      });
-
-      // Plot origin marker pill with green dot indicator
-      const plotLabel = document.createElement("div");
-      plotLabel.className = "pd-future__plot-label";
-      const plotDot = document.createElement("span");
-      plotDot.className = "pd-future__plot-badge";
-      plotDot.setAttribute("aria-hidden", "true");
-      const plotText = document.createElement("span");
-      plotText.textContent = "Your plot";
-      plotLabel.appendChild(plotDot);
-      plotLabel.appendChild(plotText);
-
-      plotLabelMarker = new Marker({
-        element: plotLabel,
-        anchor: "bottom",
-        offset: [0, -14],
-      })
-        .setLngLat(origin)
-        .addTo(map);
-
-      plotLabelMarkerRef.current = plotLabelMarker;
-
-      map.addLayer({
-        id: "future-origin-dot",
-        type: "circle",
-        source: ORIGIN_SOURCE,
-        paint: {
-          "circle-radius": 8.5,
-          "circle-color": "#1f5c45",
-          "circle-stroke-width": 2.5,
-          "circle-stroke-color": "#ffffff",
-        },
-      });
-
-      const showPopup = (event: MapMouseEvent) => {
-        const feature = map.queryRenderedFeatures(event.point, {
-          layers: ["future-item-dot", "future-origin-dot"],
-        })[0];
-        if (!feature) return;
-
-        if (feature.layer.id === "future-origin-dot") {
-          map.flyTo({
-            center: origin,
-            zoom: 15.5,
-            essential: true,
-            duration: 800,
-          });
-          openPopup(
-            origin,
-            property.neighbourhood.mapLabel,
-            "Project Location",
-          );
-          return;
-        }
-
-        const featureId = feature.properties?.id ?? feature.id;
-        const matchedItem = itemsRef.current.find((it) => it.id === featureId);
-        if (matchedItem) {
-          focusMapItem(matchedItem);
-        } else {
-          const properties = feature.properties as { name?: string; meta?: string; label?: string };
-          openPopup(
-            [event.lngLat.lng, event.lngLat.lat],
-            properties.name ?? properties.label ?? "Landmark",
-            properties.meta,
-          );
-        }
-      };
-      map.on("click", "future-item-dot", showPopup);
-      map.on("click", "future-origin-dot", showPopup);
-      map.on("click", () => {
-        if (!isDesktop || map.scrollZoom.isEnabled()) return;
-        map.scrollZoom.enable();
-        setShowMapHint(false);
-      });
-      map.on("mouseenter", "future-item-dot", () => { map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", "future-item-dot", () => { map.getCanvas().style.cursor = ""; });
+    window.requestAnimationFrame(() => {
+      createMap();
+      resizeMap();
     });
+    const bootTimer = window.setTimeout(() => {
+      createMap();
+      resizeMap();
+      window.requestAnimationFrame(resizeMap);
+    }, 100);
 
     return () => {
+      cancelled = true;
       readyRef.current = false;
-      mapRef.current = null;
+      setMapReady(false);
+      window.clearTimeout(bootTimer);
       if (hintTimer) window.clearTimeout(hintTimer);
+      if (initialResizeTimer) window.clearTimeout(initialResizeTimer);
+      resizeObserver?.disconnect();
+      intersectionObserver?.disconnect();
       plotLabelMarker?.remove();
+      plotLabelMarkerRef.current = null;
       destinationMarkerRef.current?.remove();
       destinationMarkerRef.current = null;
-      map.remove();
+      popupRef.current?.remove();
+      popupRef.current = null;
+      mapRef.current = null;
+      map?.remove();
     };
     // The map is created once; data updates are handled by the effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -953,7 +1053,7 @@ export default function FutureNeighbourhoodMap({
   // Push the current horizon's data into the map and keep everything in frame.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !mapReady) return;
 
     const applyData = () => {
       try {
@@ -999,18 +1099,7 @@ export default function FutureNeighbourhoodMap({
     }
 
     applyData();
-  }, [geo, origin, selectedItemId]);
-
-  // The map lives in a fluid grid column, so it must re-measure on resize.
-  useEffect(() => {
-    const map = mapRef.current;
-    const node = containerRef.current;
-    if (!map || !node) return;
-
-    const observer = new ResizeObserver(() => map.resize());
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+  }, [geo, origin, selectedItemId, mapReady]);
 
   return (
     <section className="pd-section pd-future" aria-labelledby="pd-future-title">

@@ -243,7 +243,39 @@ export async function fetchPropertyById(
 }
 
 /**
- /**
+ * Detail routes use a public name slug in the URL. The property detail API
+ * still requires a UUID, so a slug is resolved against the catalogue list.
+ */
+export async function resolvePropertyId(
+  idOrSlug: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const raw = idOrSlug.trim();
+  if (!raw) return null;
+  if (isPropertyUuid(raw)) return raw;
+
+  const needle = raw.toLowerCase();
+  const { items } = await fetchProperties({
+    status: "ALL",
+    page: 1,
+    perPage: 100,
+    signal,
+  });
+
+  const match = items.find((item) => {
+    const slug = (item.slug || "").trim().toLowerCase();
+    const nameSlug = item.name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return slug === needle || nameSlug === needle || item.id === raw;
+  });
+
+  return match?.id ?? null;
+}
+
+/**
  * Plot-level units for a property, from
  * GET /api/properties/{propertyId}/units
  *
@@ -855,9 +887,30 @@ export async function searchProperties(options: {
   }>(`/api/search?${params.toString()}`, { signal });
 
   const data = response?.data;
+  const withSlugHref = (item: PropertySearchResult): PropertySearchResult => {
+    const fromHref = item.href?.match(/\/properties\/([^/?#]+)/)?.[1];
+    const id = item.id || fromHref || "";
+    const looksUuid = UUID_RE.test(id) || (fromHref ? UUID_RE.test(fromHref) : false);
+    if (!looksUuid && item.href) return item;
+    const nameSlug = item.title
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return {
+      ...item,
+      href: nameSlug
+        ? `/properties/${encodeURIComponent(nameSlug)}`
+        : item.href || `/properties/${encodeURIComponent(id)}`,
+    };
+  };
   return {
-    properties: Array.isArray(data?.properties) ? data.properties : [],
-    recommendations: Array.isArray(data?.recommendations) ? data.recommendations : [],
+    properties: (Array.isArray(data?.properties) ? data.properties : []).map(
+      withSlugHref,
+    ),
+    recommendations: (
+      Array.isArray(data?.recommendations) ? data.recommendations : []
+    ).map(withSlugHref),
     no_results_found:
       data?.no_results_found ?? ((data?.properties?.length ?? 0) === 0),
     message: data?.message ?? response?.message ?? null,

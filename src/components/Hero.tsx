@@ -12,6 +12,7 @@ import {
   type PropertySearchResult,
 } from "@/services/propertiesService";
 import { ILA_API_BASE_URL } from "@/lib/ilaApiConfig";
+import { propertyDetailPath } from "@/lib/propertyUtils";
 
 const SEARCH_WORDS = ["location", "area", "properties"] as const;
 
@@ -326,7 +327,7 @@ export default function Hero() {
                 [item.property_type, item.locality, item.city]
                   .filter(Boolean)
                   .join(" · ") || "Development",
-              href: `/properties/${item.id}`,
+              href: propertyDetailPath(item),
               price: item.price,
               bedrooms: null,
               property_type: item.property_type ?? "Development",
@@ -387,7 +388,7 @@ export default function Hero() {
               [item.property_type, item.locality, item.city]
                 .filter(Boolean)
                 .join(" · ") || "Development",
-            href: `/properties/${item.id}`,
+            href: propertyDetailPath(item),
             price: item.price,
             bedrooms: null,
             property_type: item.property_type ?? "Development",
@@ -436,7 +437,10 @@ export default function Hero() {
         className="group overflow-hidden rounded-2xl border border-black/8 bg-white/95 p-4 sm:p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-[#8a6d2f]/45 hover:bg-white hover:shadow-[0_12px_28px_rgba(138,109,47,0.12)]"
       >
         <Link
-          href={item.href || `/properties/${item.id}`}
+          href={
+            item.href ||
+            propertyDetailPath({ id: item.id, name: item.title })
+          }
           onClick={closeResults}
           className="block"
         >
@@ -447,7 +451,7 @@ export default function Hero() {
                   {item.property_type ?? "Development"}
                 </span>
                 {isRecommendation ? (
-                  <span className="rounded-full bg-gradient-to-r from-[#8a6d2f] to-[#a48135] px-2.5 py-0.5 text-[9px] font-bold tracking-wider uppercase text-white shadow-xs">
+                  <span className="rounded-full bg-linear-to-r from-[#8a6d2f] to-[#a48135] px-2.5 py-0.5 text-[9px] font-bold tracking-wider uppercase text-white shadow-xs">
                     Recommended
                   </span>
                 ) : null}
@@ -582,8 +586,8 @@ export default function Hero() {
           aria-label="Property search"
         >
           {/* Redesigned Search Block on Desktop & Mobile */}
-          <div className="group relative flex items-center gap-2 rounded-full border border-[#c6a46c]/40 bg-gradient-to-r from-black/90 via-[#13110d]/95 to-black/90 p-1.5 shadow-[0_16px_48px_rgba(0,0,0,0.55),0_0_0_1px_rgba(198,164,108,0.18)] backdrop-blur-2xl transition-all duration-300 focus-within:border-[#c6a46c] focus-within:shadow-[0_20px_56px_rgba(0,0,0,0.7),0_0_0_4px_rgba(198,164,108,0.22)] sm:gap-3 sm:p-2 sm:pl-2.5">
-            <span className="ml-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#c6a46c]/25 via-black/80 to-black/90 text-[#c6a46c] ring-1 ring-[#c6a46c]/50 shadow-inner transition-transform duration-300 group-focus-within:scale-105 sm:h-10 sm:w-10">
+          <div className="group relative flex items-center gap-2 rounded-full border border-[#c6a46c]/40 bg-linear-to-r from-black/90 via-[#13110d]/95 to-black/90 p-1.5 shadow-[0_16px_48px_rgba(0,0,0,0.55),0_0_0_1px_rgba(198,164,108,0.18)] backdrop-blur-2xl transition-all duration-300 focus-within:border-[#c6a46c] focus-within:shadow-[0_20px_56px_rgba(0,0,0,0.7),0_0_0_4px_rgba(198,164,108,0.22)] sm:gap-3 sm:p-2 sm:pl-2.5">
+            <span className="ml-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#c6a46c]/25 via-black/80 to-black/90 text-[#c6a46c] ring-1 ring-[#c6a46c]/50 shadow-inner transition-transform duration-300 group-focus-within:scale-105 sm:h-10 sm:w-10">
               <SearchIcon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
             </span>
 
@@ -645,7 +649,7 @@ export default function Hero() {
 
             <button
               type="submit"
-              className="relative shrink-0 overflow-hidden rounded-full bg-gradient-to-r from-[#c6a46c] via-[#e2c796] to-[#c6a46c] px-5 py-2.5 text-xs font-bold tracking-[0.14em] text-[#0f1114] uppercase shadow-[0_4px_16px_rgba(198,164,108,0.35)] transition-all duration-300 hover:shadow-[0_6px_22px_rgba(198,164,108,0.55)] hover:brightness-105 active:scale-[0.98] sm:px-7 sm:py-3 sm:text-sm"
+              className="relative shrink-0 overflow-hidden rounded-full bg-linear-to-r from-[#c6a46c] via-[#e2c796] to-[#c6a46c] px-5 py-2.5 text-xs font-bold tracking-[0.14em] text-[#0f1114] uppercase shadow-[0_4px_16px_rgba(198,164,108,0.35)] transition-all duration-300 hover:shadow-[0_6px_22px_rgba(198,164,108,0.55)] hover:brightness-105 active:scale-[0.98] sm:px-7 sm:py-3 sm:text-sm"
             >
               <span className="flex items-center gap-1.5">
                 <span>Search</span>
@@ -742,7 +746,7 @@ export default function Hero() {
       {portalReady && searchStatus !== "idle"
         ? createPortal(
             <div
-              className="fixed inset-0 z-[300] flex items-start justify-center overflow-y-auto bg-black/75 p-3 backdrop-blur-md sm:p-6 md:p-8"
+              className="fixed inset-0 z-300 flex items-start justify-center overflow-y-auto bg-black/75 p-3 backdrop-blur-md sm:p-6 md:p-8"
               role="dialog"
               aria-modal="true"
               aria-label="Search results"
@@ -754,7 +758,7 @@ export default function Hero() {
             >
               <div className="my-3 w-full max-w-2xl overflow-hidden rounded-3xl border border-[#c6a46c]/30 bg-[#f8f5f0] shadow-[0_32px_80px_rgba(0,0,0,0.65),0_0_0_1px_rgba(198,164,108,0.15)] sm:my-6 md:max-w-3xl lg:max-w-4xl">
                 {/* Redesigned Dialog Header */}
-                <div className="flex items-start justify-between gap-4 border-b border-[#c6a46c]/25 bg-gradient-to-r from-[#17191d] via-[#20232a] to-[#17191d] px-6 py-4.5 text-white sm:px-7 sm:py-5">
+                <div className="flex items-start justify-between gap-4 border-b border-[#c6a46c]/25 bg-linear-to-r from-[#17191d] via-[#20232a] to-[#17191d] px-6 py-4.5 text-white sm:px-7 sm:py-5">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#c6a46c]/20 text-[#c6a46c] ring-1 ring-[#c6a46c]/40">
@@ -832,7 +836,7 @@ export default function Hero() {
                     <>
                       {/* Highlighted Notice Callout Banner before the list of data */}
                       {searchMessage ? (
-                        <div className="mb-4 overflow-hidden rounded-2xl border border-[#8a6d2f]/45 bg-gradient-to-r from-[#faf6ee] via-[#f5edd7] to-[#faf6ee] p-4 shadow-xs ring-1 ring-[#8a6d2f]/25 sm:p-5">
+                        <div className="mb-4 overflow-hidden rounded-2xl border border-[#8a6d2f]/45 bg-linear-to-r from-[#faf6ee] via-[#f5edd7] to-[#faf6ee] p-4 shadow-xs ring-1 ring-[#8a6d2f]/25 sm:p-5">
                           <div className="flex items-start gap-3.5">
                             <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#8a6d2f] text-white shadow-xs">
                               <svg

@@ -26,6 +26,7 @@ import {
   removeFavorite,
   saveFavorite,
 } from "@/services/favoritesService";
+import { propertyDetailPath } from "@/lib/propertyUtils";
 
 const MOBILE_SHEET_QUERY = "(max-width: 980px)";
 
@@ -115,15 +116,17 @@ function featureCard(
       item.match_score == null ? null : `${Math.round(item.match_score * 10)}%`,
     score: item.match_score,
     breakdown,
-    // The endpoint returns ACTIVE properties with real UUIDs, which is what
-    // /properties/[propertyId] requires.
+    // Public detail URLs use the name slug; ApiPropertyView resolves it to the
+    // UUID the detail APIs still require.
     //
     // **Plural, not singular.** `/property/[trackingToken]/view` is the share
     // landing route and takes a tracking token, not a property id;
-    // `/property/{id}` has no page and answers 404. Verified against the dev
-    // server. Every other component links here the same way -- GrowthCorridors,
-    // MapSection, PropertiesList, CompareProperties, SimilarProperties.
-    href: `/properties/${item.property_id}`,
+    // `/property/{id}` has no page and answers 404.
+    href: propertyDetailPath({
+      id: item.property_id,
+      slug: item.slug,
+      name: item.property_name,
+    }),
   };
 }
 
@@ -471,7 +474,7 @@ function MatchCard({
     match.score === null ? 0 : Math.max(0, Math.min(100, match.score * 10));
 
   return (
-    <article className="group relative flex border-b border-[rgba(242,240,234,0.08)] transition-colors hover:bg-white/[0.03]">
+    <article className="group relative flex border-b border-[rgba(242,240,234,0.08)] transition-colors hover:bg-white/3">
       {/* Stretched link: the whole row is the "view" target.
 
           A <Link> wrapping the row would put the favourite button inside an
@@ -536,7 +539,7 @@ function MatchCard({
             ) : null}
           </div>
 
-          <h3 className="mt-0.5 text-[14px] font-bold tracking-tight text-[#f2f0ea] break-words sm:text-[15px]">
+          <h3 className="mt-0.5 text-[14px] font-bold tracking-tight text-[#f2f0ea] wrap-break-word sm:text-[15px]">
             {match.label}
           </h3>
 
@@ -561,7 +564,7 @@ function MatchCard({
           {match.breakdown.length > 0 ? (
             <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-snug text-[#6b7280]">
               {match.breakdown.map((entry) => (
-                <li key={entry.label} className="break-words">
+                <li key={entry.label} className="wrap-break-word">
                   {entry.label}{" "}
                   <span className="font-semibold tabular-nums text-[#8a909e]">
                     {entry.score}/10
@@ -593,7 +596,7 @@ function MatchCard({
 
           <div
             aria-hidden="true"
-            className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-white/10"
+            className="mt-1.5 h-0.75 w-full overflow-hidden rounded-full bg-white/10"
           >
             <div
               className={`h-full rounded-full transition-all duration-500 ${
@@ -765,14 +768,14 @@ function ResultsPanel({
  * it there without tucking it against the band's own hairline; `px-8 pb-10` keep
  * the measure and the floor.
  *
- * `min-h-[280px]` rather than the `360px` this had while centred: that floor
+ * `min-h-70` rather than the `360px` this had while centred: that floor
  * existed to give a centred block room to sit in the middle of. Top-aligned, the
  * content needs only its own height plus `pt-14`, and the lower floor stops a
  * short viewport from squeezing the tile and the heading together.
  */
   if (status === "idle") {
     return (
-      <div className="flex min-h-[280px] flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center">
+      <div className="flex min-h-70 flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center">
         <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#c6a46c]/15 text-[#c6a46c]">
           <IdleGlowIcon className="h-7 w-7" />
         </span>
@@ -793,7 +796,7 @@ function ResultsPanel({
   if (status === "loading") {
     return (
       <div
-        className="flex min-h-[280px] flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center"
+        className="flex min-h-70 flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center"
         aria-busy="true"
       >
         {/* `[--ila-loader-color:…]` rather than a `text-[…]` utility: the loader
@@ -825,7 +828,7 @@ function ResultsPanel({
   if (status === "error") {
     return (
       <div
-        className="flex min-h-[280px] flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center"
+        className="flex min-h-70 flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center"
         role="alert"
       >
         <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8a49e]/15 text-[#e8a49e]">
@@ -846,7 +849,7 @@ function ResultsPanel({
 
   if (status === "empty") {
     return (
-      <div className="flex min-h-[280px] flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center">
+      <div className="flex min-h-70 flex-1 flex-col items-center justify-start px-8 pt-14 pb-10 text-center">
         <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#c6a46c]/15 text-[#c6a46c]">
           <BuildingIcon className="h-7 w-7" />
         </span>
@@ -1367,12 +1370,12 @@ export default function FindYourPlot() {
                             tag_id: feature.key,
                             selected: !isOn,
                           })}
-                          className={`group relative flex min-h-[5.25rem] rounded-2xl border text-left backdrop-blur-md transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c6a46c] p-3.5 sm:min-h-[5.75rem] sm:p-4 select-none ${
+                          className={`group relative flex min-h-21 rounded-2xl border text-left backdrop-blur-md transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c6a46c] p-3.5 sm:min-h-23 sm:p-4 select-none ${
                             bento.spanClass
                           } ${
                             isOn
                               ? "border-[#c6a46c] bg-[#c6a46c]/20 text-[#f2f0ea] shadow-[0_4px_20px_rgba(198,164,108,0.22)] ring-1 ring-[#c6a46c]/40"
-                              : "border-white/10 bg-white/[0.05] text-[#f2f0ea] hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.08] hover:shadow-[0_6px_20px_rgba(0,0,0,0.3)]"
+                              : "border-white/10 bg-white/5 text-[#f2f0ea] hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/8 hover:shadow-[0_6px_20px_rgba(0,0,0,0.3)]"
                           }`}
                         >
                           {bento.type === "wide-both" ? (

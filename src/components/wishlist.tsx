@@ -10,7 +10,7 @@ import {
   type FavoriteItem,
 } from "@/services/favoritesService";
 import { type PropertyListItem } from "@/services/propertiesService";
-import { formatInr } from "@/lib/propertyUtils";
+import { formatInr, propertyDetailPath } from "@/lib/propertyUtils";
 import { getPropertyById } from "@/data/properties";
 import ShortlistPreviewModal from "@/components/ShortlistPreviewModal";
 import type { ShortlistPlot } from "@/components/ShortlistShare";
@@ -519,7 +519,10 @@ export default function Wishlist({
                         Verified & RERA Approved
                       </span>
                       <Link
-                        href={`/properties/${fav.property_id}`}
+                        href={propertyDetailPath({
+                          id: fav.property_id,
+                          name: fav.name,
+                        })}
                         onClick={onClose}
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-[#8a6d34] transition hover:text-[#171717]"
                       >

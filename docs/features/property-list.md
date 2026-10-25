@@ -14,7 +14,7 @@ It appears on the Properties catalogue page. The page heading is `Properties`, w
 
 The exact route is `/properties`, rendered by `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\app\properties\page.tsx`.
 
-The property detail route used by each card is `/properties/{property.id}`.
+The property detail route used by each card is `/properties/{slug}` via `propertyDetailPath` (API `slug`, else a name-derived slug).
 
 ## 4. Component/file paths
 
@@ -133,7 +133,7 @@ Selecting the favourite button does not select or navigate to the property; it p
 
 ## 18. Navigation behavior
 
-Each property card navigates to the exact internal route `/properties/{property.id}`. The id is the API property id, not the slug.
+Each property card navigates to `/properties/{slug}` through `propertyDetailPath`. The API UUID remains the analytics/`data-track-property` id and the backend detail key; it is no longer the preferred public path segment.
 
 Navigation is implemented with `next/link`. The detail page then handles the UUID-based API property route.
 
@@ -297,7 +297,7 @@ Known current limitations and constraints are:
 - List detail enrichment is additional API traffic and is limited to three concurrent requests.
 - A detail failure falls back to the shorter list record, so fields such as status, locality, inventory, and RERA may be unavailable for that card.
 - Favourites depend on visitor readiness and the `X-Visitor-Code` header; failure does not fail the property list.
-- The list uses API UUID ids for detail navigation; it does not navigate with slugs.
+- Detail navigation uses public slugs via `propertyDetailPath`; API UUID remains the backend/analytics id.
 - The API base URL requires `NEXT_PUBLICAPIURL`; tenant resolution requires the current hostname or server-side `SITE_DOMAIN`.
 - The Property List state must not be assumed to be shared with `MapSection`, Search, or Locations.
 - The exact backend behavior when more than 100 properties match is UNKNOWN — needs verification.

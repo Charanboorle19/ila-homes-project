@@ -29,6 +29,7 @@ import {
   type PropertyListItem,
 } from "@/services/propertiesService";
 import { fetchLocations } from "@/services/locationsService";
+import { propertyDetailPath } from "@/lib/propertyUtils";
 
 const GOLD = "#c9a84c";
 
@@ -758,7 +759,7 @@ export default function CompareProperties({
         {/* Loading overlay with blurred background and loader animation */}
         {compareStatus === "loading" && (
           <div
-            className="fixed inset-0 z-[250] flex flex-col items-center justify-center bg-black/70 backdrop-blur-md animate-fade-in"
+            className="fixed inset-0 z-250 flex flex-col items-center justify-center bg-black/70 backdrop-blur-md animate-fade-in"
             aria-live="polite"
             aria-label="Loading comparison data"
           >
@@ -779,13 +780,13 @@ export default function CompareProperties({
             role="dialog"
             aria-modal="true"
             aria-label="Property comparison results"
-            className="ila-compare-modal fixed inset-0 z-[200] flex flex-col overflow-hidden bg-[#141519] text-white animate-fade-in"
+            className="ila-compare-modal fixed inset-0 z-200 flex flex-col overflow-hidden bg-[#141519] text-white animate-fade-in"
           >
             {/* Header band */}
             <div className="shrink-0 border-b border-white/10 bg-[#17191e] px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="text-[18px] leading-[1.25] font-bold tracking-tight text-white">
+                  <h3 className="text-[18px] leading-tight font-bold tracking-tight text-white">
                     Comparison Results
                   </h3>
                   <p className="mt-1 text-[12px] leading-snug text-[#8a909e]">
@@ -834,14 +835,14 @@ export default function CompareProperties({
             </div>
 
             {/* The table */}
-            <div className="ila-search-scroll min-h-0 flex-1 overflow-auto overscroll-contain scroll-pl-[116px] snap-x">
+            <div className="ila-search-scroll min-h-0 flex-1 overflow-auto overscroll-contain scroll-pl-29 snap-x">
               <div
                 className="grid w-max"
                 style={{
                   gridTemplateColumns: `116px repeat(${compared.length}, minmax(0, max-content))`,
                 }}
               >
-                <div className="sticky left-0 z-20 flex min-h-[56px] w-[116px] items-end border-r border-b border-white/10 bg-[#141519] px-3 py-3">
+                <div className="sticky left-0 z-20 flex min-h-14 w-29 items-end border-r border-b border-white/10 bg-[#141519] px-3 py-3">
                   <span className="text-[10px] font-bold tracking-[0.14em] text-[#6b7280] uppercase">
                     Metric
                   </span>
@@ -854,7 +855,7 @@ export default function CompareProperties({
                   return (
                     <div
                       key={property.property_id}
-                      className={`flex max-w-[220px] snap-start flex-col border-r border-b border-white/10 px-3 py-3 ${
+                      className={`flex max-w-55 snap-start flex-col border-r border-b border-white/10 px-3 py-3 ${
                         isTop ? "bg-[rgba(201,168,76,0.08)]" : ""
                       }`}
                     >
@@ -865,11 +866,11 @@ export default function CompareProperties({
                       >
                         {isTop ? "Best match" : "Pinned"}
                       </p>
-                      <h4 className="mt-1 line-clamp-2 break-words text-[14px] leading-[1.25] font-bold tracking-tight text-[#f2f0ea]">
+                      <h4 className="mt-1 line-clamp-2 wrap-break-word text-[14px] leading-tight font-bold tracking-tight text-[#f2f0ea]">
                         {property.name}
                       </h4>
                       {locality ? (
-                        <p className="mt-1 line-clamp-2 break-words text-[11px] leading-[1.3] text-[#8a909e]">
+                        <p className="mt-1 line-clamp-2 wrap-break-word text-[11px] leading-[1.3] text-[#8a909e]">
                           {locality}
                         </p>
                       ) : null}
@@ -879,7 +880,7 @@ export default function CompareProperties({
 
                 {visibleRows.map(({ row, spec }) => (
                   <Fragment key={row.key}>
-                    <div className="sticky left-0 z-10 flex min-h-[56px] w-[116px] items-center border-r border-b border-white/10 bg-[#141519] px-3 text-[11px] leading-[1.3] font-medium text-[#8a909e]">
+                    <div className="sticky left-0 z-10 flex min-h-14 w-29 items-center border-r border-b border-white/10 bg-[#141519] px-3 text-[11px] leading-[1.3] font-medium text-[#8a909e]">
                       {spec.label}
                     </div>
 
@@ -900,7 +901,7 @@ export default function CompareProperties({
                       return (
                         <div
                           key={property.property_id}
-                          className={`flex min-h-[56px] max-w-[220px] snap-start flex-col justify-center border-r border-b border-white/10 px-3 py-2.5 ${
+                          className={`flex min-h-14 max-w-55 snap-start flex-col justify-center border-r border-b border-white/10 px-3 py-2.5 ${
                             isBest && !missing ? "bg-[rgba(201,168,76,0.05)]" : ""
                           }`}
                         >
@@ -919,7 +920,7 @@ export default function CompareProperties({
                           {score !== null ? (
                             <div
                               aria-hidden="true"
-                              className="mt-2 h-[3px] w-full max-w-[120px] overflow-hidden rounded-full bg-white/10"
+                              className="mt-2 h-0.75 w-full max-w-30 overflow-hidden rounded-full bg-white/10"
                             >
                               <div
                                 className={`h-full rounded-full transition-all duration-500 ${
@@ -944,14 +945,14 @@ export default function CompareProperties({
                 ))}
 
                 {visibleRows.length === 0 ? (
-                  <div className="col-span-full flex min-h-[72px] items-center border-b border-white/10 px-3 text-[12px] text-[#8a909e]">
+                  <div className="col-span-full flex min-h-18 items-center border-b border-white/10 px-3 text-[12px] text-[#8a909e]">
                     No metrics were returned for this category.
                   </div>
                 ) : null}
 
                 {showAvailability ? (
                   <Fragment>
-                    <div className="sticky left-0 z-10 flex min-h-[72px] w-[116px] items-center border-r border-b border-white/10 bg-[#141519] px-3 text-[11px] leading-[1.3] font-medium text-[#8a909e]">
+                    <div className="sticky left-0 z-10 flex min-h-18 w-29 items-center border-r border-b border-white/10 bg-[#141519] px-3 text-[11px] leading-[1.3] font-medium text-[#8a909e]">
                       Data availability
                     </div>
 
@@ -962,10 +963,10 @@ export default function CompareProperties({
                       return (
                         <div
                           key={property.property_id}
-                          className="flex min-h-[72px] max-w-[220px] snap-start flex-col justify-center gap-1.5 border-r border-b border-white/10 px-3 py-2.5"
+                          className="flex min-h-18 max-w-55 snap-start flex-col justify-center gap-1.5 border-r border-b border-white/10 px-3 py-2.5"
                         >
                           <div className="flex items-baseline justify-between gap-2">
-                            <span className="line-clamp-2 break-words text-[11px] leading-[1.3] text-[#8a909e]">
+                            <span className="line-clamp-2 wrap-break-word text-[11px] leading-[1.3] text-[#8a909e]">
                               {property.name}
                             </span>
                             <span className="shrink-0 text-[12px] font-semibold tabular-nums text-[#e8e6e1]">
@@ -976,7 +977,7 @@ export default function CompareProperties({
 
                           <div
                             aria-hidden="true"
-                            className="h-[3px] w-full overflow-hidden rounded-full bg-white/10"
+                            className="h-0.75 w-full overflow-hidden rounded-full bg-white/10"
                           >
                             <div
                               className="h-full rounded-full bg-[#8a8f98] transition-all duration-500"
@@ -995,14 +996,17 @@ export default function CompareProperties({
                   </Fragment>
                 ) : null}
 
-                <div className="sticky left-0 z-10 w-[116px] bg-[#141519] py-4" />
+                <div className="sticky left-0 z-10 w-29 bg-[#141519] py-4" />
                 {compared.map((property) => (
                   <div
                     key={property.property_id}
                     className="flex snap-start items-center bg-[#141519] px-3 py-4"
                   >
                     <Link
-                      href={`/properties/${property.property_id}`}
+                      href={propertyDetailPath({
+                        id: property.property_id,
+                        name: property.name,
+                      })}
                       aria-label={`Enquire on ${property.name}`}
                       className="flex min-h-11 w-full items-center justify-center rounded-xl bg-[#c9a84c] px-3 text-[12px] font-semibold text-[#0f1114] transition hover:bg-[#d4b57e]"
                     >
@@ -1125,7 +1129,7 @@ export default function CompareProperties({
           <h2 className="mt-2 text-[28px] leading-[1.2] font-bold tracking-tight text-[#0f1114] sm:text-3xl lg:mt-2.5 lg:text-[24px] lg:leading-[1.15]">
             Compare up to five properties at once
           </h2>
-          <p className="mt-3 text-[16px] leading-[1.5] font-medium text-[#3d4450] lg:mt-2.5 lg:text-[13px] lg:leading-[1.55]">
+          <p className="mt-3 text-[16px] leading-normal font-medium text-[#3d4450] lg:mt-2.5 lg:text-[13px] lg:leading-[1.55]">
             Pick {COMPARE_MIN_IDS} to {COMPARE_MAX_IDS} developments. We line
             them up on price, connectivity, inventory and growth, and mark the
             better value in each row.
@@ -1238,7 +1242,7 @@ export default function CompareProperties({
                             ? `Remove ${property.name} from comparison`
                             : `Add ${property.name} to comparison`
                         }
-                        className={`group relative flex h-[180px] w-full flex-col rounded-xl border p-3.5 text-left transition-all ${
+                        className={`group relative flex h-45 w-full flex-col rounded-xl border p-3.5 text-left transition-all ${
                           selected
                             ? "border-[#c9a84c] bg-[#241f14] shadow-md ring-2 ring-[#c9a84c]/30"
                             : "border-black/20 bg-[#1b1d22] hover:border-black/40"
@@ -1270,7 +1274,7 @@ export default function CompareProperties({
 
                         <div className="relative z-10 flex flex-1 flex-col justify-between">
                           <div className="flex items-start justify-between gap-1.5">
-                            <span className="rounded-full bg-black/60 px-2 py-0.5 text-[9px] font-semibold tracking-[0.1em] text-white uppercase backdrop-blur-xs">
+                            <span className="rounded-full bg-black/60 px-2 py-0.5 text-[9px] font-semibold tracking-widest text-white uppercase backdrop-blur-xs">
                               {property.property_type ?? "Plot"}
                             </span>
 
@@ -1324,7 +1328,7 @@ export default function CompareProperties({
                   <button
                     type="button"
                     onClick={clearSelection}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold tracking-[0.1em] text-[#5b6270] uppercase transition hover:text-[#0f1114]"
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold tracking-widest text-[#5b6270] uppercase transition hover:text-[#0f1114]"
                   >
                     <CloseIcon className="h-3 w-3" />
                     Clear all
@@ -1393,7 +1397,7 @@ export default function CompareProperties({
                `relative z-10` to sit above the blueprint layer, and no
                background of their own — `bg-transparent` would hide the very
                pattern the panel is showing. */
-              <div className="relative z-10 flex min-h-[360px] flex-1 flex-col items-center justify-center border border-black/10 bg-transparent p-12 text-center">
+              <div className="relative z-10 flex min-h-90 flex-1 flex-col items-center justify-center border border-black/10 bg-transparent p-12 text-center">
                 <div className="relative mb-4 flex h-14 w-14 items-center justify-center">
                   <span className="ila-loader ila-loader--lg text-[#c9a84c]" aria-hidden />
                 </div>
@@ -1406,7 +1410,7 @@ export default function CompareProperties({
 
             {/* 2. Error State */}
             {compareStatus === "error" ? (
-              <div className="relative z-10 flex min-h-[280px] flex-1 flex-col items-center justify-center border border-rose-200 bg-rose-50/40 p-8 text-center">
+              <div className="relative z-10 flex min-h-70 flex-1 flex-col items-center justify-center border border-rose-200 bg-rose-50/40 p-8 text-center">
                 <p className="text-[12px] font-bold text-rose-600 uppercase tracking-wider">Comparison Error</p>
                 <h4 className="mt-1 text-[17px] font-bold text-[#0f1114]">Unable to generate comparison</h4>
                 <p className="mt-2 max-w-md text-[13px] text-[#5b6270]">
@@ -1424,7 +1428,7 @@ export default function CompareProperties({
 
             {/* 3. Idle Preview State */}
             {compareStatus === "idle" ? (
-              <div className="relative z-10 flex min-h-[360px] flex-1 flex-col items-center justify-center border border-dashed border-black/20 bg-transparent p-8 text-center">
+              <div className="relative z-10 flex min-h-90 flex-1 flex-col items-center justify-center border border-dashed border-black/20 bg-transparent p-8 text-center">
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#c9a84c]/15 text-[#8a6a12]">
                   <CompareIcon className="h-7 w-7" />
                 </div>
@@ -1451,7 +1455,7 @@ export default function CompareProperties({
                     every title on the same line and rhymes with the
                     `CompareIcon` tile directly above.
 
-                    **`h-[18px]` inside an `h-8 w-8` tile.** 16px reads thin
+                    **`h-4.5` inside an `h-8 w-8` tile.** 16px reads thin
                     against a 32px box; 20px crowds the border. 18px is roughly
                     what the 15px emoji was contributing, so the tile reads at
                     the same density it did before — the change is in *what* the
@@ -1475,7 +1479,7 @@ export default function CompareProperties({
                     whose body does not.
 
                     `line-clamp-2` bounds the height at two lines. The idle
-                    card lives in a `min-h-[360px] flex-1` box inside a
+                    card lives in a `min-h-90 flex-1` box inside a
                     section capped at `104dvh`, so four cards each running to
                     three lines would push the copy under the CTA and the
                     section's `overflow-hidden` would clip it.
@@ -1491,7 +1495,7 @@ export default function CompareProperties({
                       className="flex items-start gap-2.5 rounded-xl border border-black/10 bg-white/80 p-3 shadow-xs"
                     >
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#c9a84c]/25 bg-[#c9a84c]/15 text-[#8a6a12]">
-                        <Icon className="h-[18px] w-[18px]" />
+                        <Icon className="h-4.5 w-4.5" />
                       </span>
                       <div className="min-w-0">
                         <p className="text-[12px] leading-tight font-bold text-[#0f1114]">
@@ -1604,11 +1608,11 @@ export default function CompareProperties({
 
                       - the scrollport is `flex-1`, so it takes all remaining
                         height rather than letting the card show bare surface;
-                      - the rows are `flex-1 min-h-[56px]`, so a short table
+                      - the rows are `flex-1 min-h-14`, so a short table
                         spreads into that height instead of clustering at the
                         top with a void beneath it, and a long one floors at
                         56px per row and scrolls;
-                      - `max-h-[92px]` stops a two- or three-row filter from
+                      - `max-h-23` stops a two- or three-row filter from
                         inflating into absurd bands. Whatever the rows cannot
                         use falls through to the availability row, then to the
                         pinned CTA footer.
@@ -1665,7 +1669,7 @@ export default function CompareProperties({
                     {visibleRows.map(({ row, spec }) => (
                         <div
                           key={row.key}
-                          className="flex max-h-[92px] min-h-[56px] flex-1 border-b border-[rgba(242,240,234,0.08)]"
+                          className="flex max-h-23 min-h-14 flex-1 border-b border-[rgba(242,240,234,0.08)]"
                         >
                           <div className="sticky left-0 z-10 flex w-52 shrink-0 items-center border-r border-[rgba(242,240,234,0.08)] bg-[#141519] px-4 text-[12px] font-medium text-[#8a909e]">
                             {spec.label}
@@ -1686,14 +1690,14 @@ export default function CompareProperties({
                               /rera/i.test(raw);
 
                             return (
-                              /* `min-h-[56px]` and `justify-center` on a column
+                              /* `min-h-14` and `justify-center` on a column
                                  rather than `items-center` on a row: the score
                                  bar and the RERA tick need a second line under
                                  the number, which a single-line centred cell
                                  could not give. */
                               <div
                                 key={property.property_id}
-                                className={`flex min-h-[56px] w-64 shrink-0 flex-col justify-center border-r border-[rgba(242,240,234,0.08)] px-4 ${
+                                className={`flex min-h-14 w-64 shrink-0 flex-col justify-center border-r border-[rgba(242,240,234,0.08)] px-4 ${
                                   isBest && !missing ? "bg-[rgba(201,168,76,0.05)]" : ""
                                 }`}
                               >
@@ -1717,7 +1721,7 @@ export default function CompareProperties({
                                      accessible value. */
                                   <div
                                     aria-hidden="true"
-                                    className="mt-2 h-[3px] w-full max-w-[180px] overflow-hidden rounded-full bg-white/10"
+                                    className="mt-2 h-0.75 w-full max-w-45 overflow-hidden rounded-full bg-white/10"
                                   >
                                     <div
                                       className={`h-full rounded-full transition-all duration-500 ${
@@ -1768,7 +1772,7 @@ export default function CompareProperties({
                         which mark a row winner, this marks a data gap, and gold
                         is reserved for the former. */}
                     {showAvailability ? (
-                      <div className="flex max-h-[160px] min-h-[64px] flex-1 border-b border-[rgba(242,240,234,0.08)]">
+                      <div className="flex max-h-40 min-h-16 flex-1 border-b border-[rgba(242,240,234,0.08)]">
                         <div className="sticky left-0 z-10 flex w-52 shrink-0 items-center border-r border-[rgba(242,240,234,0.08)] bg-[#141519] px-4 text-[12px] font-medium text-[#8a909e]">
                           Data availability
                         </div>
@@ -1780,7 +1784,7 @@ export default function CompareProperties({
                           return (
                             <div
                               key={property.property_id}
-                              className="flex min-h-[64px] w-64 shrink-0 flex-col justify-center gap-1.5 border-r border-[rgba(242,240,234,0.08)] px-4"
+                              className="flex min-h-16 w-64 shrink-0 flex-col justify-center gap-1.5 border-r border-[rgba(242,240,234,0.08)] px-4"
                             >
                               <div className="flex items-baseline justify-between gap-2">
                                 <span className="truncate text-[11px] text-[#8a909e]">
@@ -1796,7 +1800,7 @@ export default function CompareProperties({
                                   integers from the rows above. */}
                               <div
                                 aria-hidden="true"
-                                className="h-[3px] w-full overflow-hidden rounded-full bg-white/10"
+                                className="h-0.75 w-full overflow-hidden rounded-full bg-white/10"
                               >
                                 <div
                                   className="h-full rounded-full bg-[#8a8f98] transition-all duration-500"
@@ -1817,7 +1821,7 @@ export default function CompareProperties({
 
                     {/* One CTA per column, on the same track as the columns so each button travels
                         with its own property. `min-h-11` keeps a 44px touch
-                        target under a 13px label, and `max-w-[220px]` stops the
+                        target under a 13px label, and `max-w-55` stops the
                         text running the full column width on a wide screen.
                         `shrink-0` pins it to the card floor so the bottom edge
                         stays put however many rows are above it. */}
@@ -1826,8 +1830,11 @@ export default function CompareProperties({
                       {compared.map((property) => (
                         <div key={property.property_id} className="w-64 shrink-0 px-4">
                           <Link
-                            href={`/properties/${property.property_id}`}
-                            className="inline-flex min-h-11 max-w-[220px] w-full items-center justify-center rounded-xl bg-[#c9a84c] px-4 text-[13px] font-semibold text-[#0f1114] transition hover:bg-[#d4b57e]"
+                            href={propertyDetailPath({
+                        id: property.property_id,
+                        name: property.name,
+                      })}
+                            className="inline-flex min-h-11 max-w-55 w-full items-center justify-center rounded-xl bg-[#c9a84c] px-4 text-[13px] font-semibold text-[#0f1114] transition hover:bg-[#d4b57e]"
                           >
                             Enquire on {property.name}
                           </Link>
@@ -1882,7 +1889,7 @@ export default function CompareProperties({
                   return (
                     <li
                       key={property.id}
-                      className="w-[76vw] max-w-[290px] shrink-0 snap-start sm:w-auto sm:max-w-none sm:shrink"
+                      className="w-[76vw] max-w-72.5 shrink-0 snap-start sm:w-auto sm:max-w-none sm:shrink"
                     >
                       <button
                         type="button"
@@ -1894,7 +1901,7 @@ export default function CompareProperties({
                             ? `Remove ${property.name} from comparison`
                             : `Add ${property.name} to comparison`
                         }
-                        className={`group relative flex h-full min-h-[11rem] w-full flex-col rounded-2xl border p-4 text-left transition-colors ${
+                        className={`group relative flex h-full min-h-44 w-full flex-col rounded-2xl border p-4 text-left transition-colors ${
                           selected
                             ? "border-[#c9a84c] bg-[#241f14]"
                             : "border-black/20 bg-[#1b1d22]"
@@ -1926,7 +1933,7 @@ export default function CompareProperties({
 
                         <div className="relative z-10 flex flex-1 flex-col">
                           <div className="flex items-start justify-between gap-2">
-                            <span className="rounded-full bg-black/50 px-2 py-1 text-[10px] font-semibold tracking-[0.1em] text-white uppercase">
+                            <span className="rounded-full bg-black/50 px-2 py-1 text-[10px] font-semibold tracking-widest text-white uppercase">
                               {property.property_type ?? "Development"}
                             </span>
 
@@ -1978,7 +1985,7 @@ export default function CompareProperties({
                   <button
                     type="button"
                     onClick={clearSelection}
-                    className="-mr-2 inline-flex min-h-11 items-center gap-1.5 px-2 text-[11px] font-semibold tracking-[0.1em] text-[#4a5060] uppercase transition hover:text-[#0f1114]"
+                    className="-mr-2 inline-flex min-h-11 items-center gap-1.5 px-2 text-[11px] font-semibold tracking-widest text-[#4a5060] uppercase transition hover:text-[#0f1114]"
                   >
                     <CloseIcon className="h-3 w-3" />
                     Clear all
@@ -2031,7 +2038,7 @@ export default function CompareProperties({
                   </span>
                 </div>
 
-                <h3 className="mt-4 text-[18px] leading-[1.25] font-bold tracking-tight text-white">
+                <h3 className="mt-4 text-[18px] leading-tight font-bold tracking-tight text-white">
                   Side-by-side comparison is ready
                 </h3>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-white/70">
@@ -2050,7 +2057,10 @@ export default function CompareProperties({
                       </p>
                     </div>
                     <Link
-                      href={`/properties/${bestMatchProperty.property_id}`}
+                      href={propertyDetailPath({
+                        id: bestMatchProperty.property_id,
+                        name: bestMatchProperty.name,
+                      })}
                       className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-white/10 px-3 text-[12px] font-semibold text-white transition hover:bg-white/20"
                     >
                       View
@@ -2129,7 +2139,10 @@ export default function CompareProperties({
                         </p>
 
                         <Link
-                          href={`/properties/${property.property_id}`}
+                          href={propertyDetailPath({
+                        id: property.property_id,
+                        name: property.name,
+                      })}
                           className="mt-3 inline-flex h-9 w-full items-center justify-center rounded-xl border border-black/15 bg-white text-[12px] font-semibold text-[#0f1114] transition hover:border-[#c9a84c] hover:bg-[#c9a84c]/10"
                         >
                           View property
@@ -2143,7 +2156,7 @@ export default function CompareProperties({
                   .map(({ row, spec }) => (
                     <div
                       key={row.key}
-                      className="flex border-b border-black/5 hover:bg-black/[0.015] transition-colors"
+                      className="flex border-b border-black/5 hover:bg-black/1.5 transition-colors"
                     >
                       <div className="w-52 shrink-0 p-5 text-[13px] font-semibold text-[#3d4450]">
                         {spec.label}
@@ -2190,7 +2203,7 @@ export default function CompareProperties({
                             </div>
 
                             {score !== null ? (
-                              <div className="mt-2 h-1.5 w-full max-w-[180px] overflow-hidden rounded-full bg-black/10">
+                              <div className="mt-2 h-1.5 w-full max-w-45 overflow-hidden rounded-full bg-black/10">
                                 <div
                                   className={`h-full rounded-full transition-all duration-500 ${
                                     isBest ? "bg-[#c9a84c]" : "bg-[#8a8f98]"
@@ -2218,7 +2231,10 @@ export default function CompareProperties({
                   {compared.map((property) => (
                     <div key={property.property_id} className="w-64 shrink-0 border-l border-black/10 px-5">
                       <Link
-                        href={`/properties/${property.property_id}`}
+                        href={propertyDetailPath({
+                        id: property.property_id,
+                        name: property.name,
+                      })}
                         className="inline-flex h-10 w-full items-center justify-center rounded-xl bg-[#c9a84c] px-4 text-[12px] font-bold text-[#0f1114] uppercase tracking-wider shadow-sm transition hover:bg-[#d4b57e]"
                       >
                         Enquire on {property.name}
@@ -2275,7 +2291,7 @@ export default function CompareProperties({
           role="dialog"
           aria-modal="true"
           aria-label="Property comparison results"
-          className="ila-compare-modal fixed inset-0 z-[100] flex flex-col overflow-hidden bg-[#141519] text-white"
+          className="ila-compare-modal fixed inset-0 z-100 flex flex-col overflow-hidden bg-[#141519] text-white"
         >
           {/* Header band.
 
@@ -2302,7 +2318,7 @@ export default function CompareProperties({
               {/* `min-w-0` on the text column so a long top-match name
                   truncates instead of pushing the close button off the band. */}
               <div className="min-w-0">
-                <h3 className="text-[18px] leading-[1.25] font-bold tracking-tight text-white">
+                <h3 className="text-[18px] leading-tight font-bold tracking-tight text-white">
                   Comparison Results
                 </h3>
                 <p className="mt-1 text-[12px] leading-snug text-[#8a909e]">
@@ -2400,9 +2416,9 @@ export default function CompareProperties({
                 **`116px` is repeated deliberately.** It is in the template and in
                 every caption cell because it is the one measurement that has to
                 be identical everywhere: it is the sticky column's width, and the
-                sticky column's width is what `scroll-pl-[116px]` reserves.
+                sticky column's width is what `scroll-pl-29` reserves.
 
-                **`scroll-pl-[116px]` is what makes the sideways scroll land
+                **`scroll-pl-29` is what makes the sideways scroll land
                 correctly.** Snapping a value cell with `snap-start` parks its
                 left edge on the scrollport's left edge — which is *underneath*
                 the sticky caption column, hiding the first 116px of every value.
@@ -2429,7 +2445,7 @@ export default function CompareProperties({
                 flattened list the desktop and tablet tables render, so all three
                 read identically. `groupedMetrics` still drives the category pills
                 and `bestMatchId`; only the visible band is gone. */}
-            <div className="ila-search-scroll min-h-0 flex-1 overflow-auto overscroll-contain scroll-pl-[116px] snap-x">
+            <div className="ila-search-scroll min-h-0 flex-1 overflow-auto overscroll-contain scroll-pl-29 snap-x">
               <div
                 className="grid w-max"
                 style={{
@@ -2438,9 +2454,9 @@ export default function CompareProperties({
               >
                 {/* Header band. `items-end` puts the caption on the same
                     baseline as the bottom of the three header lines beside it.
-                    `min-h-[56px]` matches the metric rows below, so the band
+                    `min-h-14` matches the metric rows below, so the band
                     does not collapse around its own three lines. */}
-                <div className="sticky left-0 z-20 flex min-h-[56px] w-[116px] items-end border-r border-b border-white/10 bg-[#141519] px-3 py-3">
+                <div className="sticky left-0 z-20 flex min-h-14 w-29 items-end border-r border-b border-white/10 bg-[#141519] px-3 py-3">
                   <span className="text-[10px] font-bold tracking-[0.14em] text-[#6b7280] uppercase">
                     Metric
                   </span>
@@ -2451,16 +2467,16 @@ export default function CompareProperties({
                   const locality = property.metrics.locality ?? property.metrics.location;
 
                   return (
-                    /* `max-w-[220px]` bounds the track. Without it a single long
+                    /* `max-w-55` bounds the track. Without it a single long
                        development name, or a `truncate`d locality whose
                        max-content is its full nowrap width, would set the column
-                       width for every row under it. `break-words` on the name is
+                       width for every row under it. `wrap-break-word` on the name is
                        the matching guard: `line-clamp-2` clips an overlong word
                        rather than wrapping it, so a name with no spaces would
                        otherwise be cut mid-word. */
                     <div
                       key={property.property_id}
-                      className={`flex max-w-[220px] snap-start flex-col border-r border-b border-white/10 px-3 py-3 ${
+                      className={`flex max-w-55 snap-start flex-col border-r border-b border-white/10 px-3 py-3 ${
                         isTop ? "bg-[rgba(201,168,76,0.08)]" : ""
                       }`}
                     >
@@ -2474,7 +2490,7 @@ export default function CompareProperties({
                       >
                         {isTop ? "Best match" : "Pinned"}
                       </p>
-                      <h4 className="mt-1 line-clamp-2 break-words text-[14px] leading-[1.25] font-bold tracking-tight text-[#f2f0ea]">
+                      <h4 className="mt-1 line-clamp-2 wrap-break-word text-[14px] leading-tight font-bold tracking-tight text-[#f2f0ea]">
                         {property.name}
                       </h4>
                       {locality ? (
@@ -2483,9 +2499,9 @@ export default function CompareProperties({
                            content-sized column, and ellipsising it loses the
                            half a visitor actually reads — "Shadnagar, Hyd…".
                            Wrapping to a second line keeps all of it, and the
-                           cell's `max-w-[220px]` is what stops that from
+                           cell's `max-w-55` is what stops that from
                            feeding back into the track width. */
-                        <p className="mt-1 line-clamp-2 break-words text-[11px] leading-[1.3] text-[#8a909e]">
+                        <p className="mt-1 line-clamp-2 wrap-break-word text-[11px] leading-[1.3] text-[#8a909e]">
                           {locality}
                         </p>
                       ) : null}
@@ -2504,18 +2520,18 @@ export default function CompareProperties({
 
                     The `border-b` is on the cells rather than on a row wrapper,
                     because a grid row has no element of its own to put it on.
-                    `min-h-[56px]` likewise: the grid row is as tall as its
+                    `min-h-14` likewise: the grid row is as tall as its
                     tallest cell, so putting it on both the caption and the
                     values floors the row rather than only the cell.
 
-                    `max-w-[220px]` on every property cell, so the column's width
+                    `max-w-55` on every property cell, so the column's width
                     is decided once by the track and no individual cell can push
                     it wider. A value that does not fit wraps onto a second line
                     rather than being clipped — there is no `truncate` on any
                     value in this table. */}
                 {visibleRows.map(({ row, spec }) => (
                   <Fragment key={row.key}>
-                    <div className="sticky left-0 z-10 flex min-h-[56px] w-[116px] items-center border-r border-b border-white/10 bg-[#141519] px-3 text-[11px] leading-[1.3] font-medium text-[#8a909e]">
+                    <div className="sticky left-0 z-10 flex min-h-14 w-29 items-center border-r border-b border-white/10 bg-[#141519] px-3 text-[11px] leading-[1.3] font-medium text-[#8a909e]">
                       {spec.label}
                     </div>
 
@@ -2536,7 +2552,7 @@ export default function CompareProperties({
                       return (
                         <div
                           key={property.property_id}
-                          className={`flex min-h-[56px] max-w-[220px] snap-start flex-col justify-center border-r border-b border-white/10 px-3 py-2.5 ${
+                          className={`flex min-h-14 max-w-55 snap-start flex-col justify-center border-r border-b border-white/10 px-3 py-2.5 ${
                             isBest && !missing ? "bg-[rgba(201,168,76,0.05)]" : ""
                           }`}
                         >
@@ -2554,12 +2570,12 @@ export default function CompareProperties({
 
                           {score !== null ? (
                             /* `aria-hidden`: the number above it is the
-                               accessible value. `max-w-[120px]` rather than
+                               accessible value. `max-w-30` rather than
                                the desktop's 180px — a 3px bar has no business
                                setting a content-sized column's width. */
                             <div
                               aria-hidden="true"
-                              className="mt-2 h-[3px] w-full max-w-[120px] overflow-hidden rounded-full bg-white/10"
+                              className="mt-2 h-0.75 w-full max-w-30 overflow-hidden rounded-full bg-white/10"
                             >
                               <div
                                 className={`h-full rounded-full transition-all duration-500 ${
@@ -2588,7 +2604,7 @@ export default function CompareProperties({
                     `col-span-full` because in a grid this line is one cell
                     across every track, not a full-width block. */}
                 {visibleRows.length === 0 ? (
-                  <div className="col-span-full flex min-h-[72px] items-center border-b border-white/10 px-3 text-[12px] text-[#8a909e]">
+                  <div className="col-span-full flex min-h-18 items-center border-b border-white/10 px-3 text-[12px] text-[#8a909e]">
                     No metrics were returned for this category.
                   </div>
                 ) : null}
@@ -2603,7 +2619,7 @@ export default function CompareProperties({
                     reserved for the former. */}
                 {showAvailability ? (
                   <Fragment>
-                    <div className="sticky left-0 z-10 flex min-h-[72px] w-[116px] items-center border-r border-b border-white/10 bg-[#141519] px-3 text-[11px] leading-[1.3] font-medium text-[#8a909e]">
+                    <div className="sticky left-0 z-10 flex min-h-18 w-29 items-center border-r border-b border-white/10 bg-[#141519] px-3 text-[11px] leading-[1.3] font-medium text-[#8a909e]">
                       Data availability
                     </div>
 
@@ -2612,7 +2628,7 @@ export default function CompareProperties({
                       const complete = missing.length === 0;
 
                       return (
-                        /* `max-w-[220px]` is the same bound the header cell carries, and it is
+                        /* `max-w-55` is the same bound the header cell carries, and it is
                            needed here for the same reason: this cell holds a
                            full property name, and an unbounded `line-clamp-2`
                            name's max-content is its whole string, which would
@@ -2625,10 +2641,10 @@ export default function CompareProperties({
                            column. */
                         <div
                           key={property.property_id}
-                          className="flex min-h-[72px] max-w-[220px] snap-start flex-col justify-center gap-1.5 border-r border-b border-white/10 px-3 py-2.5"
+                          className="flex min-h-18 max-w-55 snap-start flex-col justify-center gap-1.5 border-r border-b border-white/10 px-3 py-2.5"
                         >
                           <div className="flex items-baseline justify-between gap-2">
-                            <span className="line-clamp-2 break-words text-[11px] leading-[1.3] text-[#8a909e]">
+                            <span className="line-clamp-2 wrap-break-word text-[11px] leading-[1.3] text-[#8a909e]">
                               {property.name}
                             </span>
                             <span className="shrink-0 text-[12px] font-semibold tabular-nums text-[#e8e6e1]">
@@ -2641,7 +2657,7 @@ export default function CompareProperties({
                               integers from the rows above. */}
                           <div
                             aria-hidden="true"
-                            className="h-[3px] w-full overflow-hidden rounded-full bg-white/10"
+                            className="h-0.75 w-full overflow-hidden rounded-full bg-white/10"
                           >
                             <div
                               className="h-full rounded-full bg-[#8a8f98] transition-all duration-500"
@@ -2677,14 +2693,17 @@ export default function CompareProperties({
                     `min-h-11` keeps a 44px touch target under a 12px label. The
                     caption spacer mirrors the caption column's width so this
                     row's cells line up with every row above it. */}
-                <div className="sticky left-0 z-10 w-[116px] bg-[#141519] py-4" />
+                <div className="sticky left-0 z-10 w-29 bg-[#141519] py-4" />
                 {compared.map((property) => (
                   <div
                     key={property.property_id}
                     className="flex snap-start items-center bg-[#141519] px-3 py-4"
                   >
                     <Link
-                      href={`/properties/${property.property_id}`}
+                      href={propertyDetailPath({
+                        id: property.property_id,
+                        name: property.name,
+                      })}
                       aria-label={`Enquire on ${property.name}`}
                       className="flex min-h-11 w-full items-center justify-center rounded-xl bg-[#c9a84c] px-3 text-[12px] font-semibold text-[#0f1114] transition hover:bg-[#d4b57e]"
                     >

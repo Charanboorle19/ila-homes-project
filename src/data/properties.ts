@@ -67,6 +67,8 @@ export type LifestyleItem = {
 export type PropertyRecord = {
   id: LayoutId;
   name: string;
+  /** Public URL segment when known (API slug or local id). */
+  slug?: string;
   location: string;
   locationKey: string;
   tagline: string;

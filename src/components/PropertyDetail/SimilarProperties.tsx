@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { SimilarCard } from "@/lib/similar";
-import { formatInr } from "@/lib/propertyUtils";
+import { formatInr, propertyDetailPath } from "@/lib/propertyUtils";
 import { getPropertyGallery } from "@/data/properties";
 
 export default function SimilarProperties({ items }: { items: SimilarCard[] }) {
@@ -22,7 +22,7 @@ export default function SimilarProperties({ items }: { items: SimilarCard[] }) {
             return (
               <li key={property.id}>
                 <Link
-                  href={`/properties/${property.id}`}
+                  href={propertyDetailPath(property)}
                   className="pd-similar__card"
                 >
                   <div className="pd-similar__media">

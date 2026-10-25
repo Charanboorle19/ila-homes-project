@@ -2,7 +2,7 @@
 
 ## Scope and terminology
 
-This document describes the current Property Details implementation at `/properties/{propertyId}`. It complements, rather than repeats, [`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\map.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\map.md) and [`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-popup.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-popup.md).
+This document describes the current Property Details implementation at `/properties/{slug}` (route folder param still named `propertyId`). It complements, rather than repeats, [`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\map.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\map.md) and [`C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-popup.md`](C:\Users\surya\Desktop\ILA-HOMES-PROJECT\docs\features\property-popup.md).
 
 ## 1. Feature purpose
 
@@ -12,36 +12,37 @@ The page has one shared visual template, `PropertyPageView`, for both local/stat
 
 ## 2. Property Details page flow
 
-`PropertyDetailPage` receives the route `propertyId`, first calls `getPropertyById(propertyId)`, and branches as follows:
+`PropertyDetailPage` receives the route `propertyId` (public slug or legacy UUID), first calls `getPropertyById(propertyId)`, and branches as follows:
 
 1. A matching local id renders `<PropertyPageView property={property} />`.
 2. No local record renders `<ApiPropertyView id={propertyId} />`.
-3. `ApiPropertyView` validates that the id is a UUID, fetches the API property, documents, and life-stage fit independently, maps the result with `apiPropertyToRecord`, and renders the same `PropertyPageView`.
+3. `ApiPropertyView` resolves a slug to a UUID via `resolvePropertyId` (catalogue list match), fetches the API property, documents, and life-stage fit independently, maps the result with `apiPropertyToRecord`, rewrites the address bar to the slug when needed, and renders the same `PropertyPageView`.
 4. The shared template renders the page sections in a fixed order described in section 22.
 
 ## 3. How the page is opened/navigated to
 
-The page is opened with an internal URL of the form `/properties/{propertyId}`. Current producers include:
+The page is opened with an internal URL of the form `/properties/{slug}` from `propertyDetailPath` in `src/lib/propertyUtils.ts`. Current producers include:
 
-- `PropertiesList` links for API property ids.
-- `GrowthCorridors` property links using `/properties/{property.id}`.
-- `SimilarProperties` links using `/properties/${property.id}` for local records.
-- `PropertySheet` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\components\MapSection.tsx`, whose `View Project` link uses the local/API property id when a `PropertyRecord` is available.
+- `PropertiesList` links using the API `slug`.
+- `GrowthCorridors` property links using `propertyDetailPath(item)`.
+- `SimilarProperties` links using `propertyDetailPath(property)`.
+- `PropertySheet` / map CTAs in `MapSection`, which prefer slug/name over UUID.
 
-`PropertyHero` also provides breadcrumb links to `/` and `/properties`. A direct URL is valid for a UUID API property even though that UUID is not in the local static catalogue.
+`PropertyHero` also provides breadcrumb links to `/` and `/properties`. A legacy UUID deep link still loads; after the property arrives, the address bar is rewritten to the slug.
 
 ## 4. All supported property ID types
 
-Two id types are supported by the route:
+Three path segment types are supported by the route:
 
 - **Local/static property ids:** `LayoutId` values from `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\data\properties.ts` and `listPropertyIds()`.
-- **API property ids:** UUID strings accepted by `isPropertyUuid()` in `C:\Users\surya\Desktop\ILA-HOMES-PROJECT\src\services\propertiesService.ts`.
+- **API property slugs:** public `slug` (or name-derived slug) resolved through `resolvePropertyId` against `GET /api/properties`.
+- **API property UUIDs:** accepted by `isPropertyUuid()` for legacy links; detail/documents/media APIs still require the UUID after resolution.
 
-API detail requests require the UUID, not the API property slug. A non-UUID id that is not found locally is treated as an API-view error.
+API detail requests require the UUID. A slug that cannot be matched in the catalogue is treated as an API-view error.
 
 ## 5. Route structure
 
-The route is `/properties/[propertyId]`, producing URLs such as `/properties/{local-id}` or `/properties/{uuid}`. The catalogue route is `/properties`; the home route is `/`.
+The route is `/properties/[propertyId]`, producing public URLs such as `/properties/{local-id}` or `/properties/{api-slug}`. UUID segments still resolve. The catalogue route is `/properties`; the home route is `/`.
 
 ## 6. Route/page file
 

@@ -2,6 +2,39 @@ import type { PropertyRecord } from "@/data/properties";
 
 const GACHIBOWLI: [number, number] = [78.351, 17.44];
 
+/** URL segment from a property name when the API slug is missing. */
+export function toPropertySlug(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+const PROPERTY_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Detail-page href. Prefers the API/name slug so the address bar shows
+ * `/properties/sark-green` rather than a UUID.
+ */
+export function propertyDetailPath(property: {
+  id: string;
+  slug?: string | null;
+  name?: string | null;
+}): string {
+  const slug = property.slug?.trim();
+  if (slug) return `/properties/${encodeURIComponent(slug)}`;
+  // Local static ids are already slug-shaped; keep them in the URL.
+  if (property.id && !PROPERTY_UUID_RE.test(property.id)) {
+    return `/properties/${encodeURIComponent(property.id)}`;
+  }
+  if (property.name?.trim()) {
+    return `/properties/${encodeURIComponent(toPropertySlug(property.name))}`;
+  }
+  return `/properties/${encodeURIComponent(property.id)}`;
+}
+
 export function formatInr(amount: number): string {
   if (amount >= 1_00_00_000) {
     const crore = amount / 1_00_00_000;

@@ -934,14 +934,19 @@ export default function FutureNeighbourhoodMap({
           },
         });
 
+        // Nested handlers close over `map`, which is `let … | undefined`.
+        // Capture a definite instance so TypeScript accepts the calls.
+        const liveMap = map;
+        if (!liveMap) return;
+
         const showPopup = (event: MapMouseEvent) => {
-          const feature = map.queryRenderedFeatures(event.point, {
+          const feature = liveMap.queryRenderedFeatures(event.point, {
             layers: ["future-item-dot", "future-origin-dot"],
           })[0];
           if (!feature) return;
 
           if (feature.layer.id === "future-origin-dot") {
-            map.flyTo({
+            liveMap.flyTo({
               center: origin,
               zoom: 15.5,
               essential: true,
@@ -972,18 +977,18 @@ export default function FutureNeighbourhoodMap({
             );
           }
         };
-        map.on("click", "future-item-dot", showPopup);
-        map.on("click", "future-origin-dot", showPopup);
-        map.on("click", () => {
-          if (!isDesktop || map.scrollZoom.isEnabled()) return;
-          map.scrollZoom.enable();
+        liveMap.on("click", "future-item-dot", showPopup);
+        liveMap.on("click", "future-origin-dot", showPopup);
+        liveMap.on("click", () => {
+          if (!isDesktop || liveMap.scrollZoom.isEnabled()) return;
+          liveMap.scrollZoom.enable();
           setShowMapHint(false);
         });
-        map.on("mouseenter", "future-item-dot", () => {
-          map.getCanvas().style.cursor = "pointer";
+        liveMap.on("mouseenter", "future-item-dot", () => {
+          liveMap.getCanvas().style.cursor = "pointer";
         });
-        map.on("mouseleave", "future-item-dot", () => {
-          map.getCanvas().style.cursor = "";
+        liveMap.on("mouseleave", "future-item-dot", () => {
+          liveMap.getCanvas().style.cursor = "";
         });
 
         setMapReady(true);

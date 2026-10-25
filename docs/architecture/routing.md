@@ -76,7 +76,7 @@ The page renders the catalogue heading and the client component `PropertiesList`
 - **Dynamic parameters:** None.
 - **Query parameters:** The page does not read URL query parameters. `PropertiesList` makes an internal API request with `status=ALL`, `page=1`, and `per_page=100`; those are API request parameters, not page URL parameters.
 - **How users reach it:** `Navbar`, `Footer`, the `Properties` breadcrumb on property detail pages, the API property-card links from the homepage/list experiences, and the API-property error-state link.
-- **Navigation behavior:** Property cards use Next.js `Link` elements to `/properties/{property.id}`. Favourite controls are buttons and do not navigate. **Every route change is preceded by an explicit `window.scrollTo(0, 0)` from `ScrollToTop` — see §27.**
+- **Navigation behavior:** Property cards use Next.js `Link` elements to `/properties/{slug}` via `propertyDetailPath` (API `slug`, else a name-derived slug; UUID only as last resort). Favourite controls are buttons and do not navigate. **Every route change is preceded by an explicit `window.scrollTo(0, 0)` from `ScrollToTop` — see §27.**
 - **Data/API dependencies:** `PropertiesList` loads `GET /api/properties?status=ALL&page=1&per_page=100`, optionally enriches items with `GET /api/properties/{id}`, and separately uses the favourites endpoints. Requests go through the internal API client with tenant configuration.
 - **Loading/error/not-found:** `PropertiesList` has client-managed `loading`, `ready`, and `error` states. It renders a loading status and an error message when the list request fails. No route-level error or not-found file exists. Exact complete list-error presentation is `UNKNOWN — needs verification`.
 - **Route-specific logic:** The list is client-side because tenant identity is resolved in the browser. It requests only page 1 with up to 100 items and has no URL-backed filtering, sorting, search, or pagination controls.
@@ -89,15 +89,15 @@ The page renders the catalogue heading and the client component `PropertiesList`
 **Shared rendered view:** `src/components/PropertyDetail/PropertyPageView.tsx`
 **Layout:** Root layout from `src/app/layout.tsx`; `PropertyPageView` imports `PropertyDetail.css`
 
-The route first resolves the parameter against local static property data. A local match renders `PropertyPageView` directly. If there is no local match, it renders `ApiPropertyView`, which validates and loads API-backed UUID properties and then renders the same `PropertyPageView` template.
+The route segment is the **public name slug** (for example `/properties/sark-green`), not the API UUID. The folder param remains `propertyId` for compatibility. The page first resolves the parameter against local static property data. A local match renders `PropertyPageView` directly. If there is no local match, it renders `ApiPropertyView`, which resolves a slug to a UUID via the catalogue list (`resolvePropertyId`), loads the API property, and then renders the same `PropertyPageView` template. Legacy UUID deep links still work; after load, `ApiPropertyView` rewrites the address bar to the slug with `history.replaceState`.
 
-- **Dynamic parameters:** `propertyId`.
+- **Dynamic parameters:** `propertyId` (slug or UUID).
 - **Query parameters:** None are read or written by the page.
-- **How users reach it:** `PropertiesList`, `GrowthCorridors` property links, `SimilarProperties`, the map `PropertySheet` when a `PropertyRecord` is available, and direct deep links.
-- **Navigation behavior:** Internal property links use `next/link`. The detail hero breadcrumb links to `/` and `/properties`. Similar-property cards navigate to another `/properties/{id}` path. **Every route change is preceded by an explicit `window.scrollTo(0, 0)` from `ScrollToTop`, mounted in the root layout — see §27.**
-- **Data/API dependencies:** Local ids use `src/data/properties.ts`. API ids use `GET /api/properties/{propertyId}`, with independent requests for documents and life-stage fit. Child sections may additionally request nearby places and use map/image integrations.
-- **Loading/error/not-found:** Local records render without a page data-loading state. API-backed records show `Loading property…` while loading. Invalid/non-UUID or failed API records render an in-page `Property unavailable` state with a link back to `/properties`. No `not-found.tsx` or `error.tsx` is present, and the route does not call `notFound()`.
-- **Route-specific logic:** `generateStaticParams()` returns local property ids. `generateMetadata()` uses local property metadata when available and a derived `${propertyId} · ILA Homes` title for ids without local records. API detail, documents, and life-stage requests are independently cancellable.
+- **How users reach it:** `PropertiesList`, `GrowthCorridors` property links, `SimilarProperties`, the map `PropertySheet` when a `PropertyRecord` is available, and direct deep links — all via `propertyDetailPath` in `src/lib/propertyUtils.ts`.
+- **Navigation behavior:** Internal property links use `next/link` with the slug path. The detail hero breadcrumb links to `/` and `/properties`. **Every route change is preceded by an explicit `window.scrollTo(0, 0)` from `ScrollToTop`, mounted in the root layout — see §27.**
+- **Data/API dependencies:** Local ids use `src/data/properties.ts`. API detail still uses `GET /api/properties/{uuid}` (UUID required by the backend); slug resolution uses `GET /api/properties` list matching. Independent requests load documents and life-stage fit. Child sections may additionally request nearby places and use map/image integrations.
+- **Loading/error/not-found:** Local records render without a page data-loading state. API-backed records show `Loading property…` while loading. Unresolvable slug/UUID or failed API records render an in-page `Property unavailable` state with a link back to `/properties`. No `not-found.tsx` or `error.tsx` is present, and the route does not call `notFound()`.
+- **Route-specific logic:** `generateStaticParams()` returns local property ids. `generateMetadata()` uses local property metadata when available and a derived title from the path segment for API-only entries. API detail, documents, and life-stage requests are independently cancellable.
 
 ## 6. Tracked share landing route
 

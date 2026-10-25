@@ -217,10 +217,10 @@ The exact formatter is:
 Each card is a Next.js `Link` with:
 
 ```ts
-href={`/properties/${property.id}`}
+href={propertyDetailPath(property)}
 ```
 
-The route is therefore `/properties/{candidate.id}`. The link is the whole card, and no fragment anchor, query string, external URL, or `target` is specified.
+The route is therefore `/properties/{slug-or-local-id}` from `propertyDetailPath`. The link is the whole card, and no fragment anchor, query string, external URL, or `target` is specified.
 
 ## 28. CTA/button behavior
 
@@ -312,7 +312,7 @@ It has no direct dependency on API services, fetch calls, React hooks, analytics
 - Preserve the local `properties` source and the current default limit of six unless the intended data source or result count changes.
 - Preserve the current-property exclusion (`candidate.id === current.id`) and sold-property exclusion (`candidate.status === "sold"`) unless the selection requirements intentionally change.
 - Preserve the minimum qualifying score of `28`, descending score sort, and `.slice(0, limit)` behavior unless the ranking contract intentionally changes.
-- Preserve the route format `/properties/${property.id}` and the section heading id `pd-similar-title` unless page navigation or anchor consumers are intentionally changed.
+- Preserve `propertyDetailPath(property)` for card hrefs and the section heading id `pd-similar-title` unless page navigation or anchor consumers are intentionally changed.
 - Preserve the first-image behavior through `getPropertyGallery(property)[0]`; do not assume `property.gallery` is always populated.
 - Preserve the current price formatter behavior through `formatInr(property.price)`; the card does not use `priceLabel`.
 - Preserve the three-column layout at `min-width: 760px`, the base single-column layout below it, and the `700px` image `sizes` boundary unless the responsive contract intentionally changes.

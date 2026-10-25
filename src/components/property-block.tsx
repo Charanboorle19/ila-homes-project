@@ -8,7 +8,7 @@ import type { EstateProject } from "@/data/projects";
 import type { PropertyRecord } from "@/data/properties";
 import type { Plot } from "@/data/plots";
 import { formatPrice, type ApiProperty } from "@/services/propertiesService";
-import { formatInr } from "@/lib/propertyUtils";
+import { formatInr, propertyDetailPath } from "@/lib/propertyUtils";
 import {
   fetchFavorites,
   saveFavorite,
@@ -542,8 +542,11 @@ export default function PropertyBlock({
     image: familyCommunityImg,
   };
 
-  const propertyPageId = activePropertyId || apiProperty?.id || property?.id || project?.id;
-  const propertyPageHref = `/properties/${propertyPageId}`;
+  const propertyPageHref = propertyDetailPath({
+    id: activePropertyId || apiProperty?.id || property?.id || project?.id || "",
+    slug: apiProperty?.slug || property?.slug,
+    name: apiProperty?.name || property?.name || project?.name,
+  });
 
   // Render the expanded content
   const renderExpandedBody = (onClose: () => void) => (
@@ -560,7 +563,7 @@ export default function PropertyBlock({
         />
 
         {/* Gradient Scrim for readability */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30" />
+        <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-black/30" />
 
         {/* Available status badge (Top Left) */}
         <div className="absolute top-3 left-3 z-10">
@@ -703,7 +706,7 @@ export default function PropertyBlock({
         </p>
 
         <div className="mt-3 flex gap-2.5 overflow-x-auto pb-2 scrollbar-hide">
-          <div className="flex-shrink-0 w-[calc(100%/3_-_1.67rem)] min-w-[140px] flex items-center gap-3 rounded-xl border border-[#e8e2d5] bg-[#faf8f4] p-3">
+          <div className="shrink-0 w-[calc(100%/3-1.67rem)] min-w-35 flex items-center gap-3 rounded-xl border border-[#e8e2d5] bg-[#faf8f4] p-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#876527]">
               <SchoolIcon className="h-4.5 w-4.5" />
             </div>
@@ -713,7 +716,7 @@ export default function PropertyBlock({
             </div>
           </div>
 
-          <div className="flex-shrink-0 w-[calc(100%/3_-_1.67rem)] min-w-[140px] flex items-center gap-3 rounded-xl border border-[#e8e2d5] bg-[#faf8f4] p-3">
+          <div className="shrink-0 w-[calc(100%/3-1.67rem)] min-w-35 flex items-center gap-3 rounded-xl border border-[#e8e2d5] bg-[#faf8f4] p-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#876527]">
               <TreesIcon className="h-4.5 w-4.5" />
             </div>
@@ -723,7 +726,7 @@ export default function PropertyBlock({
             </div>
           </div>
 
-          <div className="flex-shrink-0 w-[calc(100%/3_-_1.67rem)] min-w-[140px] flex items-center gap-3 rounded-xl border border-[#e8e2d5] bg-[#faf8f4] p-3">
+          <div className="shrink-0 w-[calc(100%/3-1.67rem)] min-w-35 flex items-center gap-3 rounded-xl border border-[#e8e2d5] bg-[#faf8f4] p-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#c6a46c]/20 text-[#876527]">
               <RoadIcon className="h-4.5 w-4.5" />
             </div>
@@ -758,7 +761,7 @@ export default function PropertyBlock({
             return (
               <div
                 key={plot.id}
-                className="relative flex flex-col rounded-xl border p-2.5 text-left min-h-[100px] max-h-[108px] border-[#ded9cf] bg-white"
+                className="relative flex flex-col rounded-xl border p-2.5 text-left min-h-25 max-h-27 border-[#ded9cf] bg-white"
               >
                 <div className="mb-2">
                   <span className="block text-sm font-extrabold text-[#141414] truncate">{plot.title}</span>
@@ -817,10 +820,10 @@ export default function PropertyBlock({
       <button
         type="button"
         onClick={() => setPulseModalOpen(true)}
-        className="group relative flex w-full items-center justify-between overflow-hidden rounded-2xl border border-[#c6a46c]/40 bg-gradient-to-r from-[#faf4e4] via-[#fdfbf6] to-[#f5ecd8] p-3 shadow-[0_4px_16px_rgba(198,164,108,0.14)] transition-all duration-300 hover:border-[#c6a46c] hover:shadow-[0_6px_22px_rgba(198,164,108,0.24)] active:scale-[0.99]"
+        className="group relative flex w-full items-center justify-between overflow-hidden rounded-2xl border border-[#c6a46c]/40 bg-linear-to-r from-[#faf4e4] via-[#fdfbf6] to-[#f5ecd8] p-3 shadow-[0_4px_16px_rgba(198,164,108,0.14)] transition-all duration-300 hover:border-[#c6a46c] hover:shadow-[0_6px_22px_rgba(198,164,108,0.24)] active:scale-[0.99]"
       >
         <div className="flex items-center gap-2.5">
-          <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#c6a46c] to-[#997332] text-white shadow-xs">
+          <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-[#c6a46c] to-[#997332] text-white shadow-xs">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-xl bg-[#c6a46c] opacity-40"></span>
             <EyeIcon className="h-4 w-4 relative" />
           </span>
@@ -930,7 +933,7 @@ export default function PropertyBlock({
         <button
           type="button"
           onClick={() => setSiteVisitModalOpen(true)}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-3.5 text-xs font-black tracking-wider uppercase text-[#141414] shadow-md transition active:scale-[0.99] hover:brightness-105 cursor-pointer"
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-linear-to-r from-[#d4b57e] via-[#c6a46c] to-[#b38e52] py-3.5 text-xs font-black tracking-wider uppercase text-[#141414] shadow-md transition active:scale-[0.99] hover:brightness-105 cursor-pointer"
         >
           <span>Book a Site Visit</span>
         </button>
@@ -969,7 +972,7 @@ export default function PropertyBlock({
             From {startingPrice}
           </span>
         ) : null}
-        <span className="rounded-lg bg-black/[0.05] border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
+        <span className="rounded-lg bg-black/5 border border-black/10 px-2.5 py-1 text-xs font-bold text-[#2a2824]">
           {plotSizeRange}
         </span>
       </div>
@@ -981,7 +984,7 @@ export default function PropertyBlock({
       {/* 8. UI & INTERACTION: DESKTOP FLOATING CARD (Warm Ivory Theme) */}
       {desktopOpen && !mapFullscreen ? (
         <aside
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 z-30 hidden md:flex w-[380px] max-h-[85vh] flex-col"
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 z-30 hidden md:flex w-95 max-h-[85vh] flex-col"
           aria-label="Selected property summary"
         >
           <div className="pointer-events-auto relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#ded9cf] bg-[#f9f7f2] shadow-[0_16px_40px_rgba(36,35,31,0.18)] transition-all duration-300 animate-in fade-in zoom-in-95 slide-in-from-left-4">
@@ -1013,7 +1016,7 @@ export default function PropertyBlock({
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
-              className={`pointer-events-auto fixed inset-x-0 bottom-0 z-[200] flex flex-col overflow-hidden rounded-t-[1.75rem] border-x border-t border-[#ded9cf] bg-[#f9f7f2] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-12px_36px_rgba(36,35,31,0.22)] transition-[height,max-height] duration-300 animate-in fade-in slide-in-from-bottom-6 duration-300 md:hidden ${
+              className={`pointer-events-auto fixed inset-x-0 bottom-0 z-200 flex flex-col overflow-hidden rounded-t-[1.75rem] border-x border-t border-[#ded9cf] bg-[#f9f7f2] pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-12px_36px_rgba(36,35,31,0.22)] transition-[height,max-height] duration-300 animate-in fade-in slide-in-from-bottom-6 md:hidden ${
                 mobileExpanded ? "h-[88%] max-h-[88%]" : "h-auto max-h-44"
               }`}
             >
@@ -1085,7 +1088,7 @@ export default function PropertyBlock({
       {pulseModalOpen && portalReady
         ? createPortal(
             <div
-              className="fixed inset-0 z-[350] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop animate-in fade-in duration-200"
+              className="fixed inset-0 z-350 flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop animate-in fade-in duration-200"
               onClick={() => setPulseModalOpen(false)}
             >
               <div
@@ -1132,7 +1135,7 @@ export default function PropertyBlock({
       {siteVisitModalOpen && portalReady
         ? createPortal(
             <div
-              className="fixed inset-0 z-[350] flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop animate-in fade-in duration-200"
+              className="fixed inset-0 z-350 flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm ila-modal-backdrop animate-in fade-in duration-200"
               onClick={() => setSiteVisitModalOpen(false)}
             >
               <div

@@ -30,6 +30,7 @@ import {
   PLOT_STATUS_LABEL,
   plotStatusDisplayLabel,
 } from "@/lib/plotStatus";
+import { propertyDetailPath } from "@/lib/propertyUtils";
 import {
   estateFromUnitsApi,
   estatePlaceholderFromProperty,
@@ -1877,7 +1878,7 @@ export default function GrowthCorridors() {
                                 `MapSection`'s "Visit Property" CTA, so both maps
                                 lead to the same place. */}
                             <Link
-                              href={`/properties/${item.id}`}
+                              href={propertyDetailPath(item)}
                               aria-label={`View plots in ${item.name}`}
                               data-track="PROPERTY_VIEW"
                               data-track-property={item.id}
@@ -2574,7 +2575,7 @@ export default function GrowthCorridors() {
                         it deliberately does not go through apiFetch. */}
                     <div className="mt-4 flex flex-wrap items-center gap-3">
                       <Link
-                        href={`/properties/${activeItem.id}`}
+                        href={propertyDetailPath(activeItem)}
                         data-track="PROPERTY_VIEW"
                         data-track-property={activeItem.id}
                         data-track-meta={`{"source":"growth_corridors","surface":"map_detail"}`}

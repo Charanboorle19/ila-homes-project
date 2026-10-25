@@ -10,7 +10,11 @@ import {
 } from "@/services/leadsService";
 import { bookPublicSiteVisit } from "@/services/siteVisitsService";
 import { ApiError } from "@/services/apiClient";
-import { whatsappUrl, DEFAULT_WHATSAPP_PHONE } from "@/lib/propertyUtils";
+import {
+  whatsappUrl,
+  DEFAULT_WHATSAPP_PHONE,
+  propertyDetailPath,
+} from "@/lib/propertyUtils";
 
 function storageKey(kind: "wishlist", id: string) {
   return `ila-${kind}-${id}`;
@@ -538,7 +542,7 @@ export default function PropertyFinalCta({
     const url =
       typeof window !== "undefined"
         ? window.location.href
-        : `https://ilahomes.example/properties/${property.id}`;
+        : `https://ilahomes.example${propertyDetailPath(property)}`;
     const payload = {
       title: property.name,
       text: `${property.name} — ${property.location}`,

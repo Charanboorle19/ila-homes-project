@@ -86,9 +86,9 @@ API categories are formatted for display, including `AIRPORT`, `BUSINESS`, `HIGH
 
 ## 11. Map behavior
 
-The map is created once in a mount effect. Its GeoJSON sources contain point features for the selected places and LineString features from the property origin to each place. The map fits the origin and all selected points after initial load and after horizon/data changes.
+The map is created once the canvas has a non-zero size (ResizeObserver / IntersectionObserver / short boot delay), not blindly on first mount. That avoids a blank WebGL canvas when client navigation reaches `/properties/{id}` before the sticky/aspect-ratio frame has settled under the full-height `MapSection` above. Its GeoJSON sources contain point features for the selected places and LineString features from the property origin to each place. The map fits the origin and all selected points after initial load and after horizon/data changes.
 
-Clicking a place card does not select a marker or change application state. It fits the map to the origin and that place, using padding `90`, `maxZoom: 14.5`, and an `800ms` duration. Invalid/zero item coordinates use the property origin for this card navigation.
+Clicking a place card selects that landmark (`selectedItemId`), highlights it on the map, and fits the map to the origin and that place (`800ms` duration). Invalid/zero item coordinates use the property origin for this card navigation. Card selection does **not** call `scrollIntoView` on `.pd-future__map`: that node is `position: sticky` on desktop, so scrolling it into view moved the whole page while the map stayed put.
 
 ## 12. Map configuration
 
@@ -117,7 +117,7 @@ The implementation does not create individual MapLibre `Marker` objects. It rend
 - `future-origin-halo`, `future-origin-dot`, and `future-origin-label` show the property origin.
 - `future-link-glow` and `future-link-line` draw white underlay and dashed amber connections from origin to each item.
 
-Current items use green (`#1f5c45`) circles; 2029 items use gold (`#c6a46c`). The property plot origin is indicated with green (`#1f5c45`) dot, halo, and "Your plot" badge. When a landmark is selected, it and its connecting route line are highlighted in vibrant red (`#dc2626`), and a red destination badge displays above the landmark, while unselected items and links are dimmed. Floating card overlays are omitted on both desktop and mobile to ensure a clear, unobstructed map view. Clicking an item smoothly frames both the plot origin and the landmark destination in view. Clicking the selected card again deselects it and restores the map to the full overview. Landmark card names and subtitles wrap onto multiple lines without truncation or ellipsis (`...`).
+Current items use green (`#1f5c45`) circles; 2029 items use gold (`#c6a46c`). The property plot origin is indicated with green (`#1f5c45`) dot, halo, and "Your plot" badge. When a landmark is selected, it and its connecting route line are highlighted in vibrant red (`#dc2626`), and a red destination badge displays above the landmark, while unselected items and links are dimmed. Floating card overlays are omitted on both desktop and mobile to ensure a clear, unobstructed map view. Clicking an item smoothly frames both the plot origin and the landmark destination in view without scrolling the page. Clicking the selected card again deselects it and restores the map to the full overview. Landmark card names and subtitles wrap onto multiple lines without truncation or ellipsis (`...`).
 
 ## 15. Property-specific behavior
 
@@ -135,7 +135,7 @@ The component state is:
 - `apiPlaces: ApiNearbyPlace[] | null`, initially `null`.
 - `isLoadingApi: boolean`, initially `false`.
 
-Refs are `containerRef`, `mapRef`, and `readyRef`. `mapRef` stores the MapLibre instance; `readyRef` tracks style/load readiness.
+Refs are `containerRef`, `mapRef`, `readyRef`, and `geoRef`. `mapRef` stores the MapLibre instance; `readyRef` tracks style/load readiness; `geoRef` keeps the latest GeoJSON for deferred map creation. State also includes `mapReady`, which gates the data-update effect so landmarks still apply when the map finishes loading after nearby-place data arrives.
 
 ## 17. Derived values
 
@@ -154,7 +154,7 @@ The feature defines `formatDistanceDisplay`, `formatCategoryLabel`, `formatProxi
 
 ## 19. Hooks
 
-It uses `useState` for UI/fetch state, `useRef` for the DOM container/map/readiness refs, `useMemo` for selected items/GeoJSON/Gachibowli distance, and `useEffect` for the API request, one-time map creation/cleanup, map data updates, and a `ResizeObserver` that calls `map.resize()`.
+It uses `useState` for UI/fetch/map-ready state, `useRef` for the DOM container/map/readiness/geo refs, `useMemo` for selected items/GeoJSON/Gachibowli distance, and `useEffect` for the API request, deferred map creation/cleanup (ResizeObserver + IntersectionObserver + boot resize), and map data updates once `mapReady` is true.
 
 ## 20. Loading behavior
 
@@ -210,7 +210,7 @@ The Future Neighbourhood-specific desktop layout is enabled by `@media (min-widt
 
 ## 33. CSS/classes
 
-Relevant classes include `.pd-section`, `.pd-section__inner`, `.pd-future`, `.pd-future__toggles`, `.pd-future__near`, `.pd-future__layout`, `.pd-future__list`, `.pd-future__card`, `.pd-future__card-top`, `.pd-future__kind`, `.pd-future__status`, `.pd-future__dist`, `.pd-future__map`, `.pd-future__canvas`, and `.pd-future__map-error`. Shared `.pd-chip` styles provide the horizon and near-me controls. MapLibre control classes are adjusted through `.pd-future__map .maplibregl-ctrl-group` and `.pd-future__map .maplibregl-ctrl-attrib`.
+Relevant classes include `.pd-section`, `.pd-section__inner`, `.pd-future`, `.pd-future__toggles`, `.pd-future__near`, `.pd-future__layout`, `.pd-future__list`, `.pd-future__card`, `.pd-future__card-top`, `.pd-future__kind`, `.pd-future__status`, `.pd-future__dist`, `.pd-future__map`, `.pd-future__canvas`, and `.pd-future__map-error`. Shared `.pd-chip` styles provide the horizon and near-me controls. MapLibre control classes are adjusted through `.pd-future__map .maplibregl-ctrl-group` and `.pd-future__map .maplibregl-ctrl-attrib`. `.pd-future__map .pd-future__canvas.maplibregl-map` keeps `position: absolute; inset: 0; width/height: 100%` so MapLibre’s unlayered `maplibregl-map { position: relative }` cannot collapse the canvas to zero height.
 
 ## 34. Accessibility
 
@@ -222,6 +222,7 @@ Direct dependencies are React hooks, `maplibre-gl`, `maplibre-gl/dist/maplibre-g
 
 ## 36. Known issues
 
+- Client navigation used to leave the Future Neighbourhood map blank until a hard refresh when MapLibre overrode the canvas position or measured a 0×0 container; the canvas CSS specificity fix and deferred init/resize path address that.
 - Local/static properties still issue a live nearby-places request using the fixed sample UUID; this means static properties can display sample/API places rather than only their own static neighbourhood data.
 - API failure and an empty API response both use the static fallback path, with no user-visible API error message.
 - The 2029 classification is based on status/`expected_year > 2026`; the frontend does not verify whether the proposed infrastructure is committed or guaranteed.

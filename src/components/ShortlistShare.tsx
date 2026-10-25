@@ -11,6 +11,7 @@ import { trackEvent } from "@/services/analytics/tracker";
 import { fetchProperties, type PropertyListItem } from "@/services/propertiesService";
 import { buildShareUrl, createPropertyShares } from "@/services/shareService";
 import { ILA_PROPERTY_ID } from "@/lib/ilaApiConfig";
+import { propertyDetailPath } from "@/lib/propertyUtils";
 import ShortlistPreviewModal from "./ShortlistPreviewModal";
 import "./ShortlistShare.css";
 
@@ -174,7 +175,7 @@ export default function ShortlistShare() {
     } catch {
       // Fallback: construct links using origins directly if share endpoint fails
       const fallbackUrls = selected.map(
-        (plot) => `${window.location.origin}/properties/${plot.id}`,
+        (plot) => `${window.location.origin}${propertyDetailPath(plot)}`,
       );
       setPreviewUrls(fallbackUrls);
       setPreviewOpen(true);

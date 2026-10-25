@@ -15,6 +15,7 @@ import {
   removeFavorite,
   saveFavorite,
 } from "@/services/favoritesService";
+import { propertyDetailPath } from "@/lib/propertyUtils";
 
 /**
  * Caps simultaneous detail requests.
@@ -206,7 +207,7 @@ export default function PropertiesList() {
         {items.map((property) => (
           <li key={property.id} className="relative">
             <Link
-              href={`/properties/${property.id}`}
+              href={propertyDetailPath(property)}
               data-track="PROPERTY_VIEW"
               data-track-property={property.id}
               data-track-meta='{"source":"properties_list"}'

@@ -9,6 +9,7 @@ import plotBgMansanpally from "@/app/assets/plots-pulse/mansanpally.jpg";
 import plotBgSarkGreen from "@/app/assets/about-panel/hero-property.jpg";
 import { fetchProperties, formatPrice, type PropertyListItem } from "@/services/propertiesService";
 import { propertyLayouts, type PropertyLayout } from "@/data/propertyLayouts";
+import { propertyDetailPath } from "@/lib/propertyUtils";
 import "@/app/loading.css";
 import "./PlotsWithPulse.css";
 
@@ -23,6 +24,7 @@ const GOLD = "#8A6A1F";
 
 type PulsePlot = {
   id: string;
+  slug?: string;
   name: string;
   location: string;
   meta: string;
@@ -55,6 +57,7 @@ function toPlot(property: PropertyListItem, index: number): PulsePlot {
 
   return {
     id: property.id,
+    slug: property.slug,
     name: property.name,
     location: location || "Hyderabad",
     meta: meta || "Plotted development",
@@ -147,7 +150,7 @@ function BarRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center justify-between gap-3 text-[11px]">
       <span className="w-24 shrink-0 font-medium text-[#6b7280]">{label}</span>
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/[0.06]">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/6">
         <div
           className="h-full rounded-full bg-[#8A6A1F] transition-all duration-500"
           style={{ width: `${value}%` }}
@@ -259,7 +262,7 @@ export default function PlotsWithPulse() {
     <section
       data-section="compare_plots"
       id="plots-pulse"
-      className="relative w-full overflow-hidden bg-gradient-to-b from-[#fbf7eb] via-[#fefaf0] to-[#f6f0db] border-t border-[#8A6A1F]/15"
+      className="relative w-full overflow-hidden bg-linear-to-b from-[#fbf7eb] via-[#fefaf0] to-[#f6f0db] border-t border-[#8A6A1F]/15"
       aria-labelledby="plots-pulse-heading"
       style={{ ["--gc-gold" as string]: GOLD }}
     >
@@ -285,7 +288,7 @@ export default function PlotsWithPulse() {
         </div>
 
         {loading || (!error && !plots.length) ? (
-          <div className="flex min-h-[300px] w-full flex-col items-center justify-center py-16 text-center">
+          <div className="flex min-h-75 w-full flex-col items-center justify-center py-16 text-center">
             <span
               className="ila-loader mb-4"
               style={{
@@ -304,7 +307,7 @@ export default function PlotsWithPulse() {
         ) : null}
 
         {error && !plots.length ? (
-          <div className="flex min-h-[300px] w-full flex-col items-center justify-center py-16 text-center">
+          <div className="flex min-h-75 w-full flex-col items-center justify-center py-16 text-center">
             <span
               className="ila-loader mb-4"
               style={{
@@ -364,7 +367,7 @@ export default function PlotsWithPulse() {
               {plots.map((plot, index) => (
                 <article
                   key={plot.id}
-                  className="group relative flex w-[88vw] max-w-[21.5rem] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-[#8A6A1F]/20 bg-white text-left shadow-[0_4px_18px_rgba(30,22,10,0.06)] transition duration-300 hover:-translate-y-1 hover:border-[#8A6A1F]/50 hover:shadow-[0_16px_36px_rgba(30,22,10,0.12)] sm:w-[48vw] sm:max-w-none lg:w-auto lg:min-w-[21rem] lg:flex-1 lg:flex-basis-0 xl:min-w-[23rem]"
+                  className="group relative flex w-[88vw] max-w-86 shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-[#8A6A1F]/20 bg-white text-left shadow-[0_4px_18px_rgba(30,22,10,0.06)] transition duration-300 hover:-translate-y-1 hover:border-[#8A6A1F]/50 hover:shadow-[0_16px_36px_rgba(30,22,10,0.12)] sm:w-[48vw] sm:max-w-none lg:w-auto lg:min-w-84 lg:flex-1 lg:flex-basis-0 xl:min-w-92"
                 >
                   {/* Card Media Header */}
                   <div className="relative h-40 w-full shrink-0 overflow-hidden bg-[#eef0f4] sm:h-44">
@@ -381,7 +384,7 @@ export default function PlotsWithPulse() {
                         target.style.display = "none";
                       }}
                     />
-                    <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/40 to-transparent pointer-events-none" />
+                    <div className="absolute inset-x-0 top-0 h-16 bg-linear-to-b from-black/40 to-transparent pointer-events-none" />
 
                     {/* Status badge top-left */}
                     <div className="absolute left-2.5 top-2.5 sm:left-3 sm:top-3">
@@ -421,7 +424,7 @@ export default function PlotsWithPulse() {
                     </p>
 
                     {/* Price banner */}
-                    <div className="mt-2.5 flex items-baseline justify-between border-b border-black/[0.06] pb-2.5 sm:mt-3 sm:pb-3">
+                    <div className="mt-2.5 flex items-baseline justify-between border-b border-black/6 pb-2.5 sm:mt-3 sm:pb-3">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8a909e]">
                         Guide Price
                       </span>
@@ -462,7 +465,7 @@ export default function PlotsWithPulse() {
                     {/* Direct Property Details CTA */}
                     <div className="mt-4 pt-0.5 sm:mt-5 sm:pt-1">
                       <Link
-                        href={`/properties/${plot.id}`}
+                        href={propertyDetailPath(plot)}
                         className="flex h-9.5 w-full items-center justify-center gap-2 rounded-xl border border-[#8A6A1F]/30 bg-[#8A6A1F]/5 text-[11.5px] font-bold tracking-[0.02em] text-[#0f1114] transition hover:bg-[#8A6A1F] hover:text-white active:scale-[0.99] sm:h-10 sm:text-[12px]"
                       >
                         <span>View property details</span>

@@ -807,6 +807,7 @@ export function apiPropertyToRecord(
   return {
     id: property.id as PropertyRecord["id"],
     name: property.name,
+    slug: property.slug || undefined,
     location,
     locationKey: (property.slug || property.id).toLowerCase(),
     tagline: property.short_description || property.description || property.name,
